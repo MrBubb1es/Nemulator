@@ -86,6 +86,21 @@ impl Reader {
         Ok(chr_rom)
     }
 
+    fn read_misc_rom_from_buf(&self, buf: &[u8], cart_pos: &mut usize) -> Vec<u8> {
+        let mut misc_rom = Vec::new();
+
+        let start = *cart_pos;
+        let end = buf.len();
+
+        for i in start..end {
+            misc_rom.push(buf[i]);
+        }
+
+        *cart_pos = end;
+
+        misc_rom
+    }
+
     pub fn read_cart(&self, cart_path: &str) -> Result<Cartridge, String> {
         info!("Attempting to read cartridge from {0}", cart_path);
 
@@ -101,25 +116,22 @@ impl Reader {
         let mut cart_pos = Cartridge::HEADER_LEN;
 
         if cart.has_trainer_area() {
-            match self.read_trainer_data_from_buf(&cart_data, &mut cart_pos) {
-                Ok(v) => cart.set_trainer_data(&v),
-                Err(message) => return Err(message),
-            }
+            let t_data = self.read_trainer_data_from_buf(&cart_data, &mut cart_pos)?;
+            cart.set_trainer_data(&t_data);
 
             info!("  [Successfully read trainer area]");
         }
 
         let prg_rom_size = cart.get_prg_rom_size();
-        match self.read_prg_rom_from_buf(&cart_data, &mut cart_pos, prg_rom_size) {
-            Ok(v) => cart.set_prg_rom(v),
-            Err(message) => return Err(message),
-        }
+        let prg_rom = self.read_prg_rom_from_buf(&cart_data, &mut cart_pos, prg_rom_size)?;
+        cart.set_prg_rom(prg_rom);
 
         let chr_rom_size = cart.get_chr_rom_size();
-        match self.read_chr_rom_from_buf(&cart_data, &mut cart_pos, chr_rom_size) {
-            Ok(v) => cart.set_chr_rom(v),
-            Err(message) => return Err(message),
-        }
+        let chr_rom = self.read_chr_rom_from_buf(&cart_data, &mut cart_pos, chr_rom_size)?;
+        cart.set_chr_rom(chr_rom);
+
+        let misc_rom = self.read_misc_rom_from_buf(&cart_data, &mut cart_pos);
+        cart.set_misc_rom(misc_rom);
 
         Ok(cart)
     }

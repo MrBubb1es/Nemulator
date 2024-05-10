@@ -58,10 +58,9 @@ pub struct Cartridge {
     header: Option<Header>,
 
     trainer_area: Option<[u8; 512]>,
-
     prg_rom: Vec<u8>,
-
     chr_rom: Vec<u8>,
+    misc_rom: Vec<u8>,
 }
 
 impl Cartridge {
@@ -74,10 +73,9 @@ impl Cartridge {
             header: None,
 
             trainer_area: None,
-
             prg_rom: Vec::new(),
-
             chr_rom: Vec::new(),
+            misc_rom: Vec::new(),
         }
     }
 
@@ -177,6 +175,9 @@ impl Cartridge {
         self.chr_rom = chr_rom_data;
     }
 
+    pub fn set_misc_rom(&mut self, misc_rom_data: Vec<u8>) {
+        self.misc_rom = misc_rom_data;
+    }
 
     pub fn get_format(&self) -> &CartFormat {
         &self.format

@@ -16,6 +16,7 @@
 */
 
 pub mod cartridge;
+pub mod system;
 
 fn main() {
     const TEST_ARR: [u8; 4] = [0, 1, 2, 3];

@@ -12,14 +12,14 @@ pub struct CPU<'a> {
 }
 impl CPU<'_> {
     // GETTER/SETTER FUNCTIONS
-    fn get_carry_flag(&self) -> u8 { self.flags & 0x01 }
-    fn get_zero_flag(&self) -> u8 { (self.flags & 0x02) >> 1 }
-    fn get_interrupt_flag(&self) -> u8 { (self.flags & 0x04) >> 2 }
-    fn get_decimal_flag(&self) -> u8 { (self.flags & 0x08) >> 3 }
-    fn get_b_flag(&self) -> u8 { (self.flags & 0x10) >> 4 }
-    fn get_blank_flag(&self) -> u8 { (self.flags & 0x20) >> 5 }
-    fn get_overflow_flag(&self) -> u8 { (self.flags & 0x40) >> 6 }
-    fn get_negative_flag(&self) -> u8 { (self.flags & 0x80) >> 7 }
+    pub fn get_carry_flag(&self) -> u8 { self.flags & 0x01 }
+    pub fn get_zero_flag(&self) -> u8 { (self.flags & 0x02) >> 1 }
+    pub fn get_interrupt_flag(&self) -> u8 { (self.flags & 0x04) >> 2 }
+    pub fn get_decimal_flag(&self) -> u8 { (self.flags & 0x08) >> 3 }
+    pub fn get_b_flag(&self) -> u8 { (self.flags & 0x10) >> 4 }
+    pub fn get_blank_flag(&self) -> u8 { (self.flags & 0x20) >> 5 }
+    pub fn get_overflow_flag(&self) -> u8 { (self.flags & 0x40) >> 6 }
+    pub fn get_negative_flag(&self) -> u8 { (self.flags & 0x80) >> 7 }
 
     fn set_carry_flag(&mut self, val: u8) { self.flags |= val }
     fn set_zero_flag(&mut self, val: u8) { self.flags |= val << 1 }
@@ -30,17 +30,17 @@ impl CPU<'_> {
     fn set_overflow_flag(&mut self, val: u8) { self.flags |= val << 6 }
     fn set_negative_flag(&mut self, val: u8) { self.flags |= val << 7 }
 
-    fn get_acc(&self) -> u8 { self.acc }
-    fn get_x_reg(&self) -> u8 { self.x }
-    fn get_y_reg(&self) -> u8 { self.y }
-    fn get_sp(&self) -> u8 { self.sp }
-    fn get_pc(&self) -> u16 { self.pc }
+    pub fn get_acc(&self) -> u8 { self.acc }
+    pub fn get_x_reg(&self) -> u8 { self.x }
+    pub fn get_y_reg(&self) -> u8 { self.y }
+    pub fn get_sp(&self) -> u8 { self.sp }
+    pub fn get_pc(&self) -> u16 { self.pc }
 
-    fn set_acc(&self, val: u8) { self.acc = val }
-    fn set_x_reg(&self, val: u8) { self.x = val }
-    fn set_y_reg(&self, val: u8) { self.y = val }
-    fn set_sp(&self, val: u8) { self.sp = val }
-    fn set_pc(&self, val: u16) { self.pc = val }
+    // fn set_acc(&self, val: u8) { self.acc = val }
+    // fn set_x_reg(&self, val: u8) { self.x = val }
+    // fn set_y_reg(&self, val: u8) { self.y = val }
+    // fn set_sp(&self, val: u8) { self.sp = val }
+    // fn set_pc(&self, val: u16) { self.pc = val }
 
 
     // HELPER FUNCTIONS
@@ -72,12 +72,31 @@ impl CPU<'_> {
         self.bus.write(zpage_address as u16, lo);
         self.bus.write(zpage_address.wrapping_add(1) as u16, hi);
     }
+    fn push_to_stack(&mut self, data: u8) {
+        let stk_address = 0x0100 | self.sp as u16;
+        self.bus.write(stk_address, data);
+        self.sp = self.sp.wrapping_sub(1);
+    }
+    fn pop_from_stack(&mut self) -> u8 {
+        self.sp = self.sp.wrapping_add(1);
+        let stk_address = 0x0100 | self.sp as u16;
+        self.bus.read(stk_address)
+    }
 
 
     // RESET FUNCTION
+    // TODO:
 
 
-    // ADDRESSING MODES - Fetches data from 
+    // ADDRESSING MODES - Fetches data from the bus
+    // Returns: Tuple of (data, address, cycles) where:
+    //  - data: Single byte read from memory
+    //  - address: 2 byte address that data was read from
+    //  - cycles: Number of clock cycles taken to read the data from memory
+    //
+    // Note: Implied addressing mode has no return type because no data is needed for instructions
+    // with implied addressing mode.
+
     // Implied - no extra data needed for this instruction, read no extra bytes
     fn implied(&self) {}
     // Immediate - data immediatly follows instruction, always 2 bytes
@@ -156,53 +175,362 @@ impl CPU<'_> {
 
 
     // OPCODES - all the cpu instructions
-    fn adc(&mut self, arg: u8) {
-        let result = (arg as u16) + (self.acc as u16) + (self.get_carry_flag() as u16);
+    // Args:
+    //  - data: Single byte of data read from memory. Where data comes from is determined by the
+    //          addressing mode of the instruction.
+    //  - address: Some instructions also need to write to memory, so the address that data was
+    //             taken from can also be included as an argument.
+    //
+    // Returns:
+    //  - Number of clock cycles taken by the instruction
+
+    // ADC - Add Memory to Accumulator with Carry
+    fn adc(&mut self, data: u8) {
+        let result = (data as u16) + (self.acc as u16) + (self.get_carry_flag() as u16);
         self.set_acc(result as u8);
         self.set_carry_flag(if result & 0xFF00 > 0 { 1 } else { 0 });
         self.set_zero_flag(if result & 0xFF == 0 { 1 } else { 0 });
         // NOTE: come back and do the overflow (V) flag once you know how it works
         // NOTE: and the negative flag bc I can't be bothered to rn
     }
-
-    fn and(&mut self, arg: u8) {
-        let result = self.acc & arg;
+    // AND - AND Memory with Accumulator
+    fn and(&mut self, data: u8) {
+        let result = self.acc & data;
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
         self.set_negative_flag(if result & 0x80 > 0 { 1 } else { 0 });
     }
-
+    // ASL - Shift Left One Bit (Memory or Accumulator)
     fn asl() {
         // skipping for now
     }
-
+    // BCC - Branch on Carry Clear
     fn bcc(&mut self, offset: i8) {
         if self.get_carry_flag() != 1 {
             self.pc = (self.pc as i32 + offset as i32) as u16;
         }
     }
-
+    // BCS - Branch on Carry Set
     fn bcs(&mut self, offset: i8) {
         if self.get_carry_flag() == 1 {
             self.pc = (self.pc as i32 + offset as i32) as u16;
         }
     }
-
+    // BEQ - Branch on Equal (Zero flag set)
     fn beq(&mut self, offset: i8) {
         if self.get_zero_flag() == 1 {
             self.pc = (self.pc as i32 + offset as i32) as u16;
         }
     }
-
-    fn bit(&mut self, arg: u8) {
-        self.set_negative_flag(if arg & 0x80 > 0 { 1 } else { 0 });
-        self.set_overflow_flag(if arg & 0x40 > 0 { 1 } else { 0 });
-        self.set_zero_flag(if arg & self.acc == 0 { 1 } else { 0 });
+    // BIT - Test Bits in Memory with Accumulator
+    fn bit(&mut self, data: u8) {
+        self.set_negative_flag(if data & 0x80 > 0 { 1 } else { 0 });
+        self.set_overflow_flag(if data & 0x40 > 0 { 1 } else { 0 });
+        self.set_zero_flag(if data & self.acc == 0 { 1 } else { 0 });
     }
-
+    // BMI - Branch on Result Minus (Negative flag set)
     fn bmi(&mut self, offset: i8) {
         if self.get_negative_flag() == 1 {
             self.pc = (self.pc as i32 + offset as i32) as u16;
         }
+    }
+    // BNE - Branch on Not Equal (Zero flag NOT set)
+    fn bne(&mut self, offset: i8) {
+        if self.get_zero_flag() == 0 {
+            self.pc = (self.pc as i32 + offset as i32) as u16;
+        }
+    }
+    // BPL - Branch on Result Plus (Negative flag NOT set)
+    fn bpl(&mut self, offset: i8) {
+        if self.get_negative_flag() == 0 {
+            self.pc = (self.pc as i32 + offset as i32) as u16;
+        }
+    }
+    // BRK - Force Break (Initiate interrupt)
+    fn brk(&mut self) {
+        //TODO:
+    }
+    // BVC - Branch on Overflow clear
+    fn bvc(&mut self, offset: i8) {
+        if self.get_overflow_flag() == 0 {
+            self.pc = (self.pc as i32 + offset as i32) as u16;
+        }
+    }
+    // BVS - Branch on Overflow set
+    fn bvs(&mut self, offset: i8) {
+        if self.get_overflow_flag() == 1 {
+            self.pc = (self.pc as i32 + offset as i32) as u16;
+        }
+    }
+    // CLC - Clear Carry Flag
+    fn clc(&mut self) {
+        self.set_carry_flag(0);
+    }
+    // CLD - Clear Decimal Mode
+    fn cld(&mut self) {
+        self.set_decimal_flag(0);
+    }
+    // CLI - Clear Interrupt Disable Bit
+    fn cli(&mut self) {
+        self.set_interrupt_flag(0);
+    }
+    // CLV - Clear Overflow Flag
+    fn clv(&mut self) {
+        self.set_overflow_flag(0);
+    }
+    // CMP - Compare Memory with Accumulator
+    fn cmp(&mut self, data: u8) {
+        let result = (self.acc as i16) - (data as i16);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_carry_flag(if result >= 0 { 1 } else { 0 });
+    }
+    // CPX - Compare Memory and Index X
+    fn cpx(&mut self, data: u8) {
+        let result = (self.x as i16) - (data as i16);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_carry_flag(if result >= 0 { 1 } else { 0 });
+    }
+    // CPY - Compare Memory and Index Y
+    fn cpy(&mut self, data: u8) {
+        let result = (self.y as i16) - (data as i16);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_carry_flag(if result >= 0 { 1 } else { 0 });
+    }
+    // DEC - Decrement Memory
+    fn dec(&mut self, data: u8, address: u16) {
+        let result = data.wrapping_sub(1);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.bus.write(address, result);
+    }
+    // DEX - Decrement X Register
+    fn dex(&mut self) {
+        let result = self.x.wrapping_sub(1);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.x = result;
+    }
+    // DEY - Decrement Y Register
+    fn dey(&mut self) {
+        let result = self.y.wrapping_sub(1);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.x = result;
+    }
+    // EOR - Exclusive OR
+    fn eor(&mut self, data: u8) {
+        let result = self.acc ^ data;
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.acc = result;
+    }
+    // INC - Increment Memory
+    fn inc(&mut self, data: u8, address: u16) {
+        let result = data.wrapping_add(1);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.bus.write(address, result);
+    }
+    // INX - Increment X Register
+    fn inx(&mut self) {
+        let result = self.x.wrapping_add(1);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.x = result;
+    }
+    // INY - Increment Y Register
+    fn iny(&mut self) {
+        let result = self.y.wrapping_add(1);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.y = result;
+    }
+    // JMP - Jump
+    fn jmp(&mut self, address: u16) {
+        self.pc = address;
+    }
+    // JSR - Jump to Subroutine
+    fn jsr(&mut self, address: u16) {
+        let return_point = self.pc + 2; // Return point is the return address - 1, and since this
+        // instruction will always use absolute addressing mode, the whole instruction is 3 bytes.
+        let lo = return_point as u8;
+        let hi = (return_point >> 8) as u8;
+        self.push_to_stack(lo);
+        self.push_to_stack(hi);
+    }
+    // LDA - Load Accumulator
+    fn lda(&mut self, data: u8) {
+        self.set_zero_flag(if data == 0 { 1 } else { 0 });
+        self.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+        self.acc = data;
+    }
+    // LDX - Load X Register
+    fn ldx(&mut self, data: u8) {
+        self.set_zero_flag(if data == 0 { 1 } else { 0 });
+        self.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+        self.x = data;
+    }
+    // LDY - Load Y Register
+    fn ldy(&mut self, data: u8) {
+        self.set_zero_flag(if data == 0 { 1 } else { 0 });
+        self.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+        self.y = data;
+    }
+    // LSR - Logical Shift Right (Accumulator version)
+    fn lsr_acc(&mut self) {
+        let result = self.acc >> 1;
+        self.set_carry_flag(self.acc & 0x01);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(0); // result will always have bit 7 == 0
+        self.acc = result;
+    }
+    // LSR - Logical Shift Right (Memory version)
+    fn lsr_mem(&mut self, data: u8, address: u16) {
+        let result = data >> 1;
+        self.set_carry_flag(data & 0x01);
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(0); // result will always have bit 7 == 0
+        self.bus.write(address, result);
+    }
+    // NOP - No Operation
+    fn nop(&self) {}
+    // ORA - Logical Inclusive OR
+    fn ora(&mut self, data: u8) {
+        let result = self.acc | data;
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.acc = result;
+    }
+    // PHA - Push Accumulator
+    fn pha(&mut self) {
+        self.push_to_stack(self.acc);
+    }
+    // PHP - Push Processor Status
+    fn php(&mut self) {
+        self.push_to_stack(self.flags);
+    }
+    // PLA - Pull Accumulator
+    fn pla(&mut self) {
+        let result = self.pop_from_stack();
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.acc = result;
+    }
+    // PLP - Pull Processor Status
+    fn plp(&mut self) {
+        self.flags = self.pop_from_stack();
+    }
+    // ROL - Rotate Left (Accumulator version)
+    fn rol_acc(&mut self) {
+        let result = (self.acc << 1) | self.get_carry_flag();
+        self.set_carry_flag(self.acc >> 7); // old bit 7 becomes new carry
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.acc = result;
+    }
+    // ROL - Rotate Left (Memory version)
+    fn rol_mem(&mut self, data: u8, address: u16) {
+        let result = (data << 1) | self.get_carry_flag();
+        self.set_carry_flag(data >> 7); // old bit 7 becomes new carry
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.bus.write(address, result);
+    }
+    // ROR - Rotate Right (Accumulator version)
+    fn ror_acc(&mut self) {
+        let result = (self.get_carry_flag() << 7) | (self.acc >> 1);
+        self.set_carry_flag(self.acc & 0x01); // old bit 0 becomes new carry
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.acc = result;
+    }
+    // ROR - Rotate Right (Memory version)
+    fn ror_mem(&mut self, data: u8, address: u16) {
+        let result = (self.get_carry_flag() << 7) | (data >> 1);
+        self.set_carry_flag(data & 0x01); // old bit 0 becomes new carry
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        self.bus.write(address, result);
+    }
+    // RTI - Return from Interrupt
+    fn rti(&mut self) {
+        //TODO:
+    }
+    // RTS - Return from Subroutine
+    fn rts(&mut self) {
+        self.pc = self.pop_from_stack();
+    }
+    // SBC - Subtract with Carry
+    fn sbc(&mut self, data: u8) {
+        //  result = A - M - (1 - C) == A - (M + 1 - C) == A - rhs
+        let rhs = (data + 1 - self.get_carry_flag()) as u16;
+        let result = (self.acc as u16) - rhs;
+        self.set_carry_flag(if result & 0xFF00 != 0 { 1 } else { 0 });
+        self.set_zero_flag(if result == 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        // Overflow if A < rhs
+        self.set_overflow_flag(if (self.acc as u16) < rhs as u16 { 1 } else { 0 });
+        self.acc = result as u8;
+    }
+    // SEC - Set Carry Flag
+    fn sec(&mut self) {
+        self.set_carry_flag(1);
+    }
+    // SED - Set Decimal Flag
+    fn sed(&mut self) {
+        self.set_decimal_flag(1);
+    }
+    // SEI - Set Interrupt Disable
+    fn sei(&mut self) {
+        self.set_interrupt_flag(1);
+    }
+    // STA - Store Accumulator
+    fn sta(&self, address: u16) {
+        self.bus.write(address, self.acc);
+    }
+    // STX - Store X Register
+    fn stx(&self, address: u16) {
+        self.bus.write(address, self.x);
+    }
+    // STY - Store Y Register
+    fn sty(&self, address: u16) {
+        self.bus.write(address, self.y);
+    }
+    // TAX - Transfer Accumulator to X
+    fn tax(&mut self) {
+        self.x = self.acc;
+        self.set_zero_flag(if self.x == 0 { 1 } else { 0 });
+        self.set_negative_flag(if self.x & 0x80 != 0 { 1 } else { 0 });
+    }
+    // TAY - Transfer Accumulator to Y
+    fn tay(&mut self) {
+        self.y = self.acc;
+        self.set_zero_flag(if self.y == 0 { 1 } else { 0 });
+        self.set_negative_flag(if self.y & 0x80 != 0 { 1 } else { 0 });
+    }
+    // TSX - Transfer Stack Pointer to X
+    fn tsx(&mut self) {
+        self.x = self.sp;
+        self.set_zero_flag(if self.x == 0 { 1 } else { 0 });
+        self.set_negative_flag(if self.x & 0x80 != 0 { 1 } else { 0 });
+    }
+    // TXA - Transfer X to Accumulator
+    fn txa(&mut self) {
+        self.acc = self.x;
+        self.set_zero_flag(if self.acc == 0 { 1 } else { 0 });
+        self.set_negative_flag(if self.acc & 0x80 != 0 { 1 } else { 0 });
+    }
+    // TXS - Transfer X to Stack Pointer
+    fn txs(&mut self) {
+        self.sp = self.x;
+    }
+    // TYA - Transfer Y to Accumulator
+    fn tya(&mut self) {
+        self.acc = self.y;
+        self.set_zero_flag(if self.acc == 0 { 1 } else { 0 });
+        self.set_negative_flag(if self.acc & 0x80 != 0 { 1 } else { 0 });
     }
 }
 

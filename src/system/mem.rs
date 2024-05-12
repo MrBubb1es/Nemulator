@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 pub struct Memory {
     data: [Cell<u8>; 0xFFFF],
 }

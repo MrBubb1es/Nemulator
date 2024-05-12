@@ -1,0 +1,11 @@
+/home/lance/projects/nes_emulator/target/debug/deps/libenv_logger-f795c193cef84826.rmeta: /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/lib.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/logger.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/mod.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/humantime.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/mod.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/buffer.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/target.rs
+
+/home/lance/projects/nes_emulator/target/debug/deps/env_logger-f795c193cef84826.d: /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/lib.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/logger.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/mod.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/humantime.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/mod.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/buffer.rs /home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/target.rs
+
+/home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/lib.rs:
+/home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/logger.rs:
+/home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/mod.rs:
+/home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/humantime.rs:
+/home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/mod.rs:
+/home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/buffer.rs:
+/home/lance/.cargo/registry/src/index.crates.io-6f17d22bba15001f/env_logger-0.11.3/src/fmt/writer/target.rs:

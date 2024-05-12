@@ -12,36 +12,77 @@ pub struct CPU<'a> {
 }
 impl CPU<'_> {
     // GETTER/SETTER FUNCTIONS
-    pub fn get_carry_flag(&self) -> u8 { self.flags & 0x01 }
-    pub fn get_zero_flag(&self) -> u8 { (self.flags & 0x02) >> 1 }
-    pub fn get_interrupt_flag(&self) -> u8 { (self.flags & 0x04) >> 2 }
-    pub fn get_decimal_flag(&self) -> u8 { (self.flags & 0x08) >> 3 }
-    pub fn get_b_flag(&self) -> u8 { (self.flags & 0x10) >> 4 }
-    pub fn get_blank_flag(&self) -> u8 { (self.flags & 0x20) >> 5 }
-    pub fn get_overflow_flag(&self) -> u8 { (self.flags & 0x40) >> 6 }
-    pub fn get_negative_flag(&self) -> u8 { (self.flags & 0x80) >> 7 }
+    pub fn get_carry_flag(&self) -> u8 {
+        self.flags & 0x01
+    }
+    pub fn get_zero_flag(&self) -> u8 {
+        (self.flags & 0x02) >> 1
+    }
+    pub fn get_interrupt_flag(&self) -> u8 {
+        (self.flags & 0x04) >> 2
+    }
+    pub fn get_decimal_flag(&self) -> u8 {
+        (self.flags & 0x08) >> 3
+    }
+    pub fn get_b_flag(&self) -> u8 {
+        (self.flags & 0x10) >> 4
+    }
+    pub fn get_blank_flag(&self) -> u8 {
+        (self.flags & 0x20) >> 5
+    }
+    pub fn get_overflow_flag(&self) -> u8 {
+        (self.flags & 0x40) >> 6
+    }
+    pub fn get_negative_flag(&self) -> u8 {
+        (self.flags & 0x80) >> 7
+    }
 
-    fn set_carry_flag(&mut self, val: u8) { self.flags |= val }
-    fn set_zero_flag(&mut self, val: u8) { self.flags |= val << 1 }
-    fn set_interrupt_flag(&mut self, val: u8) { self.flags |= val << 2 }
-    fn set_decimal_flag(&mut self, val: u8) { self.flags |= val << 3 }
-    fn set_b_flag(&mut self, val: u8) { self.flags |= val << 4 }
-    fn set_blank_flag(&mut self, val: u8) { self.flags |= val << 5 }
-    fn set_overflow_flag(&mut self, val: u8) { self.flags |= val << 6 }
-    fn set_negative_flag(&mut self, val: u8) { self.flags |= val << 7 }
+    fn set_carry_flag(&mut self, val: u8) {
+        self.flags |= val
+    }
+    fn set_zero_flag(&mut self, val: u8) {
+        self.flags |= val << 1
+    }
+    fn set_interrupt_flag(&mut self, val: u8) {
+        self.flags |= val << 2
+    }
+    fn set_decimal_flag(&mut self, val: u8) {
+        self.flags |= val << 3
+    }
+    fn set_b_flag(&mut self, val: u8) {
+        self.flags |= val << 4
+    }
+    fn set_blank_flag(&mut self, val: u8) {
+        self.flags |= val << 5
+    }
+    fn set_overflow_flag(&mut self, val: u8) {
+        self.flags |= val << 6
+    }
+    fn set_negative_flag(&mut self, val: u8) {
+        self.flags |= val << 7
+    }
 
-    pub fn get_acc(&self) -> u8 { self.acc }
-    pub fn get_x_reg(&self) -> u8 { self.x }
-    pub fn get_y_reg(&self) -> u8 { self.y }
-    pub fn get_sp(&self) -> u8 { self.sp }
-    pub fn get_pc(&self) -> u16 { self.pc }
+    pub fn get_acc(&self) -> u8 {
+        self.acc
+    }
+    pub fn get_x_reg(&self) -> u8 {
+        self.x
+    }
+    pub fn get_y_reg(&self) -> u8 {
+        self.y
+    }
+    pub fn get_sp(&self) -> u8 {
+        self.sp
+    }
+    pub fn get_pc(&self) -> u16 {
+        self.pc
+    }
 
     // fn set_acc(&self, val: u8) { self.acc = val }
     // fn set_x_reg(&self, val: u8) { self.x = val }
     // fn set_y_reg(&self, val: u8) { self.y = val }
     // fn set_sp(&self, val: u8) { self.sp = val }
     // fn set_pc(&self, val: u16) { self.pc = val }
-
 
     // HELPER FUNCTIONS
     // Read a 2 byte value starting at address in LLHH (little-endian) form
@@ -83,10 +124,18 @@ impl CPU<'_> {
         self.bus.read(stk_address)
     }
 
-
     // RESET FUNCTION
-    // TODO:
+    pub fn reset(&mut self) {
+        const STK_RESET: u8 = 0xFD;
+        const PC_RESET_ADDR: u16 = 0xFFFC;
 
+        self.acc = 0;
+        self.x = 0;
+        self.y = 0;
+        self.sp = STK_RESET;
+
+        self.pc = self.read_word(PC_RESET_ADDR);
+    }
 
     // ADDRESSING MODES - Fetches data from the bus
     // Returns: Tuple of (data, address, cycles) where:
@@ -173,7 +222,6 @@ impl CPU<'_> {
         self.bus.read(self.pc + 1) as i8
     }
 
-
     // OPCODES - all the cpu instructions
     // Args:
     //  - data: Single byte of data read from memory. Where data comes from is determined by the
@@ -187,9 +235,9 @@ impl CPU<'_> {
     // ADC - Add Memory to Accumulator with Carry
     fn adc(&mut self, data: u8) {
         let result = (data as u16) + (self.acc as u16) + (self.get_carry_flag() as u16);
-        self.set_acc(result as u8);
         self.set_carry_flag(if result & 0xFF00 > 0 { 1 } else { 0 });
         self.set_zero_flag(if result & 0xFF == 0 { 1 } else { 0 });
+        self.acc = result as u8;
         // NOTE: come back and do the overflow (V) flag once you know how it works
         // NOTE: and the negative flag bc I can't be bothered to rn
     }
@@ -281,21 +329,21 @@ impl CPU<'_> {
     fn cmp(&mut self, data: u8) {
         let result = (self.acc as i16) - (data as i16);
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
-        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
         self.set_carry_flag(if result >= 0 { 1 } else { 0 });
     }
     // CPX - Compare Memory and Index X
     fn cpx(&mut self, data: u8) {
         let result = (self.x as i16) - (data as i16);
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
-        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
         self.set_carry_flag(if result >= 0 { 1 } else { 0 });
     }
     // CPY - Compare Memory and Index Y
     fn cpy(&mut self, data: u8) {
         let result = (self.y as i16) - (data as i16);
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
-        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
         self.set_carry_flag(if result >= 0 { 1 } else { 0 });
     }
     // DEC - Decrement Memory
@@ -323,28 +371,28 @@ impl CPU<'_> {
     fn eor(&mut self, data: u8) {
         let result = self.acc ^ data;
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
-        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
         self.acc = result;
     }
     // INC - Increment Memory
     fn inc(&mut self, data: u8, address: u16) {
         let result = data.wrapping_add(1);
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
-        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
         self.bus.write(address, result);
     }
     // INX - Increment X Register
     fn inx(&mut self) {
         let result = self.x.wrapping_add(1);
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
-        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
         self.x = result;
     }
     // INY - Increment Y Register
     fn iny(&mut self) {
         let result = self.y.wrapping_add(1);
         self.set_zero_flag(if result == 0 { 1 } else { 0 });
-        self.set_negative_flag(if result < 0 { 1 } else { 0 });
+        self.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
         self.y = result;
     }
     // JMP - Jump
@@ -354,7 +402,7 @@ impl CPU<'_> {
     // JSR - Jump to Subroutine
     fn jsr(&mut self, address: u16) {
         let return_point = self.pc + 2; // Return point is the return address - 1, and since this
-        // instruction will always use absolute addressing mode, the whole instruction is 3 bytes.
+                                        // instruction will always use absolute addressing mode, the whole instruction is 3 bytes.
         let lo = return_point as u8;
         let hi = (return_point >> 8) as u8;
         self.push_to_stack(lo);
@@ -460,7 +508,9 @@ impl CPU<'_> {
     }
     // RTS - Return from Subroutine
     fn rts(&mut self) {
-        self.pc = self.pop_from_stack();
+        let hi = self.pop_from_stack() as u16;
+        let lo = self.pop_from_stack() as u16;
+        self.pc = (hi << 8) | lo;
     }
     // SBC - Subtract with Carry
     fn sbc(&mut self, data: u8) {
@@ -534,8 +584,5 @@ impl CPU<'_> {
     }
 }
 
-
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

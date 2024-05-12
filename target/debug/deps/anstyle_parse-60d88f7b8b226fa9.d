@@ -1,0 +1,9 @@
+C:\Users\lance\Desktop\Pet Projects\RustProjects\emulator6502\target\debug\deps\libanstyle_parse-60d88f7b8b226fa9.rmeta: C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\lib.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\params.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\mod.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\definitions.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\table.rs
+
+C:\Users\lance\Desktop\Pet Projects\RustProjects\emulator6502\target\debug\deps\anstyle_parse-60d88f7b8b226fa9.d: C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\lib.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\params.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\mod.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\definitions.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\table.rs
+
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\lib.rs:
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\params.rs:
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\mod.rs:
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\definitions.rs:
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\anstyle-parse-0.2.4\src\state\table.rs:

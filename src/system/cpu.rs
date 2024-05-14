@@ -10,7 +10,24 @@ pub struct CPU<'a> {
 
     bus: &'a Bus,
 }
-impl CPU<'_> {
+impl<'a> CPU<'a> {
+    pub fn new(bus: &'a Bus) -> Self {
+        CPU{ 
+            acc: 0, 
+            x: 0, 
+            y: 0, 
+            sp: 0, 
+            pc: 0, 
+            flags: 0, 
+            bus: bus,
+        }
+    }
+
+    pub fn cycle(&mut self, instruction: &[u8]) {
+        let (data, address, fetch_cycles) = self.fetch(instruction);
+        let execute_cycles = self.excecute(data, address);
+    }
+
     // GETTER/SETTER FUNCTIONS
     pub fn get_carry_flag(&self) -> u8 {
         self.flags & 0x01
@@ -37,28 +54,28 @@ impl CPU<'_> {
         (self.flags & 0x80) >> 7
     }
 
-    fn set_carry_flag(&mut self, val: u8) {
+    pub fn set_carry_flag(&mut self, val: u8) {
         self.flags |= val
     }
-    fn set_zero_flag(&mut self, val: u8) {
+    pub fn set_zero_flag(&mut self, val: u8) {
         self.flags |= val << 1
     }
-    fn set_interrupt_flag(&mut self, val: u8) {
+    pub fn set_interrupt_flag(&mut self, val: u8) {
         self.flags |= val << 2
     }
-    fn set_decimal_flag(&mut self, val: u8) {
+    pub fn set_decimal_flag(&mut self, val: u8) {
         self.flags |= val << 3
     }
-    fn set_b_flag(&mut self, val: u8) {
+    pub fn set_b_flag(&mut self, val: u8) {
         self.flags |= val << 4
     }
-    fn set_blank_flag(&mut self, val: u8) {
+    pub fn set_blank_flag(&mut self, val: u8) {
         self.flags |= val << 5
     }
-    fn set_overflow_flag(&mut self, val: u8) {
+    pub fn set_overflow_flag(&mut self, val: u8) {
         self.flags |= val << 6
     }
-    fn set_negative_flag(&mut self, val: u8) {
+    pub fn set_negative_flag(&mut self, val: u8) {
         self.flags |= val << 7
     }
 

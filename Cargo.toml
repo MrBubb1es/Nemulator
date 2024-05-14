@@ -8,4 +8,9 @@ edition = "2021"
 [dependencies]
 env_logger = "*"
 log = "*"
-sdl2 = "*"
+rusttype = "0.9.3"
+
+[dependencies.sdl2]
+version = "*"
+default-features = false
+features = ["ttf"]

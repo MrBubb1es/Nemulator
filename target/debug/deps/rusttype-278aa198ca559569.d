@@ -1,0 +1,8 @@
+C:\Users\lance\Desktop\Pet Projects\RustProjects\emulator6502\target\debug\deps\librusttype-278aa198ca559569.rmeta: C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\lib.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\font.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\geometry.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\outliner.rs
+
+C:\Users\lance\Desktop\Pet Projects\RustProjects\emulator6502\target\debug\deps\rusttype-278aa198ca559569.d: C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\lib.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\font.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\geometry.rs C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\outliner.rs
+
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\lib.rs:
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\font.rs:
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\geometry.rs:
+C:\Users\lance\.cargo\registry\src\index.crates.io-6f17d22bba15001f\rusttype-0.9.3\src\outliner.rs:

@@ -5,6 +5,12 @@ pub struct Bus {
 }
 
 impl Bus {
+    pub fn new() -> Self {
+        Bus {
+            memory: Memory::new(),
+        }
+    }
+
     pub fn read(&self, address: u16) -> u8 {
         match address {
             0x0000..=0xFFFF => self.memory.read(address),

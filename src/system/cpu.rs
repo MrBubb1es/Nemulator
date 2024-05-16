@@ -12,20 +12,15 @@ pub struct CPU<'a> {
 }
 impl<'a> CPU<'a> {
     pub fn new(bus: &'a Bus) -> Self {
-        CPU{ 
-            acc: 0, 
-            x: 0, 
-            y: 0, 
-            sp: 0, 
-            pc: 0, 
-            flags: 0, 
+        CPU {
+            acc: 0,
+            x: 0,
+            y: 0,
+            sp: 0,
+            pc: 0,
+            flags: 0,
             bus: bus,
         }
-    }
-
-    pub fn cycle(&mut self, instruction: &[u8]) {
-        let (data, address, fetch_cycles) = self.fetch(instruction);
-        let execute_cycles = self.excecute(data, address);
     }
 
     // GETTER/SETTER FUNCTIONS
@@ -598,6 +593,77 @@ impl<'a> CPU<'a> {
         self.acc = self.y;
         self.set_zero_flag(if self.acc == 0 { 1 } else { 0 });
         self.set_negative_flag(if self.acc & 0x80 != 0 { 1 } else { 0 });
+    }
+
+    // Execute a single instruction on the CPU. Returns number of cycles taken to complete
+    // the instruction.
+    pub fn fetch_decode_execute(&mut self) -> usize {
+        let opcode = self.bus.read(self.pc);
+        let num_cycles = match opcode {
+            0x00 => {
+                self.immediate();
+                self.pc += 1;
+                self.brk();
+                7
+            }
+            0x01 => {
+                let arg = self.indexed_x();
+                self.pc += 3;
+                self.ora(arg);
+                6
+            }
+            0x05 => {
+                let arg = self.zero_page();
+                self.pc += 2;
+                self.ora(arg);
+                3
+            }
+            0x06 => {
+                let arg = self.zero_page();
+                self.pc += 2;
+                self.asl(arg);
+                5
+            }
+            0x08 => {
+                self.implied();
+                self.pc += 1;
+                self.php();
+                3
+            }
+            0x09 => {
+                let arg = self.immediate();
+                self.pc += 2;
+                self.ora(arg);
+                2
+            }
+            0x0A => {
+                self.immediate();
+                self.pc += 1;
+                self.asl();
+                2
+            }
+            0x0D => {
+                let arg = self.absolute();
+                self.pc += 3;
+                self.ora(arg);
+                4
+            }
+            0x0E => {
+                let arg = self.absolute();
+                self.pc += 3;
+                self.asl(arg);
+                6
+            }
+            0x10 => {
+                let arg = self.immediate();
+                self.pc += 2;
+                self.bpl(arg);
+                2
+            }
+            _ => panic!("Unrecognized instruction {opcode:#x} at {0:#x}", self.pc),
+        };
+
+        0
     }
 }
 

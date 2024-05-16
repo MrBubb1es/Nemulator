@@ -52,6 +52,9 @@ pub fn main() {
         window.draw(&cpu, &bus);
         tick += 1;
 
+        // Testing the cpu for now
+        cpu.fetch_decode_execute();
+
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
@@ -130,3 +133,4 @@ pub fn main() {
 //         handle.write_all(b"\n").unwrap();
 //     }
 // }
+

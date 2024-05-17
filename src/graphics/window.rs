@@ -1,9 +1,7 @@
 
 use rusttype::{Font, Scale};
-use rusttype::LayoutIter;
 use sdl2::rect::Rect;
 use sdl2::surface::Surface;
-use sdl2::ttf::Sdl2TtfContext;
 use sdl2::video::Window as SDLWindow;
 use sdl2::event::EventPollIterator;
 use sdl2::pixels::Color;
@@ -12,14 +10,13 @@ use sdl2::{EventPump, Sdl};
 
 use crate::system::bus::Bus;
 use crate::system::cpu::CPU;
-use crate::system::mem::Memory;
 
 use super::util;
 
 pub struct Window<'a> {
     is_debug: bool,
 
-    context: Sdl,
+    _context: Sdl,
     text_font: Font<'a>,
     canvas: Canvas<SDLWindow>,
     event_pump: EventPump,
@@ -80,7 +77,7 @@ impl<'a> Window<'a> {
 
         Window{
             is_debug: debug,
-            context: sdl_context,
+            _context: sdl_context,
             text_font: font,
             canvas: canvas,
             event_pump: event_pump,
@@ -136,7 +133,12 @@ impl<'a> Window<'a> {
         self.write("Zero-Page:", 5, 5, DEBUG_TXT_SIZE+5.0, DEBUG_TXT_COLOR);
         self.write(&zero_page_str, 5, (DEBUG_TXT_SIZE as usize)+10, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
 
-        self.write_cpu(cpu, 5, 17*(DEBUG_TXT_SIZE as usize)+10, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
+        let low_height = 17*(DEBUG_TXT_SIZE as usize)+10;
+
+        self.write_cpu(cpu, 5, low_height, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
+
+        self.write("Just Executed:", 200, low_height, DEBUG_TXT_SIZE+5.0, DEBUG_TXT_COLOR);
+        self.write(&cpu.current_instr_str(), 210, low_height+(DEBUG_TXT_SIZE as usize)+10, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
 
         self.canvas.present();
     }
@@ -147,7 +149,7 @@ impl<'a> Window<'a> {
 
     // Takes in text, an x and y pair to draw to on the window, and the height in
     // pixels to draw the text, and renders it to this window's SDL canvas.
-    fn write(&mut self, text: &str, x: usize, y: usize, height: f32, color: Color) {
+    pub fn write(&mut self, text: &str, x: usize, y: usize, height: f32, color: Color) {
         // 2x scale in x direction to counter the aspect ratio of monospace characters.
         let scale = Scale {
             x: height,

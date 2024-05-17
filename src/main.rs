@@ -15,48 +15,10 @@
 *   - Online multiplayer (with servers and junk)
 */
 
-pub mod cartridge;
-pub mod graphics;
-pub mod system;
-
-use sdl2::event::Event;
-use system::{bus::Bus, cpu::CPU};
-// use sdl2::keyboard::Keycode;
-use std::time::Duration;
-
-use graphics::window::Window;
+use nes_emulator;
 
 pub fn main() {
-    let mut window = Window::new(true);
-    let mut tick = 0;
-
-    let bus = Bus::new();
-    let mut cpu = CPU::new(&bus);
-
-    cpu.set_carry_flag(1);
-
-    'running: loop {
-        for event in window.event_iter() {
-            match event {
-                Event::Quit { .. } => break 'running,
-                // | Event::KeyDown {
-                //     keycode: Some(Keycode::Escape),
-                //     ..
-                // } => break 'running,
-                _ => {}
-            }
-        }
-        // The rest of the game loop goes here...
-        // system::tick();
-        bus.write(0, tick as u8);
-        window.draw(&cpu, &bus);
-        tick += 1;
-
-        // Testing the cpu for now
-        cpu.fetch_decode_execute();
-
-        std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-    }
+    nes_emulator::run();
 }
 
 // Render example where each glyph pixel is output as an ascii character.

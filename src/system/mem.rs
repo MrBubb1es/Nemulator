@@ -6,9 +6,9 @@ pub struct Memory {
 
 impl Memory {
     pub fn new() -> Self {
-        let mut data = Vec::with_capacity(0xFFFF);
+        let mut data = Vec::with_capacity(0x10000);
 
-        for _ in 0..0xFFFF {
+        for _ in 0..=0xFFFF {
             data.push(Cell::new(0));
         }
 

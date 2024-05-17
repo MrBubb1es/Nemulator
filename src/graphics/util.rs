@@ -55,17 +55,21 @@ pub fn new_canvas_with_context(sdl_context: &Sdl, title: &str, width: Option<u32
 // screen. Basically it just does all of the rendering up front and uses the
 // rendered texture in the future.
 pub fn load_font() -> Font<'static> {
-    if let Some(font_path) = std::env::args().nth(1) {
-        let font_path = std::env::current_dir().unwrap().join(font_path);
-        let data = std::fs::read(&font_path).unwrap();
-        Font::try_from_vec(data).unwrap_or_else(|| {
-            panic!("error constructing a Font from data at {:?}", font_path);
-        })
-    } else {
-        eprintln!("No font specified ... using FiraCode-VariableFont_wght.ttf");
+    // if let Some(font_path) = std::env::args().nth(1) {
+    //     let font_path = std::env::current_dir().unwrap().join(font_path);
+    //     let data = std::fs::read(&font_path).unwrap();
+    //     Font::try_from_vec(data).unwrap_or_else(|| {
+    //         panic!("error constructing a Font from data at {:?}", font_path);
+    //     })
+    // } else {
+    //     eprintln!("No font specified ... using FiraCode-VariableFont_wght.ttf");
+    //     let font_data = include_bytes!("fonts/FiraCode-VariableFont_wght.ttf");
+    //     Font::try_from_bytes(font_data as &[u8]).expect("error constructing a Font from bytes")
+    // }
+
+    eprintln!("No font specified ... using FiraCode-VariableFont_wght.ttf");
         let font_data = include_bytes!("fonts/FiraCode-VariableFont_wght.ttf");
         Font::try_from_bytes(font_data as &[u8]).expect("error constructing a Font from bytes")
-    }
 }
 
 // Chooses either black or white text based on given background color. Uses a

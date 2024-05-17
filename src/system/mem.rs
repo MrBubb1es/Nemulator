@@ -5,16 +5,14 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new() -> Self {
-        let mut data = Vec::with_capacity(0x10000);
+    pub fn new(size: usize) -> Self {
+        let mut data = Vec::with_capacity(size);
 
-        for _ in 0..=0xFFFF {
+        for _ in 0..=size {
             data.push(Cell::new(0));
         }
 
-        Memory {
-            data: data,
-        }
+        Memory { data: data }
     }
 
     pub fn read(&self, address: u16) -> u8 {

@@ -1,3 +1,5 @@
+use crate::system::mem::Memory;
+
 // Identifier for NES 2.0 and INES formats
 pub const NES_2V0_IDENT: [u8; 4] = [b'N', b'E', b'S', 0x1A];
 
@@ -51,64 +53,51 @@ struct Header {
     default_expansion_device: u8,
 }
 
-
-
 pub struct Cartridge {
     format: CartFormat,
-    header: Option<Header>,
 
     trainer_area: Option<[u8; 512]>,
-    prg_rom: Vec<u8>,
-    chr_rom: Vec<u8>,
-    misc_rom: Vec<u8>,
+    prg_rom: Memory,
+    chr_rom: Memory,
+    misc_rom: Memory,
 }
 
 impl Cartridge {
     pub const HEADER_LEN: usize = 16;
     pub const TRAINER_LEN: usize = 512;
 
-    pub fn new() -> Self {
-        Cartridge {
-            format: CartFormat::Unknown,
-            header: None,
-
-            trainer_area: None,
-            prg_rom: Vec::new(),
-            chr_rom: Vec::new(),
-            misc_rom: Vec::new(),
-        }
-    }
-
     // Attempts to parse the header section of the provided data. If the slice of bytes isn't in
     // the NES 2.0 or INES format, the function returns an error. Else it reads the header and
-    // sets all flags/cartridge values accordingly.
-    pub fn parse_header(&mut self, data: &[u8]) -> Result<(), String> {
+    // constructs and returns the cartridge.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, String> {
         if data.len() < Self::HEADER_LEN {
             return Err(String::from("Cartridge file not NES 2.0 (or INES) format"));
         }
 
         // Identifier should be 'NES<EOF>'
+        let mut format = CartFormat::Unknown;
         if data[..4] == NES_2V0_IDENT {
-            self.format = CartFormat::INES;
-
+            format = CartFormat::INES;
             // Identifier flags are NES 2.0
             if (data[7] & 0x0C) == 0x08 {
-                self.format = CartFormat::V2NES;
+                format = CartFormat::V2NES;
             }
+        } else {
+            format = CartFormat::Unknown;
         }
 
         // If file is of unknown format, the identifier still could be looked at to determine file
         // type. Mostly a debugging tool.
         let ident = match std::str::from_utf8(&data[..4]) {
             Ok(v) => v,
-            Err(..) => { return Err(String::from("Could not read cart file identifier")) },
+            Err(..) => return Err(String::from("Could not read cart file identifier")),
         };
 
         let mut header = Header::default();
 
         header.identifier = ident.to_string();
 
-        if self.format == CartFormat::Unknown {
+        if format == CartFormat::Unknown {
             return Err(format!("Unknown cartridge format '{0}'", header.identifier));
         }
 
@@ -153,9 +142,13 @@ impl Cartridge {
 
         header.default_expansion_device = data[15] & 0x3F;
 
-        self.header = Some(header);
-
-        Ok(())
+        Ok(Cartridge {
+            format: format,
+            trainer_area: None,
+            prg_rom: Memory::from_vec(header.prg_rom),
+            chr_rom: Memory::from_vec(header.chr_rom_size),
+            misc_rom: Memory::from_vec(),
+        })
     }
 
     // Sets the trainer data of this cartridge from the given data
@@ -197,11 +190,11 @@ impl Cartridge {
                     let mm = (h.prg_rom_size & 0x3) as usize;
                     let exp = (h.prg_rom_size & 0xFC) >> 2;
 
-                    return (1 << exp) * (2*mm + 1);
+                    return (1 << exp) * (2 * mm + 1);
                 }
 
                 h.prg_rom_size as usize
-            },
+            }
             None => 0,
         }
     }
@@ -213,11 +206,11 @@ impl Cartridge {
                     let mm = (h.chr_rom_size & 0x3) as usize;
                     let exp = (h.chr_rom_size & 0xFC) >> 2;
 
-                    return (1 << exp) * (2*mm + 1);
+                    return (1 << exp) * (2 * mm + 1);
                 }
 
                 h.chr_rom_size as usize
-            },
+            }
             None => 0,
         }
     }
@@ -250,7 +243,6 @@ impl Cartridge {
         }
     }
 
-
     pub fn has_hardwired_nametable(&self) -> bool {
         match &self.header {
             Some(h) => h.hardwired_nametable,
@@ -272,36 +264,57 @@ impl Cartridge {
         }
     }
 
-
     pub fn get_prg_ram_size(&self) -> usize {
         match &self.header {
-            Some(h) => if h.has_prg_ram { 64 << h.prg_ram_shift as usize } else { 0 },
+            Some(h) => {
+                if h.has_prg_ram {
+                    64 << h.prg_ram_shift as usize
+                } else {
+                    0
+                }
+            }
             None => 0,
         }
     }
 
     pub fn get_prg_nv_ram_size(&self) -> usize {
         match &self.header {
-            Some(h) => if h.has_prg_nv_ram { 64 << h.prg_nv_ram_shift as usize } else { 0 },
+            Some(h) => {
+                if h.has_prg_nv_ram {
+                    64 << h.prg_nv_ram_shift as usize
+                } else {
+                    0
+                }
+            }
             None => 0,
         }
     }
 
     pub fn get_chr_ram_size(&self) -> usize {
         match &self.header {
-            Some(h) => if h.has_chr_ram { 64 << h.chr_ram_shift as usize } else { 0 },
+            Some(h) => {
+                if h.has_chr_ram {
+                    64 << h.chr_ram_shift as usize
+                } else {
+                    0
+                }
+            }
             None => 0,
         }
     }
-
 
     pub fn get_chr_nv_ram_size(&self) -> usize {
         match &self.header {
-            Some(h) => if h.has_chr_nv_ram { 64 << h.chr_nv_ram_shift as usize } else { 0 },
+            Some(h) => {
+                if h.has_chr_nv_ram {
+                    64 << h.chr_nv_ram_shift as usize
+                } else {
+                    0
+                }
+            }
             None => 0,
         }
     }
-
 
     pub fn get_timing_mode(&self) -> usize {
         match &self.header {
@@ -310,14 +323,12 @@ impl Cartridge {
         }
     }
 
-
     pub fn get_vs_hardware_type(&self) -> usize {
         match &self.header {
             Some(h) => h.vs_hardware_type as usize,
             None => 0,
         }
     }
-
 
     pub fn get_vs_ppu_type(&self) -> usize {
         match &self.header {
@@ -326,7 +337,6 @@ impl Cartridge {
         }
     }
 
-
     pub fn get_extended_console_type(&self) -> usize {
         match &self.header {
             Some(h) => h.extended_console_type as usize,
@@ -334,14 +344,12 @@ impl Cartridge {
         }
     }
 
-
     pub fn get_misc_rom_count(&self) -> usize {
         match &self.header {
             Some(h) => h.misc_roms_count as usize,
             None => 0,
         }
     }
-
 
     pub fn get_default_expansion_device(&self) -> usize {
         match &self.header {

@@ -15,6 +15,16 @@ impl Memory {
         Memory { data: data }
     }
 
+    pub fn from_vec(vec: Vec<u8>) -> Self {
+        let mut data: Vec<Cell<u8>> = Vec::new();
+
+        for byte in vec.into_iter() {
+            data.push(Cell::new(byte));
+        }
+
+        Memory { data: data }
+    }
+
     pub fn read(&self, address: u16) -> u8 {
         self.data[address as usize].get()
     }

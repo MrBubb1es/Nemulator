@@ -39,7 +39,9 @@ impl<'a> CPU<'a> {
     /// cycles as that instruction requires. This function encapsulates all of
     /// the fetch, decode, and execute stages of the CPU. Returns the total
     /// number of clock cycles taken for the instruction run.
-    pub fn cycle(&mut self, opcode: u8) -> usize {
+    pub fn cycle(&mut self) -> usize {
+        let opcode = self.read(self.pc);
+        
         // fetch - get the opcode we are running
         let instr = &INSTRUCTION_TABLE[opcode as usize];
 

@@ -1,6 +1,7 @@
 use crate::cartridge::cartridge::Cartridge;
 
 use super::mem::Memory;
+use super::nes_graphics;
 
 /// Representation of the NES Picture Processing Unit. Details on how the PPU
 /// works can be found here: https://www.nesdev.org/wiki/PPU_registers
@@ -78,6 +79,8 @@ pub struct PPU {
 
     cart: &'static Cartridge,
     vram: Memory,
+
+    palette: nes_graphics::NESPalette,
 }
 
 impl PPU {
@@ -93,6 +96,7 @@ impl PPU {
             cart: cart,
 
             vram: Memory::new(0x800), // 2KiB ppu ram
+            palette: nes_graphics::DEFAULT_PALETTE,
         }
     }
 
@@ -103,16 +107,18 @@ impl PPU {
     /// 
     /// 0x0000-0x1FFF: Cartridge CHR ROM
     /// 
-    /// 0x2000-0x3EFF: VRAM
+    /// 0x2000-0x2FFF: VRAM
     /// 
-    /// 0x3F00-0x3FFF: Pallete
+    /// 0x3000-0x3EFF: VRAM (Mirror of 0x2000-0x2EFF)
+    /// 
+    /// 0x3F00-0x3FFF: palette
     /// 
     ///  * `address` - 16 bit address used to access data
     pub fn read(&self, address: u16) -> u8 {
         match address {
             0x0000..=0x1FFF => self.cart.ppu_read(address),
-            0x2000..=0x2FFF => self.read_vram(address & 0x0FFF),
-            0x3F00..=0x3FFF => self.read_pallet(address & 0x00FF),
+            0x2000..=0x3EFF => self.read_vram(address & 0x0FFF),
+            0x3F00..=0x3FFF => self.read_palette(address & 0x00FF),
         }
     }
 
@@ -120,7 +126,7 @@ impl PPU {
         0
     }
 
-    fn read_pallet(&self, address: u16) -> u8 {
+    fn read_palette(&self, address: u16) -> u8 {
         0
     }
 
@@ -131,7 +137,7 @@ impl PPU {
     /// 
     /// 0x2000-0x3EFF: VRAM
     /// 
-    /// 0x3F00-0x3FFF: Pallete
+    /// 0x3F00-0x3FFF: palettee
     /// 
     ///  * `address` - 16 bit address used to access data
     pub fn write(&self, address: u16, data: u8) {

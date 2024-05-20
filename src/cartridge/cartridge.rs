@@ -10,7 +10,7 @@ pub enum CartFormat {
     V2NES,
 }
 
-// Struct containing the 16 byte header of the cartridge
+/// Struct containing information given by the 16 byte header of the cartridge
 #[derive(Default)]
 struct Header {
     // Bytes 0-3
@@ -22,7 +22,7 @@ struct Header {
     // Byte 6
     mapper_num: u16,
     alt_nametables: bool,
-    has_trainer: bool,
+    has_trainer: bool, // shouldn't matter for our purposes
     battery_present: bool,
     hardwired_nametable: bool,
     // Byte 7
@@ -53,10 +53,11 @@ struct Header {
     default_expansion_device: u8,
 }
 
+/// Representation of a standard NES Cartridge.
 pub struct Cartridge {
     format: CartFormat,
 
-    trainer_area: Option<[u8; 512]>,
+    // trainer_area: Option<[u8; 512]>,
     prg_rom: Memory,
     chr_rom: Memory,
     misc_rom: Memory,
@@ -66,9 +67,11 @@ impl Cartridge {
     pub const HEADER_LEN: usize = 16;
     pub const TRAINER_LEN: usize = 512;
 
-    // Attempts to parse the header section of the provided data. If the slice of bytes isn't in
-    // the NES 2.0 or INES format, the function returns an error. Else it reads the header and
-    // constructs and returns the cartridge.
+    /// Attempts to parse the header section of the provided data. If the slice
+    /// of bytes isn't in the NES 2.0 or iNES format, an error is returned. Else
+    /// it reads the header and constructs and returns the cartridge. The layout
+    /// of the header is described in detail here:
+    /// https://www.nesdev.org/wiki/NES_2.0#Header
     pub fn from_bytes(data: &[u8]) -> Result<Self, String> {
         if data.len() < Self::HEADER_LEN {
             return Err(String::from("Cartridge file not NES 2.0 (or INES) format"));
@@ -144,7 +147,7 @@ impl Cartridge {
 
         Ok(Cartridge {
             format: format,
-            trainer_area: None,
+            // trainer_area: None,
             prg_rom: Memory::from_vec(header.prg_rom),
             chr_rom: Memory::from_vec(header.chr_rom_size),
             misc_rom: Memory::from_vec(),

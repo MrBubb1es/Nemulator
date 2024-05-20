@@ -1,2 +1,2 @@
 # Ignore files involved in building code
-/target/
+target/

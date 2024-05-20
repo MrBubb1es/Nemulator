@@ -15,8 +15,14 @@ macro_rules! illegal_op {
     };
 }
 
+// This instruction isn't real. It cannot ever happen, so it's used as a sort
+// of placeholder or "We haven't started the program yet." It's the initial
+// instruction the CPU is loaded with
 pub const DEFAULT_ILLEGAL_OP: Instruction = illegal_op!(0x00);
 
+/// A large lookup table for each instruction, indexed by that 
+/// instruction's opcode. The full table can be viewed here:
+/// https://www.masswerk.at/6502/6502_instruction_set.html
 pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "BRK", opcode_num: 0x00, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: brk, base_clocks: 7, bytes: 2},
 	Instruction{name: "ORA", opcode_num: 0x01, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: ora, base_clocks: 6, bytes: 3},
@@ -312,6 +318,11 @@ pub enum AddressingMode {
 }
 
 #[derive(Clone, Copy)]
+/// A struct containing all of the data any instruction may need for its
+/// execution. Some instructions need data, some need addresses, some need both.
+/// Some instructions have multiple versions, and they decide which version to
+/// execute depending on whether the given OpcodeData contains an address and
+/// data. 
 pub struct OpcodeData {
     pub data: Option<u8>,
     pub address: Option<u16>,
@@ -319,6 +330,8 @@ pub struct OpcodeData {
 }
 
 #[derive(Clone)]
+/// Contains all information needed for execution and debugging of each 
+/// individual instruction. All fields are public for ease of use.
 pub struct Instruction {
     pub name: &'static str,
     pub opcode_num: u8,

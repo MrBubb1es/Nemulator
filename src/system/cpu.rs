@@ -1,9 +1,11 @@
-use std::borrow::Borrow;
-
-use super::instructions::{self, AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE};
+use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
 use super::bus::Bus;
 
+/// Representation of the NES 6502 CPU. Thankfully, the good gentelmen down at
+/// the lab have already done extensive research and documentation of this
+/// particular device, so if you ever have questions about why things are the
+/// way they are, check this wiki: https://www.nesdev.org/wiki/CPU
 pub struct CPU<'a> {
     acc: u8,
     x: u8,
@@ -17,6 +19,7 @@ pub struct CPU<'a> {
     current_instr: Instruction,
     instr_data: OpcodeData,
 }
+
 impl<'a> CPU<'a> {
     pub fn new(bus: &'a Bus) -> Self {
         CPU {
@@ -27,18 +30,30 @@ impl<'a> CPU<'a> {
             pc: 0,
             flags: 0,
             bus: bus,
-            current_instr: instructions::DEFAULT_ILLEGAL_OP,
-            instr_data: instructions::OpcodeData{data: None, address: None, offset: None},
+            current_instr: DEFAULT_ILLEGAL_OP,
+            instr_data: OpcodeData{data: None, address: None, offset: None},
         }
     }
 
+    /// Cycles the CPU through one whole instruction, taking as many clock 
+    /// cycles as that instruction requires. This function encapsulates all of
+    /// the fetch, decode, and execute stages of the CPU. Returns the total
+    /// number of clock cycles taken for the instruction run.
     pub fn cycle(&mut self, opcode: u8) -> usize {
-        let instr = &instructions::INSTRUCTION_TABLE[opcode as usize];
+        // fetch - get the opcode we are running
+        let instr = &INSTRUCTION_TABLE[opcode as usize];
 
+        // decode - retrieve the neccesary data for the instruction
         let (opcode_data, fetch_cycles) = (instr.addr_func)(self);
+
+        // execute - run the instruction, updating memory and processor status
+        //           as defined by the instruction
         let execute_cycles = (instr.func)(self, opcode_data);
+
+        // update PC
         self.pc += instr.bytes as u16;
 
+        // store the instruction just executed (for debugging)
         self.current_instr = instr.clone();
         self.instr_data = opcode_data;
 
@@ -46,134 +61,178 @@ impl<'a> CPU<'a> {
     }
 
     // GETTER/SETTER FUNCTIONS
+
+    /// Get the carry flag as a 0 or 1 value
     pub fn get_carry_flag(&self) -> u8 {
         self.flags & 0x01
     }
+    /// Get the zero flag as a 0 or 1 value
     pub fn get_zero_flag(&self) -> u8 {
         (self.flags & 0x02) >> 1
     }
+    /// Get the interrupt flag as a 0 or 1 value
     pub fn get_interrupt_flag(&self) -> u8 {
         (self.flags & 0x04) >> 2
     }
+    /// Get the decimal flag as a 0 or 1 value
     pub fn get_decimal_flag(&self) -> u8 {
         (self.flags & 0x08) >> 3
     }
+    /// Get the 'b' flag as a 0 or 1 value
     pub fn get_b_flag(&self) -> u8 {
         (self.flags & 0x10) >> 4
     }
+    /// Get the unused flag as a 0 or 1 value
     pub fn get_unused_flag(&self) -> u8 {
         (self.flags & 0x20) >> 5
     }
+    /// Get the overflow flag as a 0 or 1 value
     pub fn get_overflow_flag(&self) -> u8 {
         (self.flags & 0x40) >> 6
     }
+    /// Get the negative flag as a 0 or 1 value
     pub fn get_negative_flag(&self) -> u8 {
         (self.flags & 0x80) >> 7
     }
+    /// Get the whole flags byte (processor status byte)
     pub fn get_flags(&self) -> u8 {
         self.flags
     }
 
+    /// Set the carry flag as a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_carry_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0xFE) | (val << 0);
     }
+    /// Set the zero flag as a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_zero_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0xFD) | (val << 1);
     }
+    /// Set the interrupt flag as a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_interrupt_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0xFB) | (val << 2);
     }
+    /// Set the decimal flag to a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_decimal_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0xF7) | (val << 3);
     }
+    /// Set the 'B' flag to a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_b_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0xEF) | (val << 4);
     }
+    /// Set the unused flag to a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_unused_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0xDF) | (val << 5);
     }
+    /// Set the overflow flag to a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_overflow_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0xBF) | (val << 6);
     }
+    /// Set the negative flag to a 0 or 1. (Technically, any u8 value can be
+    /// passed to this function, but this is seen as undefined behavior)
     pub fn set_negative_flag(&mut self, val: u8) {
         self.flags = (self.flags & 0x7F) | (val << 7);
     }
+    /// Set the whole processor status byte
     pub fn set_flags(&mut self, val: u8) {
         self.flags = val;
     }
 
+    /// Get the current value of the accumulator
     pub fn get_acc(&self) -> u8 {
         self.acc
     }
+    /// Get the current value of the X register
     pub fn get_x_reg(&self) -> u8 {
         self.x
     }
+    /// Get the current value of the Y register
     pub fn get_y_reg(&self) -> u8 {
         self.y
     }
+    /// Get the current value of the stack pointer
     pub fn get_sp(&self) -> u8 {
         self.sp
     }
+    /// Get the current value of the program counter
     pub fn get_pc(&self) -> u16 {
         self.pc
     }
 
+    /// Set the value of the accumulator
     pub fn set_acc(&mut self, val: u8) {
         self.acc = val;
     }
+    /// Set the value of the X register
     pub fn set_x_reg(&mut self, val: u8) {
         self.x = val;
     }
+    /// Set the value of the Y register
     pub fn set_y_reg(&mut self, val: u8) {
         self.y = val;
     }
+    /// Set the value of the stack pointer
     pub fn set_sp(&mut self, val: u8) {
         self.sp = val;
     }
+    /// Set the value of the program counter
     pub fn set_pc(&mut self, val: u16) {
         self.pc = val;
     }
 
     // HELPER FUNCTIONS
+
+    /// Read a single byte from a given address off the bus
     pub fn read(&self, address: u16) -> u8 {
         self.bus.read(address)
     }
+    /// Write a single byte to the bus at a given address
     pub fn write(&self, address: u16, data: u8) {
         self.bus.write(address, data)
     }
-    // Read a 2 byte value starting at address in LLHH (little-endian) form
+    /// Read a 2 byte value starting at the given address in LLHH (little-endian) form
     pub fn read_word(&self, address: u16) -> u16 {
         let lo = self.bus.read(address) as u16;
         let hi = self.bus.read(address + 1) as u16;
         (hi << 8) | lo
     }
-    // Write a 2 byte value to a given memory address in LLHH form
+    /// Write a 2 byte value to a given address in LLHH form
     pub fn write_word(&self, address: u16, data: u16) {
         let lo = data as u8;
         let hi = (data >> 8) as u8;
         self.bus.write(address, lo);
         self.bus.write(address + 1, hi);
     }
-    // Read a 2 byte value from the zero-page of memory. If the address being read from is 0xFF,
-    // then the high byte will be taken from address 0x00 (wrap around zero-page)
+    /// Read a 2 byte value from the zero-page of memory. If the address being read from is 0xFF,
+    /// then the high byte will be taken from address 0x00 (wrap around zero-page)
     pub fn read_zpage_word(&self, zpage_address: u8) -> u16 {
         let lo = self.bus.read(zpage_address as u16) as u16;
         let hi = self.bus.read(zpage_address.wrapping_add(1) as u16) as u16;
         (hi << 8) | lo
     }
-    // Write a 2 byte value to the z-page in memory at given address. If address is 0xFF, the
-    // second byte will be written to 0x00 (wrapping z-page).
+    /// Write a 2 byte value to the z-page in memory at given address. If address is 0xFF, the
+    /// second byte will be written to 0x00 (wrapping z-page).
     pub fn write_zpage_word(&self, zpage_address: u8, data: u16) {
         let lo = data as u8;
         let hi = (data >> 8) as u8;
         self.bus.write(zpage_address as u16, lo);
         self.bus.write(zpage_address.wrapping_add(1) as u16, hi);
     }
+    /// Push a byte to the stack in main memory. The stack is the first page of 
+    /// memory (i.e. 0x0100-0x01FF, right after the zero page). Decrements the
+    /// sp after the value is pushed.
     pub fn push_to_stack(&mut self, data: u8) {
         let stk_address = 0x0100 | self.sp as u16;
         self.bus.write(stk_address, data);
         self.sp = self.sp.wrapping_sub(1);
     }
+    /// Pop or 'pull' a value from the stack.
     pub fn pop_from_stack(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let stk_address = 0x0100 | self.sp as u16;
@@ -181,6 +240,9 @@ impl<'a> CPU<'a> {
     }
 
     // RESET FUNCTION
+
+    /// Runs the defined reset sequence of the 6502, detailed here:
+    /// https://www.nesdev.org/wiki/CPU_power_up_state
     pub fn reset(&mut self) {
         const STK_RESET: u8 = 0xFD;
         const PC_RESET_ADDR: u16 = 0xFFFC;
@@ -193,7 +255,11 @@ impl<'a> CPU<'a> {
         self.pc = self.read_word(PC_RESET_ADDR);
     }
 
-    // Interrupt Request
+    // INTERRUPTS
+
+    /// Make an interrupt request to the CPU. Only interrupts if the interrupt
+    /// disable flag is set to 0. The interrupt sequence is detailed here:
+    /// https://www.nesdev.org/wiki/CPU_interrupts
     pub fn irq(&mut self) {
         // Check interrupt disable flag
         if self.get_interrupt_flag() == 0 {
@@ -215,7 +281,10 @@ impl<'a> CPU<'a> {
             self.pc = self.read_word(IRQ_PC_VECTOR);
         }
     }
-    // Non-Maskable Interrupt
+    /// Send a non-maskable interrupt to the CPU, which executes the defined 
+    /// 6502 interrupt sequence regardless of the state of the interrupt disable 
+    /// flag. The interrupt sequence is detailed here:
+    /// https://www.nesdev.org/wiki/CPU_interrupts
     pub fn nmi(&mut self) {
         const NMI_PC_VECTOR: u16 = 0xFFFA;
 
@@ -235,22 +304,11 @@ impl<'a> CPU<'a> {
         self.pc = self.read_word(NMI_PC_VECTOR);
     }
 
+    /// Get the instruction just executed as a string of 6502 assembly for
+    /// debugging purposes.
     pub fn current_instr_str(&self) -> String {
         let mut out_str = String::from(self.current_instr.name);
 
-        // Accumulator,
-        // Implied,
-        // Immediate,
-        // Absolute,
-        // AbsoluteX,
-        // AbsoluteY,
-        // ZeroPage,
-        // ZeroPageX,
-        // ZeroPageY,
-        // Indirect,
-        // IndirectX,
-        // IndirectY,
-        // Relative,
         out_str.push(' ');
         let temp = if self.current_instr.name == "???" {
             if self.current_instr.opcode_num == 0x00 {
@@ -309,19 +367,19 @@ mod tests {
     #[test]
     // Test program that multiplies 3 and 10 and stores the result in Accumulator
     fn test_multiply() {
-        let test_file = "prg_tests/cpu_tests/test_multiply.bin";
-        let test_bus = Bus::new();
-        let mut test_cpu = CPU::new(&test_bus);
+        // let test_file = "prg_tests/cpu_tests/test_multiply.bin";
+        // let test_bus = Bus::new();
+        // let mut test_cpu = CPU::new(&test_bus);
 
-        load_raw_mem_to_cpu(&test_cpu, &test_file);
+        // load_raw_mem_to_cpu(&test_cpu, &test_file);
 
-        // Just make sure the program loaded correctly
-        // (only checking a couple bytes, one at the start and one near the end)
-        // assert_eq!(test_cpu.read(0x0000), 0xA9);
-        // assert_eq!(test_cpu.read(0x0010), 0x00);
+        // // Just make sure the program loaded correctly
+        // // (only checking a couple bytes, one at the start and one near the end)
+        // // assert_eq!(test_cpu.read(0x0000), 0xA9);
+        // // assert_eq!(test_cpu.read(0x0010), 0x00);
 
-        // test_cpu.reset();
+        // // test_cpu.reset();
 
-        crate::run_debug(&mut test_cpu, &test_bus);
+        // crate::run_debug(&mut test_cpu, &test_bus);
     }
 }

@@ -145,219 +145,43 @@ impl Cartridge {
 
         header.default_expansion_device = data[15] & 0x3F;
 
+        let prg_rom_start = 0x10; // Assume no trainer data, start directly after header
+        let prg_rom_end = prg_rom_start + Cartridge::rom_size(header.prg_rom_size);
+        let prg_rom_vec = data[prg_rom_start..prg_rom_end].to_vec();
+
+        let chr_rom_start = prg_rom_end;
+        let chr_rom_end = chr_rom_start + Cartridge::rom_size(header.chr_rom_size);
+        let chr_rom_vec = data[chr_rom_start..chr_rom_end].to_vec();
+
+        let misc_rom_vec = data[chr_rom_end..].to_vec();
+
         Ok(Cartridge {
             format: format,
             // trainer_area: None,
-            prg_rom: Memory::from_vec(header.prg_rom),
-            chr_rom: Memory::from_vec(header.chr_rom_size),
-            misc_rom: Memory::from_vec(),
+            prg_rom: Memory::from_vec(prg_rom_vec),
+            chr_rom: Memory::from_vec(chr_rom_vec),
+            misc_rom: Memory::from_vec(misc_rom_vec),
         })
     }
 
-    // Sets the trainer data of this cartridge from the given data
-    pub fn set_trainer_data(&mut self, trainer_data: &[u8; 512]) {
-        self.trainer_area = Some(*trainer_data);
-    }
+    /// Translates from the prg/chr ROM size specified by the header to the 
+    /// actual number of bytes to read in from the cart file. 
+    fn rom_size(rom_size_bytes: u16) -> usize {
+        if (rom_size_bytes & 0xF00) == 0xF00 {
+            let mm = (rom_size_bytes & 0x3) as usize;
+            let exp = (rom_size_bytes & 0xFC) >> 2;
 
-    pub fn get_trainer_area(&self) -> Option<[u8; Self::TRAINER_LEN]> {
-        self.trainer_area
-    }
-
-    pub fn set_prg_rom(&mut self, prg_rom_data: Vec<u8>) {
-        self.prg_rom = prg_rom_data;
-    }
-
-    pub fn set_chr_rom(&mut self, chr_rom_data: Vec<u8>) {
-        self.chr_rom = chr_rom_data;
-    }
-
-    pub fn set_misc_rom(&mut self, misc_rom_data: Vec<u8>) {
-        self.misc_rom = misc_rom_data;
-    }
-
-    pub fn get_format(&self) -> &CartFormat {
-        &self.format
-    }
-
-    pub fn get_ident(&self) -> &str {
-        match &self.header {
-            Some(h) => &h.identifier,
-            None => "Unknown Header",
+            return (1 << exp) * (2 * mm + 1);
         }
+
+        rom_size_bytes as usize
     }
 
-    pub fn get_prg_rom_size(&self) -> usize {
-        match &self.header {
-            Some(h) => {
-                if (h.prg_rom_size & 0xF00) == 0xF00 {
-                    let mm = (h.prg_rom_size & 0x3) as usize;
-                    let exp = (h.prg_rom_size & 0xFC) >> 2;
-
-                    return (1 << exp) * (2 * mm + 1);
-                }
-
-                h.prg_rom_size as usize
-            }
-            None => 0,
-        }
+    pub fn read(&self, address: u16) -> u8 {
+        0
     }
 
-    pub fn get_chr_rom_size(&self) -> usize {
-        match &self.header {
-            Some(h) => {
-                if (h.chr_rom_size & 0xF00) == 0xF00 {
-                    let mm = (h.chr_rom_size & 0x3) as usize;
-                    let exp = (h.chr_rom_size & 0xFC) >> 2;
+    pub fn write(&self, address: u16, data: u8) {
 
-                    return (1 << exp) * (2 * mm + 1);
-                }
-
-                h.chr_rom_size as usize
-            }
-            None => 0,
-        }
-    }
-
-    pub fn get_mapper_num(&self) -> usize {
-        match &self.header {
-            Some(h) => h.mapper_num as usize,
-            None => 0,
-        }
-    }
-
-    pub fn has_alt_nametables(&self) -> bool {
-        match &self.header {
-            Some(h) => h.alt_nametables,
-            None => false,
-        }
-    }
-
-    pub fn has_trainer_area(&self) -> bool {
-        match &self.header {
-            Some(h) => h.has_trainer,
-            None => false,
-        }
-    }
-
-    pub fn has_battery(&self) -> bool {
-        match &self.header {
-            Some(h) => h.battery_present,
-            None => false,
-        }
-    }
-
-    pub fn has_hardwired_nametable(&self) -> bool {
-        match &self.header {
-            Some(h) => h.hardwired_nametable,
-            None => false,
-        }
-    }
-
-    pub fn get_console_type(&self) -> usize {
-        match &self.header {
-            Some(h) => h.console_type as usize,
-            None => 0,
-        }
-    }
-
-    pub fn get_submapper_num(&self) -> usize {
-        match &self.header {
-            Some(h) => h.submapper_num as usize,
-            None => 0,
-        }
-    }
-
-    pub fn get_prg_ram_size(&self) -> usize {
-        match &self.header {
-            Some(h) => {
-                if h.has_prg_ram {
-                    64 << h.prg_ram_shift as usize
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        }
-    }
-
-    pub fn get_prg_nv_ram_size(&self) -> usize {
-        match &self.header {
-            Some(h) => {
-                if h.has_prg_nv_ram {
-                    64 << h.prg_nv_ram_shift as usize
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        }
-    }
-
-    pub fn get_chr_ram_size(&self) -> usize {
-        match &self.header {
-            Some(h) => {
-                if h.has_chr_ram {
-                    64 << h.chr_ram_shift as usize
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        }
-    }
-
-    pub fn get_chr_nv_ram_size(&self) -> usize {
-        match &self.header {
-            Some(h) => {
-                if h.has_chr_nv_ram {
-                    64 << h.chr_nv_ram_shift as usize
-                } else {
-                    0
-                }
-            }
-            None => 0,
-        }
-    }
-
-    pub fn get_timing_mode(&self) -> usize {
-        match &self.header {
-            Some(h) => h.timing_mode as usize,
-            None => 0,
-        }
-    }
-
-    pub fn get_vs_hardware_type(&self) -> usize {
-        match &self.header {
-            Some(h) => h.vs_hardware_type as usize,
-            None => 0,
-        }
-    }
-
-    pub fn get_vs_ppu_type(&self) -> usize {
-        match &self.header {
-            Some(h) => h.vs_ppu_type as usize,
-            None => 0,
-        }
-    }
-
-    pub fn get_extended_console_type(&self) -> usize {
-        match &self.header {
-            Some(h) => h.extended_console_type as usize,
-            None => 0,
-        }
-    }
-
-    pub fn get_misc_rom_count(&self) -> usize {
-        match &self.header {
-            Some(h) => h.misc_roms_count as usize,
-            None => 0,
-        }
-    }
-
-    pub fn get_default_expansion_device(&self) -> usize {
-        match &self.header {
-            Some(h) => h.default_expansion_device as usize,
-            None => 0,
-        }
     }
 }

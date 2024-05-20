@@ -13,6 +13,7 @@ use crate::system::cpu::CPU;
 
 use super::util;
 
+/// Window for the emulator application
 pub struct Window<'a> {
     is_debug: bool,
 
@@ -23,7 +24,7 @@ pub struct Window<'a> {
 }
 
 impl<'a> Window<'a> {
-    // Return SDL context or panic if failure
+    /// Return SDL context or panic if failure
     fn new_sdl_context() -> Sdl {
         let context_result = util::new_sdl_context();
         if let Err(e) = context_result {
@@ -33,17 +34,7 @@ impl<'a> Window<'a> {
         context_result.unwrap()
     }
 
-    // Return TTF context or panic if failure
-    // fn new_ttf_context() -> Sdl2TtfContext {
-    //     let context_result = util::new_ttf_context();
-    //     if let Err(e) = context_result {
-    //         panic!("Error occured when getting TTF context: {e}");
-    //     }
-        
-    //     context_result.unwrap()
-    // }
-
-    // Return new SDL canvas with given title or panic if failure to create window/canvas
+    /// Return new SDL canvas with given title or panic if failure to create window/canvas
     fn new_canvas(sdl_context: &Sdl, title: &str) -> Canvas<SDLWindow> {
         let canvas_result = util::new_canvas_with_context(&sdl_context, title, None, None);
         if let Err(e) = canvas_result {
@@ -53,7 +44,7 @@ impl<'a> Window<'a> {
         canvas_result.unwrap()
     }
 
-    // Create a new event pump from given context or panic if failure
+    /// Create a new event pump from given context or panic if failure
     fn new_event_pump(sdl_context: &Sdl) -> EventPump {
         let event_pump_result = sdl_context.event_pump();
         if let Err(e) = event_pump_result {
@@ -63,6 +54,7 @@ impl<'a> Window<'a> {
         event_pump_result.unwrap()
     }
 
+    /// Create a new window. Uses the debug view if debug is true
     pub fn new(debug: bool) -> Self {
         let title = if debug {
             "NES Debug View"
@@ -84,6 +76,7 @@ impl<'a> Window<'a> {
         }
     }
 
+    /// Draw the window
     pub fn draw(&mut self, cpu: &CPU, bus: &Bus) {
         if self.is_debug {
             self.show_debug(cpu, bus);
@@ -92,12 +85,14 @@ impl<'a> Window<'a> {
         }
     }
 
+    /// Draw the NES screen to the window
     fn show(&mut self) {
         self.canvas.set_draw_color(Color::CYAN);
         self.canvas.clear();
         self.canvas.present();
     }
 
+    /// Create a zpage string for the debug view given the bus
     fn zpage_str(bus: &Bus) -> String {
         let mut mem_str: String = String::from("");
 
@@ -113,17 +108,14 @@ impl<'a> Window<'a> {
             mem_str.push_str(&suffix);
         }
 
-        // println!("{mem_str}");
-
         mem_str
     }
 
+    /// Draw the debug view (very slow bc of calls to the write function)
     fn show_debug(&mut self, cpu: &CPU, bus: &Bus) {
         const DEBUG_BG_COLOR: Color = Color::RGB(0x09, 0x31, 0x45);
         const DEBUG_TXT_COLOR: Color = Color::RGB(0xEF, 0xD4, 0x69);
         const DEBUG_TXT_SIZE: f32 = 20.0;
-        
-        // let font = util::load_font();
         
         self.canvas.set_draw_color(DEBUG_BG_COLOR);
         self.canvas.clear();
@@ -147,8 +139,10 @@ impl<'a> Window<'a> {
         self.event_pump.poll_iter()
     }
 
-    // Takes in text, an x and y pair to draw to on the window, and the height in
-    // pixels to draw the text, and renders it to this window's SDL canvas.
+    /// Takes in text, an x and y pair to draw to on the window, and the height 
+    /// in pixels to draw the text, and renders it to this window's SDL canvas.
+    /// This function is very slow bc it loops over every pixel in the text box,
+    /// and the text boxes get pretty large. Debug view runs at < 60 fps.
     pub fn write(&mut self, text: &str, x: usize, y: usize, height: f32, color: Color) {
         // 2x scale in x direction to counter the aspect ratio of monospace characters.
         let scale = Scale {
@@ -236,6 +230,7 @@ impl<'a> Window<'a> {
         }
     }
 
+    /// Write the CPU to the window for debug view. Displays registers and status flags
     fn write_cpu(&mut self, cpu: &CPU, x: usize, y: usize, height: f32, color: Color) {
         let x_str = format!("     X: {:#06X}", cpu.get_x_reg());
         let y_str = format!("     Y: {:#06X}", cpu.get_y_reg());

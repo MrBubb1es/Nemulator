@@ -30,7 +30,6 @@ pub fn run() {
         }
         // The rest of the game loop goes here...
         // system::tick();
-        bus.write(0, tick as u8);
         window.draw(&cpu, &bus);
         tick += 1;
 

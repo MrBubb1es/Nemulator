@@ -6,7 +6,7 @@ use super::ppu::PPU;
 /// Main bus struct connecting CPU, main memory, the cartridge, the PPU
 pub struct Bus {
     memory: Memory,
-    cartridge: &'static cartridge::Cartridge,
+    cart: &'static cartridge::Cartridge,
     ppu: &'static PPU,
 }
 
@@ -15,7 +15,7 @@ impl Bus {
     pub fn new(cart: &'static cartridge::Cartridge, ppu: &'static PPU) -> Self {
         Bus {
             memory: Memory::new(0x800),
-            cartridge: cart,
+            cart,
             ppu: ppu,
         }
     }
@@ -32,7 +32,7 @@ impl Bus {
                 // Next 2KiB are the 8 PPU registers mirrored over and over
                 self.ppu.read(address & 0x0008)
             }
-            _ => self.cartridge.read(address),
+            _ => self.cart.cpu_read(address),
         }
     }
 
@@ -48,7 +48,7 @@ impl Bus {
                 // Next 2KiB are the 8 PPU registers mirrored over and over
                 self.ppu.write(address & 0x0008, data)
             }
-            _ => self.cartridge.write(address, data),
+            _ => self.cart.cpu_write(address, data),
         }
     }
 }

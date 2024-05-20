@@ -177,11 +177,17 @@ impl Cartridge {
         rom_size_bytes as usize
     }
 
-    pub fn read(&self, address: u16) -> u8 {
+    pub fn cpu_read(&self, address: u16) -> u8 {
         0
     }
 
-    pub fn write(&self, address: u16, data: u8) {
+    pub fn cpu_write(&self, address: u16, data: u8) {
 
     }
+
+    pub fn ppu_read(&self, address: u16) -> u8 {
+        0
+    }
+
+    pub fn ppu_write(&self, address: u16, data: u8) {}
 }

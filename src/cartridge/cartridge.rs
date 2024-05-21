@@ -189,5 +189,11 @@ impl Cartridge {
         0
     }
 
-    pub fn ppu_write(&self, address: u16, data: u8) {}
+    pub fn ppu_write(&self, address: u16, data: u8) {
+
+    }
+
+    pub fn get_rom_sizes(&self) -> (usize, usize) {
+        (self.prg_rom.size(), self.chr_rom.size())
+    }
 }

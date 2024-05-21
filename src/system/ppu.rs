@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::cartridge::cartridge::Cartridge;
 
 use super::mem::Memory;
@@ -77,7 +79,7 @@ pub struct PPU {
 
     oam_dma: u8,
 
-    cart: &'static Cartridge,
+    cart: Rc<Cartridge>,
     vram: Memory,
 
     palette: nes_graphics::NESPalette,
@@ -86,7 +88,7 @@ pub struct PPU {
 impl PPU {
     /// Create a new PPU 
     ///  * `cart` - The cartridge to attatch to the PPU bus
-    pub fn new(cart: &Cartridge) -> Self {
+    pub fn new(cart: Rc<Cartridge>) -> Self {
         PPU {
             ppu_ctrl: 0, ppu_mask: 0, ppu_status: 0, oam_address: 0, 
             oam_data: 0, ppu_scroll: 0, ppu_address: 0, ppu_data: 0, 
@@ -119,6 +121,7 @@ impl PPU {
             0x0000..=0x1FFF => self.cart.ppu_read(address),
             0x2000..=0x3EFF => self.read_vram(address & 0x0FFF),
             0x3F00..=0x3FFF => self.read_palette(address & 0x00FF),
+            _ => 0,
         }
     }
 

@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::cartridge::cartridge;
 use super::mem::Memory;
 use super::ppu::PPU;
@@ -6,12 +8,12 @@ use super::ppu::PPU;
 /// Main bus struct connecting CPU, main memory, the cartridge, the PPU
 pub struct Bus {
     memory: Memory,
-    cart: &'static cartridge::Cartridge,
+    cart: Rc<cartridge::Cartridge>,
 }
 
 impl Bus {
     /// Create a new bus attatched to some cartridge
-    pub fn new(cart: &cartridge::Cartridge, ppu: &PPU) -> Self {
+    pub fn new(cart: Rc<cartridge::Cartridge>) -> Self {
         Bus {
             memory: Memory::new(0x800),
             cart,

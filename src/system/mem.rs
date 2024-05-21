@@ -41,4 +41,9 @@ impl Memory {
     pub fn write(&self, address: u16, data: u8) {
         self.data[address as usize].set(data);
     }
+
+    /// Get the size of the memory (for debugging purposes)
+    pub fn size(&self) -> usize {
+        self.data.len()
+    }
 }

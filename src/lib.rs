@@ -3,7 +3,7 @@ pub mod graphics;
 pub mod system;
 
 use sdl2::{event::Event, keyboard::Keycode};
-use system::{bus::Bus, cpu::CPU};
+use system::{bus::Bus, cpu::CPU, nes::{self, NES}};
 use std::time::Duration;
 
 use graphics::window::Window;
@@ -12,10 +12,7 @@ pub fn run() {
     let mut window = Window::new(false);
     let mut tick = 0;
 
-    let bus = Bus::new();
-    let mut cpu = CPU::new(&bus);
-
-    cpu.set_carry_flag(1);
+    let mut nemulator = nes::NES::new("prg_tests/1.Branch_Basics.nes");
 
     'running: loop {
         for event in window.event_iter() {
@@ -30,14 +27,14 @@ pub fn run() {
         }
         // The rest of the game loop goes here...
         // system::tick();
-        window.draw(&cpu, &bus);
+        window.draw(nemulator.get_cpu(), nemulator.get_bus());
         tick += 1;
 
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }
 
-pub fn run_debug(cpu: &mut CPU, bus: &Bus) {
+pub fn run_debug(nes: &mut NES) {
     let mut window = Window::new(true);
     let mut tick = 0;
 
@@ -49,7 +46,7 @@ pub fn run_debug(cpu: &mut CPU, bus: &Bus) {
                 Event::KeyDown {
                     keycode: Some(Keycode::Space),
                     ..
-                } => { cpu.cycle(cpu.read(cpu.get_pc())); },
+                } => { nes.cycle(); },
                 
                 _ => {}
             }
@@ -57,7 +54,7 @@ pub fn run_debug(cpu: &mut CPU, bus: &Bus) {
         // The rest of the game loop goes here...
         // system::tick();
         // bus.write(0, tick as u8);
-        window.draw(&cpu, &bus);
+        window.draw(nes.get_cpu(), nes.get_bus());
         tick += 1;
 
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

@@ -67,6 +67,7 @@ pub const DEFAULT_PALETTE: NESPalette = NESPalette{
     ]
 };
 
+#[derive(Clone, Copy)]
 pub struct NESColor {
     pub r: u8,
     pub g: u8,

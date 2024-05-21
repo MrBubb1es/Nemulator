@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
 use super::bus::Bus;
@@ -6,7 +8,7 @@ use super::bus::Bus;
 /// the lab have already done extensive research and documentation of this
 /// particular device, so if you ever have questions about why things are the
 /// way they are, check this wiki: https://www.nesdev.org/wiki/CPU
-pub struct CPU<'a> {
+pub struct CPU {
     acc: u8,
     x: u8,
     y: u8,
@@ -14,14 +16,14 @@ pub struct CPU<'a> {
     pc: u16,
     flags: u8,
 
-    bus: &'a Bus,
+    bus: Rc<Bus>,
 
     current_instr: Instruction,
     instr_data: OpcodeData,
 }
 
-impl<'a> CPU<'a> {
-    pub fn new(bus: &'a Bus) -> Self {
+impl CPU {
+    pub fn new(bus: Rc<Bus>) -> Self {
         CPU {
             acc: 0,
             x: 0,

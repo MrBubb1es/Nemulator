@@ -18,7 +18,7 @@
 use nes_emulator;
 
 pub fn main() {
-    nes_emulator::run();
+    // nes_emulator::run_debug();
 }
 
 // Render example where each glyph pixel is output as an ascii character.

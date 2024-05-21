@@ -37,6 +37,10 @@ impl NES {
         }
     }
 
+    pub fn reset_cpu(&mut self) {
+        self.cpu.reset();
+    }
+
     pub fn get_cpu(&self) -> &CPU {
         &self.cpu
     }
@@ -53,7 +57,7 @@ impl NES {
 
 #[cfg(test)]
 mod tests {
-    use crate::{run, run_debug};
+    use crate::{run_debug};
 
     use super::NES;
 
@@ -65,6 +69,17 @@ mod tests {
 
         assert_eq!(prg_size, 0xE15);
         assert_eq!(chr_size, 0xA54);
+
+        test_nemulator.cpu.reset();
+
+        // run_debug(&mut test_nemulator);
+    }
+
+    #[test]
+    fn test_load_cart() {
+        let mut test_nemulator = NES::new("prg_tests/1.Branch_Basics.nes");
+
+        test_nemulator.reset_cpu();
 
         run_debug(&mut test_nemulator);
     }

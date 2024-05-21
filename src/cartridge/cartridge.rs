@@ -15,7 +15,7 @@ pub enum CartFormat {
 
 /// Struct containing information given by the 16 byte header of the cartridge
 #[derive(Default)]
-struct Header {
+pub struct Header {
     // Bytes 0-3
     identifier: String,
     // Byte 4
@@ -60,6 +60,8 @@ struct Header {
 pub struct Cartridge {
     format: CartFormat,
 
+    header: Header,
+
     // trainer_area: Option<[u8; 512]>,
     prg_rom: Memory,
     chr_rom: Memory,
@@ -80,6 +82,8 @@ impl Cartridge {
         if data.len() < Self::HEADER_LEN {
             return Err(String::from("Cartridge file not NES 2.0 (or INES) format"));
         }
+
+        println!("{} {} {} {}", data[0], data[1], data[2], data[3]);
 
         // Identifier should be 'NES<EOF>'
         let mut format = CartFormat::Unknown;
@@ -149,26 +153,49 @@ impl Cartridge {
 
         header.default_expansion_device = data[15] & 0x3F;
 
-        let prg_rom_start = 0x10; // Assume no trainer data, start directly after header
-        let prg_rom_end = prg_rom_start + rom_size(header.prg_rom_size);
+        const CHR_ROM_BANK_SIZE: usize = 0x2000; // 8KiB
+        const PRG_ROM_BANK_SIZE: usize = 0x4000; // 16KiB
+
+        let prg_rom_start = 0x10 + if header.has_trainer { 0x200 } else { 0 };
+        let prg_rom_banks = Cartridge::rom_size(header.prg_rom_size);
+        let prg_rom_end = prg_rom_start + prg_rom_banks * PRG_ROM_BANK_SIZE;
         let prg_rom_vec = data[prg_rom_start..prg_rom_end].to_vec();
 
         let chr_rom_start = prg_rom_end;
-        let chr_rom_end = chr_rom_start + rom_size(header.chr_rom_size);
+        let chr_rom_banks = Cartridge::rom_size(header.chr_rom_size);
+        let chr_rom_end = chr_rom_start + chr_rom_banks * CHR_ROM_BANK_SIZE;
         let chr_rom_vec = data[chr_rom_start..chr_rom_end].to_vec();
 
         let misc_rom_vec = data[chr_rom_end..].to_vec();
 
         let mapper = Box::new(mapper::get_mapper(header.mapper_num));
 
+        println!("Prg ROM Size: {} (given by {})", prg_rom_vec.len(), header.prg_rom_size);
+        println!("Chr ROM Size: {} (given by {})", chr_rom_vec.len(), header.chr_rom_size);
+        println!("Misc ROM Size: {}", misc_rom_vec.len());
+
         Ok(Cartridge {
             format: format,
+            header: header,
             // trainer_area: None,
             prg_rom: Memory::from_vec(prg_rom_vec),
             chr_rom: Memory::from_vec(chr_rom_vec),
             misc_rom: Memory::from_vec(misc_rom_vec),
             mapper: mapper,
         })
+    }
+
+    /// Translates from the prg/chr ROM size specified by the header to the
+    /// actual number of bytes to read in from the cart file.
+    fn rom_size(rom_size_bytes: u16) -> usize {
+        if (rom_size_bytes & 0xF00) == 0xF00 {
+            let mm = (rom_size_bytes & 0x3) as usize;
+            let exp = (rom_size_bytes & 0xFC) >> 2;
+
+            return (1 << exp) * (2 * mm + 1);
+        }
+
+        rom_size_bytes as usize
     }
 
     /// Read data from PRG memory on the cartridge, through the mapper. Only the CPU can do this.
@@ -198,17 +225,4 @@ impl Cartridge {
     pub fn get_rom_sizes(&self) -> (usize, usize) {
         (self.prg_rom.size(), self.chr_rom.size())
     }
-}
-
-/// Translates from the prg/chr ROM size specified by the header to the
-/// actual number of bytes to read in from the cart file.
-fn rom_size(rom_size_bytes: u16) -> usize {
-    if (rom_size_bytes & 0xF00) == 0xF00 {
-        let mm = (rom_size_bytes & 0x3) as usize;
-        let exp = (rom_size_bytes & 0xFC) >> 2;
-
-        return (1 << exp) * (2 * mm + 1);
-    }
-
-    rom_size_bytes as usize
 }

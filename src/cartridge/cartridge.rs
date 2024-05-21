@@ -186,6 +186,12 @@ impl Cartridge {
             self.prg_rom.write(real_address, data);
         }
     }
+
+    pub fn ppu_read(&self, address: u16) -> u8 {
+        0
+    }
+
+    pub fn ppu_write(&self, address: u16, data: u8) {}
 }
 
 /// Translates from the prg/chr ROM size specified by the header to the

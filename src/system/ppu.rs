@@ -1,3 +1,7 @@
+use crate::cartridge::cartridge::Cartridge;
+
+use super::mem::Memory;
+
 /// Representation of the NES Picture Processing Unit. Details on how the PPU
 /// works can be found here: https://www.nesdev.org/wiki/PPU_registers
 pub struct PPU {
@@ -71,25 +75,70 @@ pub struct PPU {
     ppu_data: u8,
 
     oam_dma: u8,
+
+    cart: &'static Cartridge,
+    vram: Memory,
 }
 
 impl PPU {
-    /// Create a new PPU
-    pub fn new() -> Self {
+    /// Create a new PPU 
+    ///  * `cart` - The cartridge to attatch to the PPU bus
+    pub fn new(cart: &Cartridge) -> Self {
         PPU {
             ppu_ctrl: 0, ppu_mask: 0, ppu_status: 0, oam_address: 0, 
             oam_data: 0, ppu_scroll: 0, ppu_address: 0, ppu_data: 0, 
             
             oam_dma: 0,
+
+            cart: cart,
+
+            vram: Memory::new(0x800), // 2KiB ppu ram
         }
     }
 
     // GETTER / SETTER FUNCTIONS
+
+    /// Reads a single byte from a given address. The ram/rom accessed depends 
+    /// on the address.
+    /// 
+    /// 0x0000-0x1FFF: Cartridge CHR ROM
+    /// 
+    /// 0x2000-0x3EFF: VRAM
+    /// 
+    /// 0x3F00-0x3FFF: Pallete
+    /// 
+    ///  * `address` - 16 bit address used to access data
     pub fn read(&self, address: u16) -> u8 {
+        match address {
+            0x0000..=0x1FFF => self.cart.ppu_read(address),
+            0x2000..=0x2FFF => self.read_vram(address & 0x0FFF),
+            0x3F00..=0x3FFF => self.read_pallet(address & 0x00FF),
+        }
+    }
+
+    fn read_vram(&self, address: u16) -> u8 {
         0
     }
 
+    fn read_pallet(&self, address: u16) -> u8 {
+        0
+    }
+
+    /// Write a single byte of data to a given address. The ram accessed depends 
+    /// on the address.
+    /// 
+    /// 0x0000-0x1FFF: Cartridge CHR ROM
+    /// 
+    /// 0x2000-0x3EFF: VRAM
+    /// 
+    /// 0x3F00-0x3FFF: Pallete
+    /// 
+    ///  * `address` - 16 bit address used to access data
     pub fn write(&self, address: u16, data: u8) {
+
+    }
+
+    pub fn render_to_arr(dest: &mut [u8; 256*240*3]) {
 
     }
 }

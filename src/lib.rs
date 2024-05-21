@@ -16,7 +16,7 @@ pub fn test_cart(f: &str) {
     let cart = Cartridge::from_bytes(&cart_data[..]).expect("Couldn't parse cart file");
     let bus = Bus::new(&cart);
     let mut cpu = CPU::new(&bus);
-    let ppu = PPU::new();
+    let ppu = PPU::new(&cart);
 
     // Set up CPU
     // cpu.reset();

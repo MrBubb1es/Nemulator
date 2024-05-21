@@ -9,7 +9,7 @@ pub struct Bus {
 
 impl Bus {
     /// Create a new bus attatched to some cartridge
-    pub fn new(cart: &'static cartridge::Cartridge) -> Self {
+    pub fn new(cart: &cartridge::Cartridge) -> Self {
         Bus {
             memory: Memory::new(0x800),
             cartridge: cart,

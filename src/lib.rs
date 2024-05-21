@@ -1,13 +1,29 @@
 pub mod cartridge;
 pub mod graphics;
-pub mod nes;
 pub mod system;
 
+use cartridge::cartridge::Cartridge;
 use sdl2::{event::Event, keyboard::Keycode};
 use std::time::Duration;
-use system::{bus::Bus, cpu::CPU};
+use system::{bus::Bus, cpu::CPU, ppu::PPU};
 
 use graphics::window::Window;
+
+pub fn test_cart(f: &str) {
+    // Initialize NES
+    let path = std::path::Path::new(f);
+    let cart_data = std::fs::read(path).expect("Couldn't read file");
+    let cart = Cartridge::from_bytes(&cart_data[..]).expect("Couldn't parse cart file");
+    let bus = Bus::new(&cart);
+    let mut cpu = CPU::new(&bus);
+    let ppu = PPU::new();
+
+    // Set up CPU
+    // cpu.reset();
+    for _ in 0..20 {
+        cpu.cycle();
+    }
+}
 
 // pub fn run() {
 //     let mut window = Window::new(false);

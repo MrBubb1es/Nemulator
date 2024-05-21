@@ -1,4 +1,7 @@
+use crate::cartridge::mapper;
 use crate::system::mem::Memory;
+
+use super::mapper::Mapper;
 
 // Identifier for NES 2.0 and INES formats
 pub const NES_2V0_IDENT: [u8; 4] = [b'N', b'E', b'S', 0x1A];
@@ -61,6 +64,7 @@ pub struct Cartridge {
     prg_rom: Memory,
     chr_rom: Memory,
     misc_rom: Memory,
+    mapper: Box<dyn Mapper>,
 }
 
 impl Cartridge {
@@ -146,14 +150,16 @@ impl Cartridge {
         header.default_expansion_device = data[15] & 0x3F;
 
         let prg_rom_start = 0x10; // Assume no trainer data, start directly after header
-        let prg_rom_end = prg_rom_start + Cartridge::rom_size(header.prg_rom_size);
+        let prg_rom_end = prg_rom_start + rom_size(header.prg_rom_size);
         let prg_rom_vec = data[prg_rom_start..prg_rom_end].to_vec();
 
         let chr_rom_start = prg_rom_end;
-        let chr_rom_end = chr_rom_start + Cartridge::rom_size(header.chr_rom_size);
+        let chr_rom_end = chr_rom_start + rom_size(header.chr_rom_size);
         let chr_rom_vec = data[chr_rom_start..chr_rom_end].to_vec();
 
         let misc_rom_vec = data[chr_rom_end..].to_vec();
+
+        let mapper = Box::new(mapper::get_mapper(header.mapper_num));
 
         Ok(Cartridge {
             format: format,
@@ -161,28 +167,24 @@ impl Cartridge {
             prg_rom: Memory::from_vec(prg_rom_vec),
             chr_rom: Memory::from_vec(chr_rom_vec),
             misc_rom: Memory::from_vec(misc_rom_vec),
+            mapper: mapper,
         })
     }
 
-    /// Translates from the prg/chr ROM size specified by the header to the 
-    /// actual number of bytes to read in from the cart file. 
-    fn rom_size(rom_size_bytes: u16) -> usize {
-        if (rom_size_bytes & 0xF00) == 0xF00 {
-            let mm = (rom_size_bytes & 0x3) as usize;
-            let exp = (rom_size_bytes & 0xFC) >> 2;
-
-            return (1 << exp) * (2 * mm + 1);
-        }
-
-        rom_size_bytes as usize
-    }
-
+    /// Read data from PRG memory on the cartridge, through the mapper. Only the CPU can do this.
     pub fn cpu_read(&self, address: u16) -> u8 {
-        0
+        if let Some(real_address) = self.mapper.get_cpu_read_addr(address) {
+            self.prg_rom.read(real_address)
+        } else {
+            0
+        }
     }
 
+    /// Write data to PRG memory on the cartridge, through the mapper. Only the CPU can do this.
     pub fn cpu_write(&self, address: u16, data: u8) {
-
+        if let Some(real_address) = self.mapper.get_cpu_read_addr(address) {
+            self.prg_rom.write(real_address, data);
+        }
     }
 
     pub fn ppu_read(&self, address: u16) -> u8 {
@@ -196,4 +198,17 @@ impl Cartridge {
     pub fn get_rom_sizes(&self) -> (usize, usize) {
         (self.prg_rom.size(), self.chr_rom.size())
     }
+}
+
+/// Translates from the prg/chr ROM size specified by the header to the
+/// actual number of bytes to read in from the cart file.
+fn rom_size(rom_size_bytes: u16) -> usize {
+    if (rom_size_bytes & 0xF00) == 0xF00 {
+        let mm = (rom_size_bytes & 0x3) as usize;
+        let exp = (rom_size_bytes & 0xFC) >> 2;
+
+        return (1 << exp) * (2 * mm + 1);
+    }
+
+    rom_size_bytes as usize
 }

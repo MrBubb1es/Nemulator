@@ -33,11 +33,15 @@ impl CPU {
             flags: 0,
             bus: bus,
             current_instr: DEFAULT_ILLEGAL_OP,
-            instr_data: OpcodeData{data: None, address: None, offset: None},
+            instr_data: OpcodeData {
+                data: None,
+                address: None,
+                offset: None,
+            },
         }
     }
 
-    /// Cycles the CPU through one whole instruction, taking as many clock 
+    /// Cycles the CPU through one whole instruction, taking as many clock
     /// cycles as that instruction requires. This function encapsulates all of
     /// the fetch, decode, and execute stages of the CPU. Returns the total
     /// number of clock cycles taken for the instruction run.
@@ -228,7 +232,7 @@ impl CPU {
         self.bus.write(zpage_address as u16, lo);
         self.bus.write(zpage_address.wrapping_add(1) as u16, hi);
     }
-    /// Push a byte to the stack in main memory. The stack is the first page of 
+    /// Push a byte to the stack in main memory. The stack is the first page of
     /// memory (i.e. 0x0100-0x01FF, right after the zero page). Decrements the
     /// sp after the value is pushed.
     pub fn push_to_stack(&mut self, data: u8) {
@@ -285,8 +289,8 @@ impl CPU {
             self.pc = self.read_word(IRQ_PC_VECTOR);
         }
     }
-    /// Send a non-maskable interrupt to the CPU, which executes the defined 
-    /// 6502 interrupt sequence regardless of the state of the interrupt disable 
+    /// Send a non-maskable interrupt to the CPU, which executes the defined
+    /// 6502 interrupt sequence regardless of the state of the interrupt disable
     /// flag. The interrupt sequence is detailed here:
     /// https://www.nesdev.org/wiki/CPU_interrupts
     pub fn nmi(&mut self) {
@@ -323,24 +327,48 @@ impl CPU {
         } else {
             match self.current_instr.addr_mode {
                 AddressingMode::Accumulator => String::from("A : [acc]"),
-                
+
                 AddressingMode::Implied => String::from(" : [imp]"),
-                
-                AddressingMode::Immediate => format!("#${:02X} : [imm]", self.instr_data.data.unwrap()),
-                
-                AddressingMode::Absolute => format!("${:04X} : [abs]", self.instr_data.address.unwrap()),
-                AddressingMode::AbsoluteX => format!("${:04X},X : [abs x]", self.instr_data.address.unwrap()),
-                AddressingMode::AbsoluteY => format!("${:04X},Y : [abs y]", self.instr_data.address.unwrap()),
 
-                AddressingMode::ZeroPage => format!("${:02X} : [zpage]", self.instr_data.address.unwrap()), 
-                AddressingMode::ZeroPageX => format!("${:02X},X : [zpage x]", self.instr_data.address.unwrap()),
-                AddressingMode::ZeroPageY => format!("${:02X},Y : [zpage y]", self.instr_data.address.unwrap()),
+                AddressingMode::Immediate => {
+                    format!("#${:02X} : [imm]", self.instr_data.data.unwrap())
+                }
 
-                AddressingMode::Indirect => format!("$({:02X}) : [ind]", self.instr_data.address.unwrap()), 
-                | AddressingMode::IndirectX => format!("$({:02X}),X : [ind x]", self.instr_data.address.unwrap()),
-                | AddressingMode::IndirectY => format!("$({:02X}),Y : [ind y]", self.instr_data.address.unwrap()),
+                AddressingMode::Absolute => {
+                    format!("${:04X} : [abs]", self.instr_data.address.unwrap())
+                }
+                AddressingMode::AbsoluteX => {
+                    format!("${:04X},X : [abs x]", self.instr_data.address.unwrap())
+                }
+                AddressingMode::AbsoluteY => {
+                    format!("${:04X},Y : [abs y]", self.instr_data.address.unwrap())
+                }
 
-                AddressingMode::Relative => format!("${:02X} : [rel, offset = {}]", self.instr_data.offset.unwrap() as u8, self.instr_data.offset.unwrap()),
+                AddressingMode::ZeroPage => {
+                    format!("${:02X} : [zpage]", self.instr_data.address.unwrap())
+                }
+                AddressingMode::ZeroPageX => {
+                    format!("${:02X},X : [zpage x]", self.instr_data.address.unwrap())
+                }
+                AddressingMode::ZeroPageY => {
+                    format!("${:02X},Y : [zpage y]", self.instr_data.address.unwrap())
+                }
+
+                AddressingMode::Indirect => {
+                    format!("$({:02X}) : [ind]", self.instr_data.address.unwrap())
+                }
+                AddressingMode::IndirectX => {
+                    format!("$({:02X}),X : [ind x]", self.instr_data.address.unwrap())
+                }
+                AddressingMode::IndirectY => {
+                    format!("$({:02X}),Y : [ind y]", self.instr_data.address.unwrap())
+                }
+
+                AddressingMode::Relative => format!(
+                    "${:02X} : [rel, offset = {}]",
+                    self.instr_data.offset.unwrap() as u8,
+                    self.instr_data.offset.unwrap()
+                ),
             }
         };
         out_str.push_str(&temp);
@@ -351,8 +379,8 @@ impl CPU {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
     use std::fs;
+    use std::io::Read;
 
     use super::Bus;
     use super::CPU;
@@ -362,10 +390,9 @@ mod tests {
         let mut data: Vec<u8> = Vec::new();
         mem_file.read_to_end(&mut data).unwrap();
 
-        data.into_iter().enumerate()
-            .for_each(|(addr, byte)|
-                cpu.write(addr as u16, byte)
-        );
+        data.into_iter()
+            .enumerate()
+            .for_each(|(addr, byte)| cpu.write(addr as u16, byte));
     }
 
     #[test]
@@ -387,3 +414,4 @@ mod tests {
         // crate::run_debug(&mut test_cpu, &test_bus);
     }
 }
+

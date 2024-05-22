@@ -33,7 +33,7 @@ impl NES {
             cart,
             bus,
             cpu,
-            ppu
+            ppu,
         }
     }
 
@@ -54,10 +54,9 @@ impl NES {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{run_debug};
+    use crate::run_debug;
 
     use super::NES;
 
@@ -81,6 +80,23 @@ mod tests {
 
         test_nemulator.reset_cpu();
 
-        run_debug(&mut test_nemulator);
+        //run_debug(&mut test_nemulator);
+    }
+
+    #[test]
+    fn run_nes_test() {
+        let mut test_nemulator = NES::new("prg_tests/nestest.nes");
+        test_nemulator.reset_cpu();
+        test_nemulator.cpu.set_pc(0xC000); // run tests automatically
+
+        for _ in 0..100000 {
+            // I don't know how else to drive the cpu rn
+            test_nemulator.cycle();
+        }
+
+        // run_debug(&mut test_nemulator);
+
+        assert_eq!(test_nemulator.bus.read(0x0002), 0);
+        assert_eq!(test_nemulator.bus.read(0x0003), 0);
     }
 }

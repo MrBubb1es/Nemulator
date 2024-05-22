@@ -18,7 +18,9 @@
 use nes_emulator;
 
 pub fn main() {
-    // nes_emulator::run_debug();
+    let mut nes = nes_emulator::system::nes::NES::new("prg_tests/nestest.nes");
+    nes.reset_cpu();
+    nes_emulator::run_debug(&mut nes);
 }
 
 // Render example where each glyph pixel is output as an ascii character.
@@ -95,4 +97,3 @@ pub fn main() {
 //         handle.write_all(b"\n").unwrap();
 //     }
 // }
-

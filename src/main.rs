@@ -20,6 +20,7 @@ use nes_emulator;
 pub fn main() {
     let mut nes = nes_emulator::system::nes::NES::new("prg_tests/nestest.nes");
     nes.reset_cpu();
+    nes.cpu.set_pc(0xC000);
     nes_emulator::run_debug(&mut nes);
 }
 

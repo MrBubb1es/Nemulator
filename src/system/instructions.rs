@@ -1,3 +1,7 @@
+// KNOWN ISSUES:
+//  - Not all instructions that use abs_x, abs_y, etc. should add the extra 
+//    clock cycle if page boundary crossed. (e.g. SBC does but STA does not)
+
 use crate::system::cpu::CPU;
 
 // Define the macro
@@ -25,7 +29,7 @@ pub const DEFAULT_ILLEGAL_OP: Instruction = illegal_op!(0x00);
 /// https://www.masswerk.at/6502/6502_instruction_set.html
 pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "BRK", opcode_num: 0x00, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: brk, base_clocks: 7, bytes: 2},
-	Instruction{name: "ORA", opcode_num: 0x01, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: ora, base_clocks: 6, bytes: 3},
+	Instruction{name: "ORA", opcode_num: 0x01, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: ora, base_clocks: 6, bytes: 2},
 	illegal_op!(0x02),
 	illegal_op!(0x03),
 	illegal_op!(0x04),
@@ -42,7 +46,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x0F),
 
 	Instruction{name: "BPL", opcode_num: 0x10, addr_mode: AddressingMode::Relative, addr_func: relative, func: bpl, base_clocks: 2, bytes: 2},
-	Instruction{name: "ORA", opcode_num: 0x11, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: ora, base_clocks: 5, bytes: 3},
+	Instruction{name: "ORA", opcode_num: 0x11, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: ora, base_clocks: 5, bytes: 2},
 	illegal_op!(0x12),
 	illegal_op!(0x13),
 	illegal_op!(0x14),
@@ -59,7 +63,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x1F),
 
 	Instruction{name: "JSR", opcode_num: 0x20, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: jsr, base_clocks: 6, bytes: 3},
-	Instruction{name: "AND", opcode_num: 0x21, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: and, base_clocks: 6, bytes: 3},
+	Instruction{name: "AND", opcode_num: 0x21, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: and, base_clocks: 6, bytes: 2},
 	illegal_op!(0x22),
 	illegal_op!(0x23),
 	Instruction{name: "BIT", opcode_num: 0x24, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: bit, base_clocks: 3, bytes: 2},
@@ -68,15 +72,15 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x27),
 	Instruction{name: "PLP", opcode_num: 0x28, addr_mode: AddressingMode::Implied, addr_func: implied, func: plp, base_clocks: 4, bytes: 1},
 	Instruction{name: "AND", opcode_num: 0x29, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: and, base_clocks: 2, bytes: 2},
-	Instruction{name: "ROL", opcode_num: 0x2A, addr_mode: AddressingMode::Implied, addr_func: implied, func: rol, base_clocks: 2, bytes: 1},
+	Instruction{name: "ROL", opcode_num: 0x2A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: rol, base_clocks: 2, bytes: 1},
 	illegal_op!(0x2B),
 	Instruction{name: "BIT", opcode_num: 0x2C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: bit, base_clocks: 4, bytes: 3},
 	Instruction{name: "AND", opcode_num: 0x2D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: and, base_clocks: 4, bytes: 3},
-	Instruction{name: "ROL", opcode_num: 0x2E, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: rol, base_clocks: 6, bytes: 1},
+	Instruction{name: "ROL", opcode_num: 0x2E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rol, base_clocks: 6, bytes: 3},
 	illegal_op!(0x2F),
 
 	Instruction{name: "BMI", opcode_num: 0x30, addr_mode: AddressingMode::Relative, addr_func: relative, func: bmi, base_clocks: 2, bytes: 2},
-	Instruction{name: "AND", opcode_num: 0x31, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: and, base_clocks: 5, bytes: 3},
+	Instruction{name: "AND", opcode_num: 0x31, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: and, base_clocks: 5, bytes: 2},
 	illegal_op!(0x32),
 	illegal_op!(0x33),
 	illegal_op!(0x34),
@@ -94,7 +98,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 
 
 	Instruction{name: "RTI", opcode_num: 0x40, addr_mode: AddressingMode::Implied, addr_func: implied, func: rti, base_clocks: 6, bytes: 1},
-	Instruction{name: "EOR", opcode_num: 0x41, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: eor, base_clocks: 6, bytes: 3},
+	Instruction{name: "EOR", opcode_num: 0x41, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: eor, base_clocks: 6, bytes: 2},
 	illegal_op!(0x42),
 	illegal_op!(0x43),
 	illegal_op!(0x44),
@@ -111,7 +115,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x4F),
 
 	Instruction{name: "BVC", opcode_num: 0x50, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvc, base_clocks: 2, bytes: 2},
-	Instruction{name: "EOR", opcode_num: 0x51, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: eor, base_clocks: 5, bytes: 3},
+	Instruction{name: "EOR", opcode_num: 0x51, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: eor, base_clocks: 5, bytes: 2},
 	illegal_op!(0x52),
 	illegal_op!(0x53),
 	illegal_op!(0x54),
@@ -128,7 +132,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x5F),
 
 	Instruction{name: "RTS", opcode_num: 0x60, addr_mode: AddressingMode::Implied, addr_func: implied, func: rts, base_clocks: 6, bytes: 1},
-	Instruction{name: "ADC", opcode_num: 0x61, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: adc, base_clocks: 6, bytes: 3},
+	Instruction{name: "ADC", opcode_num: 0x61, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: adc, base_clocks: 6, bytes: 2},
 	illegal_op!(0x62),
 	illegal_op!(0x63),
 	illegal_op!(0x64),
@@ -145,7 +149,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x6F),
 
 	Instruction{name: "BVS", opcode_num: 0x70, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvs, base_clocks: 2, bytes: 2},
-	Instruction{name: "ADC", opcode_num: 0x71, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: adc, base_clocks: 5, bytes: 3},
+	Instruction{name: "ADC", opcode_num: 0x71, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: adc, base_clocks: 5, bytes: 2},
 	illegal_op!(0x72),
 	illegal_op!(0x73),
 	illegal_op!(0x74),
@@ -163,7 +167,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 
 
 	illegal_op!(0x80),
-	Instruction{name: "STA", opcode_num: 0x81, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sta, base_clocks: 6, bytes: 3},
+	Instruction{name: "STA", opcode_num: 0x81, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sta, base_clocks: 6, bytes: 2},
 	illegal_op!(0x82),
 	illegal_op!(0x83),
 	Instruction{name: "STY", opcode_num: 0x84, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sty, base_clocks: 3, bytes: 2},
@@ -180,7 +184,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x8F),
 
 	Instruction{name: "BCC", opcode_num: 0x90, addr_mode: AddressingMode::Relative, addr_func: relative, func: bcc, base_clocks: 2, bytes: 2},
-	Instruction{name: "STA", opcode_num: 0x91, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sta, base_clocks: 6, bytes: 3},
+	Instruction{name: "STA", opcode_num: 0x91, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sta, base_clocks: 6, bytes: 2},
 	illegal_op!(0x92),
 	illegal_op!(0x93),
 	Instruction{name: "STY", opcode_num: 0x94, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sty, base_clocks: 4, bytes: 2},
@@ -197,7 +201,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0x9F),
 
 	Instruction{name: "LDY", opcode_num: 0xA0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldy, base_clocks: 2, bytes: 2},
-	Instruction{name: "LDA", opcode_num: 0xA1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: lda, base_clocks: 6, bytes: 3},
+	Instruction{name: "LDA", opcode_num: 0xA1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: lda, base_clocks: 6, bytes: 2},
 	Instruction{name: "LDX", opcode_num: 0xA2, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldx, base_clocks: 2, bytes: 2},
 	illegal_op!(0xA3),
 	Instruction{name: "LDY", opcode_num: 0xA4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ldy, base_clocks: 3, bytes: 2},
@@ -214,7 +218,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0xAF),
 
 	Instruction{name: "BCS", opcode_num: 0xB0, addr_mode: AddressingMode::Relative, addr_func: relative, func: bcs, base_clocks: 2, bytes: 2},
-	Instruction{name: "LDA", opcode_num: 0xB1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: lda, base_clocks: 5, bytes: 3},
+	Instruction{name: "LDA", opcode_num: 0xB1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: lda, base_clocks: 5, bytes: 2},
 	illegal_op!(0xB2),
 	illegal_op!(0xB3),
 	Instruction{name: "LDY", opcode_num: 0xB4, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ldy, base_clocks: 4, bytes: 2},
@@ -232,7 +236,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 
 
 	Instruction{name: "CPY", opcode_num: 0xC0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cpy, base_clocks: 2, bytes: 2},
-	Instruction{name: "CMP", opcode_num: 0xC1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: cmp, base_clocks: 6, bytes: 3},
+	Instruction{name: "CMP", opcode_num: 0xC1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: cmp, base_clocks: 6, bytes: 2},
 	illegal_op!(0xC2),
 	illegal_op!(0xC3),
 	Instruction{name: "CPY", opcode_num: 0xC4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cpy, base_clocks: 3, bytes: 2},
@@ -249,7 +253,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0xCF),
 
 	Instruction{name: "BNE", opcode_num: 0xD0, addr_mode: AddressingMode::Relative, addr_func: relative, func: bne, base_clocks: 2, bytes: 2},
-	Instruction{name: "CMP", opcode_num: 0xD1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: cmp, base_clocks: 5, bytes: 3},
+	Instruction{name: "CMP", opcode_num: 0xD1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: cmp, base_clocks: 5, bytes: 2},
 	illegal_op!(0xD2),
 	illegal_op!(0xD3),
 	illegal_op!(0xD4),
@@ -266,7 +270,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0xDF),
 
 	Instruction{name: "CPX", opcode_num: 0xE0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cpx, base_clocks: 2, bytes: 2},
-	Instruction{name: "SBC", opcode_num: 0xE1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sbc, base_clocks: 6, bytes: 3},
+	Instruction{name: "SBC", opcode_num: 0xE1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sbc, base_clocks: 6, bytes: 2},
 	illegal_op!(0xE2),
 	illegal_op!(0xE3),
 	Instruction{name: "CPX", opcode_num: 0xE4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cpx, base_clocks: 3, bytes: 2},
@@ -283,7 +287,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
 	illegal_op!(0xEF),
 
 	Instruction{name: "BEQ", opcode_num: 0xF0, addr_mode: AddressingMode::Relative, addr_func: relative, func: beq, base_clocks: 2, bytes: 2},
-	Instruction{name: "SBC", opcode_num: 0xF1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sbc, base_clocks: 5, bytes: 3},
+	Instruction{name: "SBC", opcode_num: 0xF1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sbc, base_clocks: 5, bytes: 2},
 	illegal_op!(0xF2),
 	illegal_op!(0xF3),
 	illegal_op!(0xF4),
@@ -375,8 +379,10 @@ fn absolute(cpu: &CPU) -> (OpcodeData, usize) {
 // Also known as Absolute X addressing.
 fn absolute_x(cpu: &CPU) -> (OpcodeData, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
-    let effective_address = abs_address + cpu.get_x_reg() as u16;
+    let effective_address = abs_address.wrapping_add(cpu.get_x_reg() as u16);
     let data = cpu.read(effective_address);
+
+    println!("ABS: 0x{:04X}, EFF: 0x{:04X}, X: {}", abs_address, effective_address, cpu.get_x_reg());
 
     let page_boundary_crossed: bool = (abs_address & 0xFF00) != (effective_address & 0xFF00);
 
@@ -393,7 +399,7 @@ fn absolute_x(cpu: &CPU) -> (OpcodeData, usize) {
 // Also known as Absolute Y addressing.
 fn absolute_y(cpu: &CPU) -> (OpcodeData, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
-    let effective_address = abs_address + cpu.get_y_reg() as u16;
+    let effective_address = abs_address.wrapping_add(cpu.get_y_reg() as u16);
     let data = cpu.read(effective_address);
 
     let page_boundary_crossed: bool = (abs_address & 0xFF00) != (effective_address & 0xFF00);
@@ -485,7 +491,7 @@ fn indirect(cpu: &CPU) -> (OpcodeData, usize) {
     )
 }
 // Pre-Indexed Indirect Zero-Page (X) - Like Indexed Z-Page x, but as in Indirect addressing, another
-// address is read from memory instead of the data itcpu. The address read is the effective
+// address is read from memory instead of the data. The address read is the effective
 // address of the actual data. Note that if the z-page address is 0x00FF, then the bytes at
 // 0x00FF and 0x0000 are read and used as low and high bytes of the effective address, respectively
 fn indirect_x(cpu: &CPU) -> (OpcodeData, usize) {
@@ -508,7 +514,7 @@ fn indirect_x(cpu: &CPU) -> (OpcodeData, usize) {
 fn indirect_y(cpu: &CPU) -> (OpcodeData, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1);
     let abs_address = cpu.read_zpage_word(zpage_address);
-    let effective_address = abs_address + cpu.get_y_reg() as u16;
+    let effective_address = abs_address.wrapping_add(cpu.get_y_reg() as u16);
     let data = cpu.read(effective_address);
 
     let page_boundary_crossed = (abs_address & 0xFF00) != (effective_address & 0xFF00);
@@ -573,12 +579,27 @@ fn and(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 
     let result = cpu.get_acc() & data;
     cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 > 0 { 1 } else { 0 });
+    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.set_acc(result);
     0
 }
-// ASL - Shift Left One Bit (Memory or Accumulator)
-fn asl(_: &mut CPU, _: OpcodeData) -> usize {
-    // skipping for now
+// ASL - Shift Left One Bit
+fn asl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
+        let result = data << 1;
+        cpu.set_carry_flag((data & 0x80) >> 7);
+        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
+        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        cpu.write(address, result);
+    }
+    // Otherwise, Accumulator version
+    else {
+        let result = cpu.get_acc() << 1;
+        cpu.set_carry_flag((cpu.get_acc() & 0x80) >> 7);
+        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
+        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        cpu.set_acc(result);
+    }
     0
 }
 // BCC - Branch on Carry Clear
@@ -586,7 +607,16 @@ fn bcc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_carry_flag() != 1 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
     0
 }
@@ -595,8 +625,18 @@ fn bcs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_carry_flag() == 1 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
+
     0
 }
 // BEQ - Branch on Equal (Zero flag set)
@@ -604,7 +644,16 @@ fn beq(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_zero_flag() == 1 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
     
     0
@@ -623,7 +672,16 @@ fn bmi(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_negative_flag() == 1 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
     0
 }
@@ -632,7 +690,16 @@ fn bne(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_zero_flag() == 0 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
     0
 }
@@ -641,7 +708,16 @@ fn bpl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_negative_flag() == 0 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
     0
 }
@@ -656,7 +732,16 @@ fn bvc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_overflow_flag() == 0 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
     0
 }
@@ -665,7 +750,16 @@ fn bvs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.get_overflow_flag() == 1 {
+        let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
+        
+        let is_same_page = prev_pc & 0xFF00 == cpu.get_pc() & 0xFF00;
+
+        if is_same_page {
+            return 1;
+        } else {
+            return 2;
+        }
     }
     0
 }
@@ -733,6 +827,7 @@ fn dec(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 // DEX - Decrement X Register
 fn dex(cpu: &mut CPU, _: OpcodeData) -> usize {
     let result = cpu.get_x_reg().wrapping_sub(1);
+    
     cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
     cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
     cpu.set_x_reg(result);
@@ -770,6 +865,7 @@ fn inc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 // INX - Increment X Register
 fn inx(cpu: &mut CPU, _: OpcodeData) -> usize {
     let result = cpu.get_x_reg().wrapping_add(1);
+
     cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
     cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
     cpu.set_x_reg(result);
@@ -794,12 +890,12 @@ fn jmp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn jsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
 
-    let return_point = cpu.get_pc() - 1; // Return point is the return address - 1, and since this
-    let lo = return_point as u8;
+    let return_point = cpu.get_pc().wrapping_sub(1); // Return point is pc - 1
     let hi = (return_point >> 8) as u8;
+    let lo = return_point as u8;
 
-    cpu.push_to_stack(lo);
     cpu.push_to_stack(hi);
+    cpu.push_to_stack(lo);
     cpu.set_pc(address);
 
     0
@@ -853,7 +949,7 @@ fn lsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // NOP - No Operation
-fn nop(_: &mut CPU, _: OpcodeData) -> usize { 1 }
+fn nop(_: &mut CPU, _: OpcodeData) -> usize { 0 }
 // ORA - Logical Inclusive OR
 fn ora(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
@@ -871,7 +967,9 @@ fn pha(cpu: &mut CPU, _: OpcodeData) -> usize {
 }
 // PHP - Push Processor Status
 fn php(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.push_to_stack(cpu.get_flags());
+    // Bit 5 (unused flag) is always set to 1 when status pushed to stack
+    // Bit 4 (break flag) is set when push to stk caused by php or brk
+    cpu.push_to_stack(cpu.get_flags() | 0x30);
     0
 }
 // PLA - Pull Accumulator
@@ -884,8 +982,10 @@ fn pla(cpu: &mut CPU, _: OpcodeData) -> usize {
 }
 // PLP - Pull Processor Status
 fn plp(cpu: &mut CPU, _: OpcodeData) -> usize {
-    let data = cpu.pop_from_stack();
-    cpu.set_flags(data);
+    // Bit 5 is ignored when pulling into processor status
+    // Bit 4 is cleared
+    let data = cpu.pop_from_stack() & 0xCF;
+    cpu.set_flags(data | (cpu.get_flags() & 0x20));
     0
 }
 // ROL - Rotate Left
@@ -932,32 +1032,34 @@ fn ror(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 // RTI - Return from Interrupt
 fn rti(cpu: &mut CPU, _: OpcodeData) -> usize {
-    // Restore processer status
-    let prev_status = cpu.pop_from_stack();
-    cpu.set_flags(prev_status);
-    cpu.set_b_flag(0);
-    cpu.set_unused_flag(0);
+    // Restore processer status (Bit 5 ignored, bit 4 cleared)
+    let prev_status = cpu.pop_from_stack() & 0xCF;
+    cpu.set_flags(prev_status | (cpu.get_flags() & 0x20));
     // Return to previous PC
-    let hi = cpu.pop_from_stack() as u16;
     let lo = cpu.pop_from_stack() as u16;
+    let hi = cpu.pop_from_stack() as u16;
     cpu.set_pc((hi << 8) | lo);
 
     0
 }
 // RTS - Return from Subroutine
 fn rts(cpu: &mut CPU, _: OpcodeData) -> usize {
-    let hi = cpu.pop_from_stack() as u16;
     let lo = cpu.pop_from_stack() as u16;
-    cpu.set_pc((hi << 8) | lo);
+    let hi = cpu.pop_from_stack() as u16;
+    let new_pc = (hi << 8) | lo;
+    cpu.set_pc(new_pc.wrapping_add(1));
     0
 }
 // SBC - Subtract with Carry
 fn sbc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
-    let twos_comp = (data as i8 * -1) as u8;
+    // Add with carry: A + M + C
+    // Sub with carry: A - M - (1 - C) == A + (-M - 1) + C
+    let twos_comp = (data as i8 * -1).wrapping_sub(1) as u8;
+
 
     let new_opcode_data = OpcodeData{
-        data: Some(twos_comp), 
+        data: Some(twos_comp),  // -M - 1
         address: opcode_data.address, 
         offset: opcode_data.offset
     }; 

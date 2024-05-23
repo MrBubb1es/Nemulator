@@ -18,19 +18,22 @@ pub struct CPU {
 
     bus: Rc<Bus>,
 
+    clocks: usize,
+
     current_instr: Instruction,
     instr_data: OpcodeData,
 }
 
 impl CPU {
     pub fn new(bus: Rc<Bus>) -> Self {
-        CPU {
+        let mut new_cpu = CPU {
             acc: 0,
             x: 0,
             y: 0,
-            sp: 0,
+            sp: 0, // will be set to 0xFD in reset due to wrapping sub
             pc: 0,
-            flags: 0,
+            flags: 0x20, // start w/ unused flag on cuz why not ig (fixes nesdev tests)
+            clocks: 0,
             bus: bus,
             current_instr: DEFAULT_ILLEGAL_OP,
             instr_data: OpcodeData {
@@ -38,37 +41,46 @@ impl CPU {
                 address: None,
                 offset: None,
             },
-        }
+        };
+
+        new_cpu.reset();
+
+        new_cpu
     }
 
     /// Cycles the CPU through one whole instruction, taking as many clock
     /// cycles as that instruction requires. This function encapsulates all of
     /// the fetch, decode, and execute stages of the CPU. Returns the total
     /// number of clock cycles taken for the instruction run.
-    pub fn cycle(&mut self) -> usize {
+    pub fn cycle(&mut self) {
         let opcode = self.read(self.pc);
-        
+
         // fetch - get the opcode we are running
         let instr = &INSTRUCTION_TABLE[opcode as usize];
 
         // decode - retrieve the neccesary data for the instruction
         let (opcode_data, fetch_cycles) = (instr.addr_func)(self);
 
+        // Increment pc before instruction execution
+        self.pc += instr.bytes as u16;
+
         // execute - run the instruction, updating memory and processor status
         //           as defined by the instruction
         let execute_cycles = (instr.func)(self, opcode_data);
-
-        // update PC
-        self.pc += instr.bytes as u16;
 
         // store the instruction just executed (for debugging)
         self.current_instr = instr.clone();
         self.instr_data = opcode_data;
 
-        execute_cycles + fetch_cycles + instr.base_clocks
+        self.clocks += execute_cycles + fetch_cycles + instr.base_clocks;
     }
 
     // GETTER/SETTER FUNCTIONS
+
+    /// Get the current number of clock cycles since turn-on
+    pub fn clocks(&self) -> usize {
+        self.clocks
+    }
 
     /// Get the carry flag as a 0 or 1 value
     pub fn get_carry_flag(&self) -> u8 {
@@ -236,6 +248,9 @@ impl CPU {
     /// memory (i.e. 0x0100-0x01FF, right after the zero page). Decrements the
     /// sp after the value is pushed.
     pub fn push_to_stack(&mut self, data: u8) {
+        
+        // println!("Pushing 0x{:02X} to stk", data);
+
         let stk_address = 0x0100 | self.sp as u16;
         self.bus.write(stk_address, data);
         self.sp = self.sp.wrapping_sub(1);
@@ -244,7 +259,11 @@ impl CPU {
     pub fn pop_from_stack(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let stk_address = 0x0100 | self.sp as u16;
-        self.bus.read(stk_address)
+        let data = self.bus.read(stk_address);
+
+        // println!("Popping 0x{:02X} from stk", data);
+
+        data
     }
 
     // RESET FUNCTION
@@ -252,15 +271,26 @@ impl CPU {
     /// Runs the defined reset sequence of the 6502, detailed here:
     /// https://www.nesdev.org/wiki/CPU_power_up_state
     pub fn reset(&mut self) {
-        const STK_RESET: u8 = 0xFD;
-        const PC_RESET_ADDR: u16 = 0xFFFC;
+        const RESET_PC_VECTOR: u16 = 0xFFFC;
 
-        self.acc = 0;
-        self.x = 0;
-        self.y = 0;
-        self.sp = STK_RESET;
+        // self.acc = 0;
+        // self.x = 0;
+        // self.y = 0;
+        self.sp = self.sp.wrapping_sub(3);
 
-        self.pc = self.read_word(PC_RESET_ADDR);
+        // Interrupt flag set and unused flag unchanged, set the rest to 0
+        self.set_carry_flag(0);
+        self.set_zero_flag(0);
+        self.set_interrupt_flag(1);
+        self.set_decimal_flag(0);
+        self.set_b_flag(0);
+        // leave unused flag alone
+        self.set_overflow_flag(0);
+        self.set_negative_flag(0);
+
+        self.pc = self.read_word(RESET_PC_VECTOR);
+
+        self.clocks += 7;
     }
 
     // INTERRUPTS
@@ -276,8 +306,8 @@ impl CPU {
             // Store PC
             let lo = self.pc as u8;
             let hi = (self.pc >> 8) as u8;
-            self.push_to_stack(lo);
             self.push_to_stack(hi);
+            self.push_to_stack(lo);
 
             // Set flags and store status
             self.set_b_flag(0);
@@ -287,6 +317,9 @@ impl CPU {
 
             // Set PC to whatever is at addr 0xFFFE
             self.pc = self.read_word(IRQ_PC_VECTOR);
+
+            // Interrupts take 7 clock cycles
+            self.clocks += 7;
         }
     }
     /// Send a non-maskable interrupt to the CPU, which executes the defined
@@ -299,8 +332,8 @@ impl CPU {
         // Store PC
         let lo = self.pc as u8;
         let hi = (self.pc >> 8) as u8;
-        self.push_to_stack(lo);
         self.push_to_stack(hi);
+        self.push_to_stack(lo);
 
         // Set flags and store status
         self.set_b_flag(0);
@@ -310,12 +343,17 @@ impl CPU {
 
         // Set PC to whatever is at addr 0xFFFE
         self.pc = self.read_word(NMI_PC_VECTOR);
+
+        // Interrupts take 7 clock cycles
+        self.clocks += 7;
     }
 
     /// Get the instruction just executed as a string of 6502 assembly for
     /// debugging purposes.
     pub fn current_instr_str(&self) -> String {
-        let mut out_str = String::from(self.current_instr.name);
+        let mut out_str = format!("0x{:02X}", self.current_instr.opcode_num);
+        out_str.push(' ');
+        out_str.push_str(self.current_instr.name);
 
         out_str.push(' ');
         let temp = if self.current_instr.name == "???" {
@@ -328,7 +366,7 @@ impl CPU {
             match self.current_instr.addr_mode {
                 AddressingMode::Accumulator => String::from("A : [acc]"),
 
-                AddressingMode::Implied => String::from(" : [imp]"),
+                AddressingMode::Implied => String::from(": [imp]"),
 
                 AddressingMode::Immediate => {
                     format!("#${:02X} : [imm]", self.instr_data.data.unwrap())
@@ -355,13 +393,13 @@ impl CPU {
                 }
 
                 AddressingMode::Indirect => {
-                    format!("$({:02X}) : [ind]", self.instr_data.address.unwrap())
+                    format!("$(??) : [ind, abs_addr = 0x{:04X}]", self.instr_data.address.unwrap())
                 }
                 AddressingMode::IndirectX => {
-                    format!("$({:02X}),X : [ind x]", self.instr_data.address.unwrap())
+                    format!("$(??),X : [ind x, abs_addr = 0x{:04X}]", self.instr_data.address.unwrap())
                 }
                 AddressingMode::IndirectY => {
-                    format!("$({:02X}),Y : [ind y]", self.instr_data.address.unwrap())
+                    format!("$(??),Y : [ind y, abs_addr = 0x{:04X}]", self.instr_data.address.unwrap())
                 }
 
                 AddressingMode::Relative => format!(
@@ -374,6 +412,15 @@ impl CPU {
         out_str.push_str(&temp);
 
         out_str
+    }
+
+    pub fn print_state(&self) {
+        println!("CPU State:");
+        println!("  A: 0x{:02X}, X: 0x{:02X}, Y: 0x{:02X}", self.acc, self.x, self.y);
+        println!("  SP: 0x{:02X}, PC: 0x{:04X}", self.sp, self.pc);
+        println!("  Status (NVUBDIZC): {:08b}", self.get_flags());
+        println!("  Last Instr: {}", self.current_instr_str());
+        println!("  Total Clks: {}", self.clocks);
     }
 }
 

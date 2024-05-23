@@ -35,7 +35,7 @@ pub fn run() {
         }
         // The rest of the game loop goes here...
         // system::tick();
-        window.draw(nemulator.get_cpu(), nemulator.get_bus());
+        window.draw(&nemulator);
         tick += 1;
 
         std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
@@ -81,7 +81,7 @@ pub fn run_debug(nes: &mut NES) {
         // The rest of the game loop goes here...
         // system::tick();
         // bus.write(0, tick as u8);
-        window.draw(nes.get_cpu(), nes.get_bus());
+        window.draw(&nes);
 
         tick += 1;
 

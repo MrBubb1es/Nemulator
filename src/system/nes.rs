@@ -7,7 +7,7 @@ use super::{bus::Bus, cpu::CPU, ppu::PPU};
 pub struct NES {
     cart: Rc<Cartridge>,
     bus: Rc<Bus>,
-    cpu: CPU,
+    pub cpu: CPU,
     ppu: PPU,
 }
 
@@ -49,6 +49,10 @@ impl NES {
         &self.bus
     }
 
+    pub fn get_clks(&self) -> usize {
+        self.cpu.clocks()
+    }
+
     pub fn cycle(&mut self) {
         self.cpu.cycle();
     }
@@ -56,6 +60,8 @@ impl NES {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::read_to_string;
+
     use crate::run_debug;
 
     use super::NES;
@@ -85,12 +91,53 @@ mod tests {
 
     #[test]
     fn run_nes_test() {
+        let mut expected_vals = Vec::new();
+        
+        for line in read_to_string("prg_tests/cpu_tests/expected_log.txt").unwrap().lines() {
+            expected_vals.push(
+                {
+                    let temp: Vec<usize> = line.split(",").map(|num| {
+                        if num.contains("0x") {
+                            usize::from_str_radix(&num[2..], 16).unwrap()
+                        } else {
+                            usize::from_str_radix(num, 10).unwrap()
+                        }
+                    }).collect();
+
+                    (temp[0] as u16, // pc
+                    temp[1] as u8,   // sp
+                    temp[2] as u8,   // acc
+                    temp[3] as u8,   // x
+                    temp[4] as u8,   // y
+                    temp[5] as u8,   // status
+                    temp[6])         // clocks
+                }
+            )
+        }
+
+
         let mut test_nemulator = NES::new("prg_tests/nestest.nes");
-        test_nemulator.reset_cpu();
         test_nemulator.cpu.set_pc(0xC000); // run tests automatically
 
-        for _ in 0..100000 {
-            // I don't know how else to drive the cpu rn
+        let mut i = 0;
+        // I don't know how else to drive the cpu rn
+        while test_nemulator.cpu.clocks() < 100000 {
+            if test_nemulator.cpu.clocks() > 13000 {
+                // test_nemulator.get_cpu().print_state();
+            }
+
+            let (exp_pc, exp_sp, exp_acc, exp_x, exp_y, exp_flags, exp_clks) = expected_vals[i];
+
+            assert_eq!(exp_pc, test_nemulator.get_cpu().get_pc());
+            assert_eq!(exp_sp, test_nemulator.get_cpu().get_sp());
+            assert_eq!(exp_acc, test_nemulator.get_cpu().get_acc());
+            assert_eq!(exp_x, test_nemulator.get_cpu().get_x_reg());
+            assert_eq!(exp_y, test_nemulator.get_cpu().get_y_reg());
+            assert_eq!(exp_flags, test_nemulator.get_cpu().get_flags());
+            assert_eq!(exp_clks, test_nemulator.get_cpu().clocks());
+
+            i = i + 1;
+
             test_nemulator.cycle();
         }
 

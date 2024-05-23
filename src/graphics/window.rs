@@ -10,6 +10,7 @@ use sdl2::{EventPump, Sdl};
 
 use crate::system::bus::Bus;
 use crate::system::cpu::CPU;
+use crate::system::nes::NES;
 
 use super::util;
 
@@ -77,9 +78,9 @@ impl<'a> Window<'a> {
     }
 
     /// Draw the window
-    pub fn draw(&mut self, cpu: &CPU, bus: &Bus) {
+    pub fn draw(&mut self, nes: &NES) {
         if self.is_debug {
-            self.show_debug(cpu, bus);
+            self.show_debug(nes);
         } else {
             self.show();
         }
@@ -112,7 +113,7 @@ impl<'a> Window<'a> {
     }
 
     /// Draw the debug view (very slow bc of calls to the write function)
-    fn show_debug(&mut self, cpu: &CPU, bus: &Bus) {
+    fn show_debug(&mut self, nes: &NES) {
         const DEBUG_BG_COLOR: Color = Color::RGB(0x09, 0x31, 0x45);
         const DEBUG_TXT_COLOR: Color = Color::RGB(0xEF, 0xD4, 0x69);
         const DEBUG_TXT_SIZE: f32 = 20.0;
@@ -120,17 +121,20 @@ impl<'a> Window<'a> {
         self.canvas.set_draw_color(DEBUG_BG_COLOR);
         self.canvas.clear();
 
-        let zero_page_str = Window::zpage_str(&bus);
+        let zero_page_str = Window::zpage_str(nes.get_bus());
+        let clk_str = format!("Clocks: {}", nes.get_clks());
 
         self.write("Zero-Page:", 5, 5, DEBUG_TXT_SIZE+5.0, DEBUG_TXT_COLOR);
         self.write(&zero_page_str, 5, (DEBUG_TXT_SIZE as usize)+10, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
 
         let low_height = 17*(DEBUG_TXT_SIZE as usize)+10;
 
-        self.write_cpu(cpu, 5, low_height, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
+        self.write_cpu(nes.get_cpu(), 5, low_height, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
 
         self.write("Just Executed:", 200, low_height, DEBUG_TXT_SIZE+5.0, DEBUG_TXT_COLOR);
-        self.write(&cpu.current_instr_str(), 210, low_height+(DEBUG_TXT_SIZE as usize)+10, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
+        self.write(&nes.get_cpu().current_instr_str(), 210, low_height+(DEBUG_TXT_SIZE as usize)+10, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
+        self.write(&clk_str, 210, low_height+2*(DEBUG_TXT_SIZE as usize)+20, DEBUG_TXT_SIZE, DEBUG_TXT_COLOR);
+
 
         self.canvas.present();
     }

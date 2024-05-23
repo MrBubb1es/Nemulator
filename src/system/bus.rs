@@ -26,7 +26,7 @@ impl Bus {
         match address {
             0x0000..=0x1FFF => {
                 // First 2KiB of memory (0x0800) are mirrored until 0x2000
-                self.memory.read(address & 0x08FF)
+                self.memory.read(address % 0x08FF)
             },
             _ => self.cart.cpu_read(address),
         }
@@ -38,7 +38,7 @@ impl Bus {
         match address {
             0x0000..=0x1FFF => {
                 // First 2KiB of memory (0x0800) are mirrored until 0x2000
-                self.memory.write(address & 0x08FF, data)
+                self.memory.write(address % 0x08FF, data)
             },
             _ => self.cart.cpu_write(address, data),
         }

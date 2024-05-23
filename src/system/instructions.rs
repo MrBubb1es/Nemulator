@@ -4,7 +4,7 @@
 
 use crate::system::cpu::CPU;
 
-// Define the macro
+// Generic unimplemented opcode instr with given opcode (for differentiating instr calls)
 macro_rules! illegal_op {
     ($opcode:expr) => {
         Instruction {
@@ -15,6 +15,8 @@ macro_rules! illegal_op {
             func: xxx,
             base_clocks: 2,
             bytes: 1,
+            has_extra_fetch_cycles: false, 
+            is_illegal: true,
         }
     };
 }
@@ -28,280 +30,262 @@ pub const DEFAULT_ILLEGAL_OP: Instruction = illegal_op!(0x00);
 /// instruction's opcode. The full table can be viewed here:
 /// https://www.masswerk.at/6502/6502_instruction_set.html
 pub const INSTRUCTION_TABLE: [Instruction; 256] = [
-    Instruction{name: "BRK", opcode_num: 0x00, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: brk, base_clocks: 7, bytes: 2},
-	Instruction{name: "ORA", opcode_num: 0x01, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: ora, base_clocks: 6, bytes: 2},
-	illegal_op!(0x02),
-	illegal_op!(0x03),
-	illegal_op!(0x04),
-	Instruction{name: "ORA", opcode_num: 0x05, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ora, base_clocks: 3, bytes: 2},
-	Instruction{name: "ASL", opcode_num: 0x06, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: asl, base_clocks: 5, bytes: 2},
-	illegal_op!(0x07),
-	Instruction{name: "PHP", opcode_num: 0x08, addr_mode: AddressingMode::Implied, addr_func: implied, func: php, base_clocks: 3, bytes: 1},
-	Instruction{name: "ORA", opcode_num: 0x09, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ora, base_clocks: 2, bytes: 2},
-	Instruction{name: "ASL", opcode_num: 0x0A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: asl, base_clocks: 2, bytes: 1},
-	illegal_op!(0x0B),
-	illegal_op!(0x0C),
-	Instruction{name: "ORA", opcode_num: 0x0D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ora, base_clocks: 4, bytes: 3},
-	Instruction{name: "ASL", opcode_num: 0x0E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: asl, base_clocks: 6, bytes: 3},
-	illegal_op!(0x0F),
-
-	Instruction{name: "BPL", opcode_num: 0x10, addr_mode: AddressingMode::Relative, addr_func: relative, func: bpl, base_clocks: 2, bytes: 2},
-	Instruction{name: "ORA", opcode_num: 0x11, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: ora, base_clocks: 5, bytes: 2},
-	illegal_op!(0x12),
-	illegal_op!(0x13),
-	illegal_op!(0x14),
-	Instruction{name: "ORA", opcode_num: 0x15, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ora, base_clocks: 4, bytes: 2},
-	Instruction{name: "ASL", opcode_num: 0x16, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: asl, base_clocks: 6, bytes: 2},
-	illegal_op!(0x17),
-	Instruction{name: "CLC", opcode_num: 0x18, addr_mode: AddressingMode::Implied, addr_func: implied, func: clc, base_clocks: 2, bytes: 1},
-	Instruction{name: "ORA", opcode_num: 0x19, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: ora, base_clocks: 4, bytes: 3},
-	illegal_op!(0x1A),
-	illegal_op!(0x1B),
-	illegal_op!(0x1C),
-	Instruction{name: "ORA", opcode_num: 0x1D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ora, base_clocks: 4, bytes: 3},
-	Instruction{name: "ASL", opcode_num: 0x1E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: asl, base_clocks: 7, bytes: 3},
-	illegal_op!(0x1F),
-
-	Instruction{name: "JSR", opcode_num: 0x20, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: jsr, base_clocks: 6, bytes: 3},
-	Instruction{name: "AND", opcode_num: 0x21, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: and, base_clocks: 6, bytes: 2},
-	illegal_op!(0x22),
-	illegal_op!(0x23),
-	Instruction{name: "BIT", opcode_num: 0x24, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: bit, base_clocks: 3, bytes: 2},
-	Instruction{name: "AND", opcode_num: 0x25, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: and, base_clocks: 3, bytes: 2},
-	Instruction{name: "ROL", opcode_num: 0x26, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rol, base_clocks: 5, bytes: 2},
-	illegal_op!(0x27),
-	Instruction{name: "PLP", opcode_num: 0x28, addr_mode: AddressingMode::Implied, addr_func: implied, func: plp, base_clocks: 4, bytes: 1},
-	Instruction{name: "AND", opcode_num: 0x29, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: and, base_clocks: 2, bytes: 2},
-	Instruction{name: "ROL", opcode_num: 0x2A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: rol, base_clocks: 2, bytes: 1},
-	illegal_op!(0x2B),
-	Instruction{name: "BIT", opcode_num: 0x2C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: bit, base_clocks: 4, bytes: 3},
-	Instruction{name: "AND", opcode_num: 0x2D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: and, base_clocks: 4, bytes: 3},
-	Instruction{name: "ROL", opcode_num: 0x2E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rol, base_clocks: 6, bytes: 3},
-	illegal_op!(0x2F),
-
-	Instruction{name: "BMI", opcode_num: 0x30, addr_mode: AddressingMode::Relative, addr_func: relative, func: bmi, base_clocks: 2, bytes: 2},
-	Instruction{name: "AND", opcode_num: 0x31, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: and, base_clocks: 5, bytes: 2},
-	illegal_op!(0x32),
-	illegal_op!(0x33),
-	illegal_op!(0x34),
-	Instruction{name: "AND", opcode_num: 0x35, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: and, base_clocks: 4, bytes: 2},
-	Instruction{name: "ROL", opcode_num: 0x36, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rol, base_clocks: 6, bytes: 2},
-	illegal_op!(0x37),
-	Instruction{name: "SEC", opcode_num: 0x38, addr_mode: AddressingMode::Implied, addr_func: implied, func: sec, base_clocks: 2, bytes: 1},
-	Instruction{name: "AND", opcode_num: 0x39, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: and, base_clocks: 4, bytes: 3},
-	illegal_op!(0x3A),
-	illegal_op!(0x3B),
-	illegal_op!(0x3C),
-	Instruction{name: "AND", opcode_num: 0x3D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: and, base_clocks: 4, bytes: 3},
-	Instruction{name: "ROL", opcode_num: 0x3E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rol, base_clocks: 7, bytes: 3},
-	illegal_op!(0x3F),
-
-
-	Instruction{name: "RTI", opcode_num: 0x40, addr_mode: AddressingMode::Implied, addr_func: implied, func: rti, base_clocks: 6, bytes: 1},
-	Instruction{name: "EOR", opcode_num: 0x41, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: eor, base_clocks: 6, bytes: 2},
-	illegal_op!(0x42),
-	illegal_op!(0x43),
-	illegal_op!(0x44),
-	Instruction{name: "EOR", opcode_num: 0x45, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: eor, base_clocks: 3, bytes: 2},
-	Instruction{name: "LSR", opcode_num: 0x46, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: lsr, base_clocks: 5, bytes: 2},
-	illegal_op!(0x47),
-	Instruction{name: "PHA", opcode_num: 0x48, addr_mode: AddressingMode::Implied, addr_func: implied, func: pha, base_clocks: 3, bytes: 1},
-	Instruction{name: "EOR", opcode_num: 0x49, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: eor, base_clocks: 2, bytes: 2},
-	Instruction{name: "LSR", opcode_num: 0x4A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: lsr, base_clocks: 2, bytes: 1},
-	illegal_op!(0x4B),
-	Instruction{name: "JMP", opcode_num: 0x4C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: jmp, base_clocks: 3, bytes: 3},
-	Instruction{name: "EOR", opcode_num: 0x4D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: eor, base_clocks: 4, bytes: 3},
-	Instruction{name: "LSR", opcode_num: 0x4E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lsr, base_clocks: 6, bytes: 3},
-	illegal_op!(0x4F),
-
-	Instruction{name: "BVC", opcode_num: 0x50, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvc, base_clocks: 2, bytes: 2},
-	Instruction{name: "EOR", opcode_num: 0x51, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: eor, base_clocks: 5, bytes: 2},
-	illegal_op!(0x52),
-	illegal_op!(0x53),
-	illegal_op!(0x54),
-	Instruction{name: "EOR", opcode_num: 0x55, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: eor, base_clocks: 4, bytes: 2},
-	Instruction{name: "LSR", opcode_num: 0x56, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: lsr, base_clocks: 6, bytes: 2},
-	illegal_op!(0x57),
-	Instruction{name: "CLI", opcode_num: 0x58, addr_mode: AddressingMode::Implied, addr_func: implied, func: cli, base_clocks: 2, bytes: 1},
-	Instruction{name: "EOR", opcode_num: 0x59, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: eor, base_clocks: 4, bytes: 3},
-	illegal_op!(0x5A),
-	illegal_op!(0x5B),
-	illegal_op!(0x5C),
-	Instruction{name: "EOR", opcode_num: 0x5D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: eor, base_clocks: 4, bytes: 3},
-	Instruction{name: "LSR", opcode_num: 0x5E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: lsr, base_clocks: 7, bytes: 3},
-	illegal_op!(0x5F),
-
-	Instruction{name: "RTS", opcode_num: 0x60, addr_mode: AddressingMode::Implied, addr_func: implied, func: rts, base_clocks: 6, bytes: 1},
-	Instruction{name: "ADC", opcode_num: 0x61, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: adc, base_clocks: 6, bytes: 2},
-	illegal_op!(0x62),
-	illegal_op!(0x63),
-	illegal_op!(0x64),
-	Instruction{name: "ADC", opcode_num: 0x65, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: adc, base_clocks: 3, bytes: 2},
-	Instruction{name: "ROR", opcode_num: 0x66, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ror, base_clocks: 5, bytes: 2},
-	illegal_op!(0x67),
-	Instruction{name: "PLA", opcode_num: 0x68, addr_mode: AddressingMode::Implied, addr_func: implied, func: pla, base_clocks: 4, bytes: 1},
-	Instruction{name: "ADC", opcode_num: 0x69, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: adc, base_clocks: 2, bytes: 2},
-	Instruction{name: "ROR", opcode_num: 0x6A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: ror, base_clocks: 2, bytes: 1},
-	illegal_op!(0x6B),
-	Instruction{name: "JMP", opcode_num: 0x6C, addr_mode: AddressingMode::Indirect, addr_func: indirect, func: jmp, base_clocks: 5, bytes: 3},
-	Instruction{name: "ADC", opcode_num: 0x6D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: adc, base_clocks: 4, bytes: 3},
-	Instruction{name: "ROR", opcode_num: 0x6E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ror, base_clocks: 6, bytes: 3},
-	illegal_op!(0x6F),
-
-	Instruction{name: "BVS", opcode_num: 0x70, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvs, base_clocks: 2, bytes: 2},
-	Instruction{name: "ADC", opcode_num: 0x71, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: adc, base_clocks: 5, bytes: 2},
-	illegal_op!(0x72),
-	illegal_op!(0x73),
-	illegal_op!(0x74),
-	Instruction{name: "ADC", opcode_num: 0x75, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: adc, base_clocks: 4, bytes: 2},
-	Instruction{name: "ROR", opcode_num: 0x76, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ror, base_clocks: 6, bytes: 2},
-	illegal_op!(0x77),
-	Instruction{name: "SEI", opcode_num: 0x78, addr_mode: AddressingMode::Implied, addr_func: implied, func: sei, base_clocks: 2, bytes: 1},
-	Instruction{name: "ADC", opcode_num: 0x79, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: adc, base_clocks: 4, bytes: 3},
-	illegal_op!(0x7A),
-	illegal_op!(0x7B),
-	illegal_op!(0x7C),
-	Instruction{name: "ADC", opcode_num: 0x7D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: adc, base_clocks: 4, bytes: 3},
-	Instruction{name: "ROR", opcode_num: 0x7E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ror, base_clocks: 7, bytes: 3},
-	illegal_op!(0x7F),
-
-
-	illegal_op!(0x80),
-	Instruction{name: "STA", opcode_num: 0x81, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sta, base_clocks: 6, bytes: 2},
-	illegal_op!(0x82),
-	illegal_op!(0x83),
-	Instruction{name: "STY", opcode_num: 0x84, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sty, base_clocks: 3, bytes: 2},
-	Instruction{name: "STA", opcode_num: 0x85, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sta, base_clocks: 3, bytes: 2},
-	Instruction{name: "STX", opcode_num: 0x86, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: stx, base_clocks: 3, bytes: 2},
-	illegal_op!(0x87),
-	Instruction{name: "DEY", opcode_num: 0x88, addr_mode: AddressingMode::Implied, addr_func: implied, func: dey, base_clocks: 2, bytes: 1},
-	illegal_op!(0x89),
-	Instruction{name: "TXA", opcode_num: 0x8A, addr_mode: AddressingMode::Implied, addr_func: implied, func: txa, base_clocks: 2, bytes: 1},
-	illegal_op!(0x8B),
-	Instruction{name: "STY", opcode_num: 0x8C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sty, base_clocks: 4, bytes: 3},
-	Instruction{name: "STA", opcode_num: 0x8D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sta, base_clocks: 4, bytes: 3},
-	Instruction{name: "STX", opcode_num: 0x8E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: stx, base_clocks: 4, bytes: 3},
-	illegal_op!(0x8F),
-
-	Instruction{name: "BCC", opcode_num: 0x90, addr_mode: AddressingMode::Relative, addr_func: relative, func: bcc, base_clocks: 2, bytes: 2},
-	Instruction{name: "STA", opcode_num: 0x91, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sta, base_clocks: 6, bytes: 2},
-	illegal_op!(0x92),
-	illegal_op!(0x93),
-	Instruction{name: "STY", opcode_num: 0x94, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sty, base_clocks: 4, bytes: 2},
-	Instruction{name: "STA", opcode_num: 0x95, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sta, base_clocks: 4, bytes: 2},
-	Instruction{name: "STX", opcode_num: 0x96, addr_mode: AddressingMode::ZeroPageY, addr_func: zpage_y, func: stx, base_clocks: 4, bytes: 2},
-	illegal_op!(0x97),
-	Instruction{name: "TYA", opcode_num: 0x98, addr_mode: AddressingMode::Implied, addr_func: implied, func: tya, base_clocks: 2, bytes: 1},
-	Instruction{name: "STA", opcode_num: 0x99, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: sta, base_clocks: 5, bytes: 3},
-	Instruction{name: "TXS", opcode_num: 0x9A, addr_mode: AddressingMode::Implied, addr_func: implied, func: txs, base_clocks: 2, bytes: 1},
-	illegal_op!(0x9B),
-	illegal_op!(0x9C),
-	Instruction{name: "STA", opcode_num: 0x9D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: sta, base_clocks: 5, bytes: 3},
-	illegal_op!(0x9E),
-	illegal_op!(0x9F),
-
-	Instruction{name: "LDY", opcode_num: 0xA0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldy, base_clocks: 2, bytes: 2},
-	Instruction{name: "LDA", opcode_num: 0xA1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: lda, base_clocks: 6, bytes: 2},
-	Instruction{name: "LDX", opcode_num: 0xA2, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldx, base_clocks: 2, bytes: 2},
-	illegal_op!(0xA3),
-	Instruction{name: "LDY", opcode_num: 0xA4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ldy, base_clocks: 3, bytes: 2},
-	Instruction{name: "LDA", opcode_num: 0xA5, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: lda, base_clocks: 3, bytes: 2},
-	Instruction{name: "LDX", opcode_num: 0xA6, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ldx, base_clocks: 3, bytes: 2},
-	illegal_op!(0xA7),
-	Instruction{name: "TAY", opcode_num: 0xA8, addr_mode: AddressingMode::Implied, addr_func: implied, func: tay, base_clocks: 2, bytes: 1},
-	Instruction{name: "LDA", opcode_num: 0xA9, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: lda, base_clocks: 2, bytes: 2},
-	Instruction{name: "TAX", opcode_num: 0xAA, addr_mode: AddressingMode::Implied, addr_func: implied, func: tax, base_clocks: 2, bytes: 1},
-	illegal_op!(0xAB),
-	Instruction{name: "LDY", opcode_num: 0xAC, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ldy, base_clocks: 4, bytes: 3},
-	Instruction{name: "LDA", opcode_num: 0xAD, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lda, base_clocks: 4, bytes: 3},
-	Instruction{name: "LDX", opcode_num: 0xAE, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ldx, base_clocks: 4, bytes: 3},
-	illegal_op!(0xAF),
-
-	Instruction{name: "BCS", opcode_num: 0xB0, addr_mode: AddressingMode::Relative, addr_func: relative, func: bcs, base_clocks: 2, bytes: 2},
-	Instruction{name: "LDA", opcode_num: 0xB1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: lda, base_clocks: 5, bytes: 2},
-	illegal_op!(0xB2),
-	illegal_op!(0xB3),
-	Instruction{name: "LDY", opcode_num: 0xB4, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ldy, base_clocks: 4, bytes: 2},
-	Instruction{name: "LDA", opcode_num: 0xB5, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: lda, base_clocks: 4, bytes: 2},
-	Instruction{name: "LDX", opcode_num: 0xB6, addr_mode: AddressingMode::ZeroPageY, addr_func: zpage_y, func: ldx, base_clocks: 4, bytes: 2},
-	illegal_op!(0xB7),
-	Instruction{name: "CLV", opcode_num: 0xB8, addr_mode: AddressingMode::Implied, addr_func: implied, func: clv, base_clocks: 2, bytes: 1},
-	Instruction{name: "LDA", opcode_num: 0xB9, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: lda, base_clocks: 4, bytes: 3},
-	Instruction{name: "TSX", opcode_num: 0xBA, addr_mode: AddressingMode::Implied, addr_func: implied, func: tsx, base_clocks: 2, bytes: 1},
-	illegal_op!(0xBB),
-	Instruction{name: "LDY", opcode_num: 0xBC, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ldy, base_clocks: 4, bytes: 3},
-	Instruction{name: "LDA", opcode_num: 0xBD, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: lda, base_clocks: 4, bytes: 3},
-	Instruction{name: "LDX", opcode_num: 0xBE, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: ldx, base_clocks: 4, bytes: 3},
-	illegal_op!(0xBF),
-
-
-	Instruction{name: "CPY", opcode_num: 0xC0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cpy, base_clocks: 2, bytes: 2},
-	Instruction{name: "CMP", opcode_num: 0xC1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: cmp, base_clocks: 6, bytes: 2},
-	illegal_op!(0xC2),
-	illegal_op!(0xC3),
-	Instruction{name: "CPY", opcode_num: 0xC4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cpy, base_clocks: 3, bytes: 2},
-	Instruction{name: "CMP", opcode_num: 0xC5, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cmp, base_clocks: 3, bytes: 2},
-	Instruction{name: "DEC", opcode_num: 0xC6, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: dec, base_clocks: 5, bytes: 2},
-	illegal_op!(0xC7),
-	Instruction{name: "INY", opcode_num: 0xC8, addr_mode: AddressingMode::Implied, addr_func: implied, func: iny, base_clocks: 2, bytes: 1},
-	Instruction{name: "CMP", opcode_num: 0xC9, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cmp, base_clocks: 2, bytes: 2},
-	Instruction{name: "DEX", opcode_num: 0xCA, addr_mode: AddressingMode::Implied, addr_func: implied, func: dex, base_clocks: 2, bytes: 1},
-	illegal_op!(0xCB),
-	Instruction{name: "CPY", opcode_num: 0xCC, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: cpy, base_clocks: 4, bytes: 3},
-	Instruction{name: "CMP", opcode_num: 0xCD, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: cmp, base_clocks: 4, bytes: 3},
-	Instruction{name: "DEC", opcode_num: 0xCE, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: dec, base_clocks: 6, bytes: 3},
-	illegal_op!(0xCF),
-
-	Instruction{name: "BNE", opcode_num: 0xD0, addr_mode: AddressingMode::Relative, addr_func: relative, func: bne, base_clocks: 2, bytes: 2},
-	Instruction{name: "CMP", opcode_num: 0xD1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: cmp, base_clocks: 5, bytes: 2},
-	illegal_op!(0xD2),
-	illegal_op!(0xD3),
-	illegal_op!(0xD4),
-	Instruction{name: "CMP", opcode_num: 0xD5, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: cmp, base_clocks: 4, bytes: 2},
-	Instruction{name: "DEC", opcode_num: 0xD6, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: dec, base_clocks: 6, bytes: 2},
-	illegal_op!(0xD7),
-	Instruction{name: "CLD", opcode_num: 0xD8, addr_mode: AddressingMode::Implied, addr_func: implied, func: cld, base_clocks: 2, bytes: 1},
-	Instruction{name: "CMP", opcode_num: 0xD9, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: cmp, base_clocks: 4, bytes: 3},
-	Instruction{name: "NOP", opcode_num: 0xDA, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1},
-	illegal_op!(0xDB),
-	illegal_op!(0xDC),
-	Instruction{name: "CMP", opcode_num: 0xDD, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: cmp, base_clocks: 4, bytes: 3},
-	Instruction{name: "DEC", opcode_num: 0xDE, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: dec, base_clocks: 7, bytes: 3},
-	illegal_op!(0xDF),
-
-	Instruction{name: "CPX", opcode_num: 0xE0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cpx, base_clocks: 2, bytes: 2},
-	Instruction{name: "SBC", opcode_num: 0xE1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sbc, base_clocks: 6, bytes: 2},
-	illegal_op!(0xE2),
-	illegal_op!(0xE3),
-	Instruction{name: "CPX", opcode_num: 0xE4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cpx, base_clocks: 3, bytes: 2},
-	Instruction{name: "SBC", opcode_num: 0xE5, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sbc, base_clocks: 3, bytes: 2},
-	Instruction{name: "INC", opcode_num: 0xE6, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: inc, base_clocks: 5, bytes: 2},
-	illegal_op!(0xE7),
-	Instruction{name: "INX", opcode_num: 0xE8, addr_mode: AddressingMode::Implied, addr_func: implied, func: inx, base_clocks: 2, bytes: 1},
-	Instruction{name: "SBC", opcode_num: 0xE9, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: sbc, base_clocks: 2, bytes: 2},
-	Instruction{name: "NOP", opcode_num: 0xEA, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1},
-	illegal_op!(0xEB),
-	Instruction{name: "CPX", opcode_num: 0xEC, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: cpx, base_clocks: 4, bytes: 3},
-	Instruction{name: "SBC", opcode_num: 0xED, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sbc, base_clocks: 4, bytes: 3},
-	Instruction{name: "INC", opcode_num: 0xEE, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: inc, base_clocks: 6, bytes: 3},
-	illegal_op!(0xEF),
-
-	Instruction{name: "BEQ", opcode_num: 0xF0, addr_mode: AddressingMode::Relative, addr_func: relative, func: beq, base_clocks: 2, bytes: 2},
-	Instruction{name: "SBC", opcode_num: 0xF1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sbc, base_clocks: 5, bytes: 2},
-	illegal_op!(0xF2),
-	illegal_op!(0xF3),
-	illegal_op!(0xF4),
-	Instruction{name: "SBC", opcode_num: 0xF5, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sbc, base_clocks: 4, bytes: 2},
-	Instruction{name: "INC", opcode_num: 0xF6, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: inc, base_clocks: 6, bytes: 2},
-	illegal_op!(0xF7),
-	Instruction{name: "SED", opcode_num: 0xF8, addr_mode: AddressingMode::Implied, addr_func: implied, func: sed, base_clocks: 2, bytes: 1},
-	Instruction{name: "SBC", opcode_num: 0xF9, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: sbc, base_clocks: 4, bytes: 3},
-	Instruction{name: "NOP", opcode_num: 0xFA, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1},
-	illegal_op!(0xFB),
-	illegal_op!(0xFC),
-	Instruction{name: "SBC", opcode_num: 0xFD, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: sbc, base_clocks: 4, bytes: 3},
-	Instruction{name: "INC", opcode_num: 0xFE, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: inc, base_clocks: 7, bytes: 3},
-	illegal_op!(0xFF),
+    Instruction{name: "BRK", opcode_num: 0x00, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: brk, base_clocks: 7, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ORA", opcode_num: 0x01, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: ora, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x02), // JAM
+    Instruction{name: "SLO", opcode_num: 0x03, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: slo, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x04, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: nop, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "ORA", opcode_num: 0x05, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ora, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x06, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: asl, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SLO", opcode_num: 0x07, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: slo, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "PHP", opcode_num: 0x08, addr_mode: AddressingMode::Implied, addr_func: implied, func: php, base_clocks: 3, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ORA", opcode_num: 0x09, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ora, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x0A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: asl, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ANC", opcode_num: 0x0B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: anc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x0C, addr_mode: AddressingMode::Absolute, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "ORA", opcode_num: 0x0D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ora, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x0E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: asl, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SLO", opcode_num: 0x0F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: slo, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BPL", opcode_num: 0x10, addr_mode: AddressingMode::Relative, addr_func: relative, func: bpl, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "ORA", opcode_num: 0x11, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: ora, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    illegal_op!(0x12), // JAM
+    Instruction{name: "SLO", opcode_num: 0x13, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: slo, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x14, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "ORA", opcode_num: 0x15, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ora, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x16, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: asl, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SLO", opcode_num: 0x17, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: slo, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CLC", opcode_num: 0x18, addr_mode: AddressingMode::Implied, addr_func: implied, func: clc, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ORA", opcode_num: 0x19, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: ora, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0x1A, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "SLO", opcode_num: 0x1B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: slo, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x1C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "ORA", opcode_num: 0x1D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ora, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x1E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: asl, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SLO", opcode_num: 0x1F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: slo, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "JSR", opcode_num: 0x20, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: jsr, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "AND", opcode_num: 0x21, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: and, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x22), // JAM
+    Instruction{name: "RLA", opcode_num: 0x23, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: rla, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BIT", opcode_num: 0x24, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: bit, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "AND", opcode_num: 0x25, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: and, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x26, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rol, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RLA", opcode_num: 0x27, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rla, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "PLP", opcode_num: 0x28, addr_mode: AddressingMode::Implied, addr_func: implied, func: plp, base_clocks: 4, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "AND", opcode_num: 0x29, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: and, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x2A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: rol, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ANC", opcode_num: 0x2B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: anc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BIT", opcode_num: 0x2C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: bit, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "AND", opcode_num: 0x2D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: and, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x2E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rol, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RLA", opcode_num: 0x2F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rla, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BMI", opcode_num: 0x30, addr_mode: AddressingMode::Relative, addr_func: relative, func: bmi, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "AND", opcode_num: 0x31, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: and, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    illegal_op!(0x32), // JAM
+    Instruction{name: "RLA", opcode_num: 0x2F, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: rla, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x34, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "AND", opcode_num: 0x35, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: and, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x36, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rol, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RLA", opcode_num: 0x2F, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rla, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "SEC", opcode_num: 0x38, addr_mode: AddressingMode::Implied, addr_func: implied, func: sec, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "AND", opcode_num: 0x39, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: and, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0x3A, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "RLA", opcode_num: 0x3B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: rla, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x3C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "AND", opcode_num: 0x3D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: and, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x3E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rol, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RLA", opcode_num: 0x3F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rla, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "RTI", opcode_num: 0x40, addr_mode: AddressingMode::Implied, addr_func: implied, func: rti, base_clocks: 6, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "EOR", opcode_num: 0x41, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: eor, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x42), // JAM
+    Instruction{name: "SRE", opcode_num: 0x43, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sre, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x44, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: nop, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "EOR", opcode_num: 0x45, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: eor, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x46, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: lsr, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SRE", opcode_num: 0x47, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sre, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "PHA", opcode_num: 0x48, addr_mode: AddressingMode::Implied, addr_func: implied, func: pha, base_clocks: 3, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "EOR", opcode_num: 0x49, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: eor, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x4A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: lsr, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASR", opcode_num: 0x4B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: asr, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "JMP", opcode_num: 0x4C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: jmp, base_clocks: 3, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "EOR", opcode_num: 0x4D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: eor, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x4E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lsr, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SRE", opcode_num: 0x4F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sre, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BVC", opcode_num: 0x50, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "EOR", opcode_num: 0x51, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: eor, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    illegal_op!(0x52), // JAM
+    Instruction{name: "SRE", opcode_num: 0x4F, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sre, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x54, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "EOR", opcode_num: 0x55, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: eor, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x56, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: lsr, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SRE", opcode_num: 0x57, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sre, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CLI", opcode_num: 0x58, addr_mode: AddressingMode::Implied, addr_func: implied, func: cli, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "EOR", opcode_num: 0x59, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: eor, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0x5A, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "SRE", opcode_num: 0x5B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: sre, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x5C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "EOR", opcode_num: 0x5D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: eor, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x5E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: lsr, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SRE", opcode_num: 0x5F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: sre, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "RTS", opcode_num: 0x60, addr_mode: AddressingMode::Implied, addr_func: implied, func: rts, base_clocks: 6, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ADC", opcode_num: 0x61, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: adc, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x62), // JAM
+    Instruction{name: "RRA", opcode_num: 0x63, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: rra, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x64, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: nop, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "ADC", opcode_num: 0x65, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: adc, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x66, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ror, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RRA", opcode_num: 0x67, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rra, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "PLA", opcode_num: 0x68, addr_mode: AddressingMode::Implied, addr_func: implied, func: pla, base_clocks: 4, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ADC", opcode_num: 0x69, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: adc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x6A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: ror, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ARR", opcode_num: 0x6B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: arr, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "JMP", opcode_num: 0x6C, addr_mode: AddressingMode::Indirect, addr_func: indirect, func: jmp, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ADC", opcode_num: 0x6D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: adc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x6E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ror, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RRA", opcode_num: 0x6F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rra, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BVS", opcode_num: 0x70, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvs, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "ADC", opcode_num: 0x71, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: adc, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    illegal_op!(0x72), // JAM
+    Instruction{name: "RRA", opcode_num: 0x73, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: rra, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x74, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "ADC", opcode_num: 0x75, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: adc, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x76, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ror, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RRA", opcode_num: 0x77, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rra, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "SEI", opcode_num: 0x78, addr_mode: AddressingMode::Implied, addr_func: implied, func: sei, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ADC", opcode_num: 0x79, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: adc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0x7A, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "RRA", opcode_num: 0x7B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: rra, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x7C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "ADC", opcode_num: 0x7D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: adc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x7E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ror, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "RRA", opcode_num: 0x7F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rra, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0x80, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: nop, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "STA", opcode_num: 0x81, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sta, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0x82, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: nop, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "SAX", opcode_num: 0x83, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sax, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "STY", opcode_num: 0x84, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sty, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "STA", opcode_num: 0x85, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sta, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "STX", opcode_num: 0x86, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: stx, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SAX", opcode_num: 0x87, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sax, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "DEY", opcode_num: 0x88, addr_mode: AddressingMode::Implied, addr_func: implied, func: dey, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0x89, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: nop, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "TXA", opcode_num: 0x8A, addr_mode: AddressingMode::Implied, addr_func: implied, func: txa, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x8B), // XAA - non-deterministic, highly unstable, do not use
+    Instruction{name: "STY", opcode_num: 0x8C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sty, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "STA", opcode_num: 0x8D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sta, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "STX", opcode_num: 0x8E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: stx, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SAX", opcode_num: 0x8F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sax, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BCC", opcode_num: 0x90, addr_mode: AddressingMode::Relative, addr_func: relative, func: bcc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "STA", opcode_num: 0x91, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sta, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x92), // JAM
+    illegal_op!(0x93), // SHA
+    Instruction{name: "STY", opcode_num: 0x94, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sty, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "STA", opcode_num: 0x95, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sta, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "STX", opcode_num: 0x96, addr_mode: AddressingMode::ZeroPageY, addr_func: zpage_y, func: stx, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SAX", opcode_num: 0x97, addr_mode: AddressingMode::ZeroPageY, addr_func: zpage_y, func: sax, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "TYA", opcode_num: 0x98, addr_mode: AddressingMode::Implied, addr_func: implied, func: tya, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "STA", opcode_num: 0x99, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: sta, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "TXS", opcode_num: 0x9A, addr_mode: AddressingMode::Implied, addr_func: implied, func: txs, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x9B), // SHA - IndirectY
+    illegal_op!(0x9C), // SHY
+    Instruction{name: "STA", opcode_num: 0x9D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: sta, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0x9E), // SHX
+    illegal_op!(0x9F), // SHA - AbsoluteY
+    Instruction{name: "LDY", opcode_num: 0xA0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldy, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xA1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: lda, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDX", opcode_num: 0xA2, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldx, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LAX", opcode_num: 0xA3, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: lax, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "LDY", opcode_num: 0xA4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ldy, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xA5, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: lda, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDX", opcode_num: 0xA6, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ldx, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LAX", opcode_num: 0xA7, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: lax, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "TAY", opcode_num: 0xA8, addr_mode: AddressingMode::Implied, addr_func: implied, func: tay, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xA9, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: lda, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "TAX", opcode_num: 0xAA, addr_mode: AddressingMode::Implied, addr_func: implied, func: tax, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0xAB), // LXA
+    Instruction{name: "LDY", opcode_num: 0xAC, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ldy, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xAD, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lda, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDX", opcode_num: 0xAE, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ldx, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LAX", opcode_num: 0xAF, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lax, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BCS", opcode_num: 0xB0, addr_mode: AddressingMode::Relative, addr_func: relative, func: bcs, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xB1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: lda, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    illegal_op!(0xB2), // JAM
+    Instruction{name: "LAX", opcode_num: 0xB3, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: lax, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "LDY", opcode_num: 0xB4, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ldy, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xB5, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: lda, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDX", opcode_num: 0xB6, addr_mode: AddressingMode::ZeroPageY, addr_func: zpage_y, func: ldx, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LAX", opcode_num: 0xB7, addr_mode: AddressingMode::ZeroPageY, addr_func: zpage_y, func: lax, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CLV", opcode_num: 0xB8, addr_mode: AddressingMode::Implied, addr_func: implied, func: clv, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xB9, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: lda, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "TSX", opcode_num: 0xBA, addr_mode: AddressingMode::Implied, addr_func: implied, func: tsx, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0xBB), // LAS
+    Instruction{name: "LDY", opcode_num: 0xBC, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ldy, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "LDA", opcode_num: 0xBD, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: lda, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "LDX", opcode_num: 0xBE, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: ldx, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "LAX", opcode_num: 0xBF, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: lax, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "CPY", opcode_num: 0xC0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cpy, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "CMP", opcode_num: 0xC1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: cmp, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0xC2, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: nop, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "DCP", opcode_num: 0xC3, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: dcp, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CPY", opcode_num: 0xC4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cpy, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "CMP", opcode_num: 0xC5, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cmp, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DEC", opcode_num: 0xC6, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: dec, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DCP", opcode_num: 0xC7, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: dcp, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "INY", opcode_num: 0xC8, addr_mode: AddressingMode::Implied, addr_func: implied, func: iny, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "CMP", opcode_num: 0xC9, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cmp, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DEX", opcode_num: 0xCA, addr_mode: AddressingMode::Implied, addr_func: implied, func: dex, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    illegal_op!(0xCB), // SBX
+    Instruction{name: "CPY", opcode_num: 0xCC, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: cpy, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "CMP", opcode_num: 0xCD, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: cmp, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DEC", opcode_num: 0xCE, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: dec, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DCP", opcode_num: 0xCF, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: dcp, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BNE", opcode_num: 0xD0, addr_mode: AddressingMode::Relative, addr_func: relative, func: bne, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "CMP", opcode_num: 0xD1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: cmp, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    illegal_op!(0xD2), // JAM
+    Instruction{name: "DCP", opcode_num: 0xD3, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: dcp, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0xD4, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CMP", opcode_num: 0xD5, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: cmp, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DEC", opcode_num: 0xD6, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: dec, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DCP", opcode_num: 0xD7, addr_mode: AddressingMode::Absolute, addr_func: zpage_x, func: dcp, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CLD", opcode_num: 0xD8, addr_mode: AddressingMode::Implied, addr_func: implied, func: cld, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "CMP", opcode_num: 0xD9, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: cmp, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0xDA, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DCP", opcode_num: 0xDB, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: dcp, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0xDC, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "CMP", opcode_num: 0xDD, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: cmp, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "DEC", opcode_num: 0xDE, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: dec, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "DCP", opcode_num: 0xDF, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: dcp, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CPX", opcode_num: 0xE0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: cpx, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SBC", opcode_num: 0xE1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sbc, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0xE2, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: nop, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "ISC", opcode_num: 0xE3, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: isc, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CPX", opcode_num: 0xE4, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: cpx, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SBC", opcode_num: 0xE5, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sbc, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "INC", opcode_num: 0xE6, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: inc, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ISC", opcode_num: 0xE7, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: isc, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "INX", opcode_num: 0xE8, addr_mode: AddressingMode::Implied, addr_func: implied, func: inx, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SBC", opcode_num: 0xE9, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: sbc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0xEA, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "USBC", opcode_num: 0xEB, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: sbc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "CPX", opcode_num: 0xEC, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: cpx, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SBC", opcode_num: 0xED, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sbc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "INC", opcode_num: 0xEE, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: inc, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ISC", opcode_num: 0xEF, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: isc, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "BEQ", opcode_num: 0xF0, addr_mode: AddressingMode::Relative, addr_func: relative, func: beq, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "SBC", opcode_num: 0xF1, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sbc, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
+    illegal_op!(0xF2), // JAM
+    Instruction{name: "ISC", opcode_num: 0xF3, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: isc, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0xF4, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "SBC", opcode_num: 0xF5, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sbc, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "INC", opcode_num: 0xF6, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: inc, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ISC", opcode_num: 0xF7, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: isc, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "SED", opcode_num: 0xF8, addr_mode: AddressingMode::Implied, addr_func: implied, func: sed, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "SBC", opcode_num: 0xF9, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: sbc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "NOP", opcode_num: 0xFA, addr_mode: AddressingMode::Implied, addr_func: implied, func: nop, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ISC", opcode_num: 0xFB, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: isc, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "NOP", opcode_num: 0xFC, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
+    Instruction{name: "SBC", opcode_num: 0xFD, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: sbc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
+    Instruction{name: "INC", opcode_num: 0xFE, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: inc, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ISC", opcode_num: 0xFF, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: isc, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
 ];
 
 #[derive(Clone, Copy)]
@@ -344,6 +328,8 @@ pub struct Instruction {
     pub func: fn(cpu: &mut CPU, opcode_data: OpcodeData) -> usize,
     pub base_clocks: usize,
     pub bytes: usize,
+    pub has_extra_fetch_cycles: bool,
+    pub is_illegal: bool,
 }
 
 
@@ -381,8 +367,6 @@ fn absolute_x(cpu: &CPU) -> (OpcodeData, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
     let effective_address = abs_address.wrapping_add(cpu.get_x_reg() as u16);
     let data = cpu.read(effective_address);
-
-    println!("ABS: 0x{:04X}, EFF: 0x{:04X}, X: {}", abs_address, effective_address, cpu.get_x_reg());
 
     let page_boundary_crossed: bool = (abs_address & 0xFF00) != (effective_address & 0xFF00);
 
@@ -1051,6 +1035,8 @@ fn rts(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // SBC - Subtract with Carry
+//  Note: instr 0xEB (illegal opcode) executes the same as 0xE9, which is legal.
+//        0xEB is differentiated in the table only by the name "USBC" for "Undocumented SBC"
 fn sbc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
     // Add with carry: A + M + C
@@ -1140,5 +1126,208 @@ fn tya(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 
-// INVALID OPCODE - An unimplemented opcode not recognized by the CPU
+
+/// ======== ILLEGAL OPCODES ========
+
+// INVALID OPCODE - An unimplemented opcode not recognized by the CPU.
+//                  Placeholder for all unimplemented illegal opcodes.
 fn xxx(_: &mut CPU, _: OpcodeData) -> usize { 0 }
+
+
+// LAX - Load Accumulator and X Register
+fn lax(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    let data = opcode_data.data.unwrap();
+
+    cpu.set_zero_flag(if data == 0 { 1 } else { 0 });
+    cpu.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+    cpu.set_acc(data);
+    cpu.set_x_reg(data);
+    0
+}
+
+// SAX - Store Accumulator & X Register (bitwise acc & x)
+fn sax(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    let address = opcode_data.address.unwrap();
+    
+    let result = cpu.get_acc() & cpu.get_x_reg();
+    cpu.write(address, result);
+
+    0
+}
+
+// DCP - Decrement Memory and Compare with Accumulator
+fn dcp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    dec(cpu, opcode_data);
+
+    let new_op_data = OpcodeData{
+        address: opcode_data.address,
+        data: Some(opcode_data.data.unwrap().wrapping_sub(1)),
+        offset: opcode_data.offset,
+    };
+    
+    cmp(cpu, new_op_data);
+
+    0
+}
+
+// ISC - Increment Memory and Subtract with Carry
+fn isc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    inc(cpu, opcode_data);
+
+    let new_op_data = OpcodeData{
+        address: opcode_data.address,
+        data: Some(opcode_data.data.unwrap().wrapping_add(1)),
+        offset: opcode_data.offset,
+    };
+    
+    sbc(cpu, new_op_data);
+
+    0
+}
+
+// SLO - Arithmetic Shift Left then Logical Inclusive OR
+fn slo(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    asl(cpu, opcode_data);
+
+    let new_op_data = OpcodeData{
+        address: opcode_data.address,
+        data: Some(opcode_data.data.unwrap() << 1),
+        offset: opcode_data.offset,
+    };
+    
+    ora(cpu, new_op_data);
+
+    0
+}
+
+// RLA - Rotate Left then Logical AND with Accumulator
+fn rla(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    let data = opcode_data.data.unwrap();
+    let address = opcode_data.address.unwrap();
+
+    // Doing the ROL here because result will be used here anyways
+    // avoids computing result twice, plus there is no accumulator version
+    // so there's no need to worry abt that
+    let result = (data << 1) | cpu.get_carry_flag();
+    cpu.set_carry_flag(data >> 7); // old bit 7 becomes new carry
+    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
+    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.write(address, result);
+
+    let new_op_data = OpcodeData{
+        address: opcode_data.address,
+        data: Some(result),
+        offset: opcode_data.offset,
+    };
+    
+    and(cpu, new_op_data);
+
+    0
+}
+
+// SRE - Logical Shift Right then "Exclusive OR" Memory with Accumulator
+fn sre(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    lsr(cpu, opcode_data);
+
+    let new_op_data = OpcodeData{
+        address: opcode_data.address,
+        data: Some(opcode_data.data.unwrap() >> 1),
+        offset: opcode_data.offset,
+    };
+    
+    eor(cpu, new_op_data);
+
+    0
+}
+
+// RRA - Rotate Right and Add Memory to Accumulator
+fn rra(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    let data = opcode_data.data.unwrap(); 
+    let address = opcode_data.address.unwrap();
+
+    // Doing the ROR here because result will be used here anyways
+    // avoids computing result twice, plus there is no accumulator version
+    // so there's no need to worry abt that
+    let result = (cpu.get_carry_flag() << 7) | (data >> 1);
+    cpu.set_carry_flag(data & 0x01); // old bit 0 becomes new carry
+    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
+    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.write(address, result);
+
+    let new_op_data = OpcodeData{
+        address: opcode_data.address,
+        data: Some(result),
+        offset: opcode_data.offset,
+    };
+    
+    adc(cpu, new_op_data);
+
+    0
+}
+
+// ANC - Bitwise AND Memory with Accumulator then Move Negative Flag to Carry Flag
+fn anc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    and(cpu, opcode_data);
+
+    cpu.set_carry_flag(cpu.get_negative_flag());
+
+    0
+}
+
+// ALR - Bitwise AND Memory with Accumulator then Logical Shift Right
+fn asr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    let data = opcode_data.data.unwrap();
+
+    let result = (data & cpu.get_acc()) >> 1 | (cpu.get_carry_flag() << 7);
+    cpu.set_carry_flag(data & cpu.get_acc() & 0x01);
+    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
+    cpu.set_negative_flag(0);
+    cpu.set_acc(result);
+
+    0
+}
+
+// ARR - Bitwise AND Memory with Accumulator then Rotate Right
+fn arr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+    let data = opcode_data.data.unwrap();
+    
+    let result = (data & cpu.get_acc()) >> 1 | (cpu.get_carry_flag() << 7);
+    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
+    cpu.set_negative_flag(0);
+    cpu.set_acc(result);
+    
+    if cpu.get_decimal_flag() == 1 {
+        cpu.set_carry_flag(if result & 0x40 != 0 { 1 } else { 0 });
+        cpu.set_overflow_flag(if result & 0x40 != result & 0x20 { 1 } else { 0 });
+    } else {
+        cpu.set_carry_flag(if (result & 0xF0).wrapping_add(result & 0x10) > 0x50 { 1 } else { 0 });
+        cpu.set_overflow_flag(if result & 0x40 != data & 0x40 { 1 } else { 0 });
+    }
+
+    0
+}
+
+// Not sure exactly how to go about ignoring offsets of addressing modes yet...
+// // SHA Indirect Y - Store Accumulator Bitwise AND Index Register X Bitwise AND Memory
+// fn sha_ind_y(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+//     let address = opcode_data.address.unwrap().wrapping_sub(cpu.get_y_reg() as u16); // "ignore" / undo the y offset of the address
+//     let hi = (address >> 8) as u8;
+
+//     let result = cpu.get_y_reg() & hi.wrapping_add(1);
+
+//     cpu.write(address, result);
+
+//     0
+// }
+
+// // SHY - Store Index Register Y Bitwise AND Value
+// fn shy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+//     let address = opcode_data.address.unwrap().wrapping_sub(cpu.get_x_reg() as u16); // "ignore" / undo the x offset of the address
+//     let hi = (address >> 8) as u8;
+
+//     let result = cpu.get_y_reg() & hi.wrapping_add(1);
+
+//     cpu.write(address, result);
+
+//     0
+// }

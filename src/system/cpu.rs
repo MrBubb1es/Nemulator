@@ -72,7 +72,11 @@ impl CPU {
         self.current_instr = instr.clone();
         self.instr_data = opcode_data;
 
-        self.clocks += execute_cycles + fetch_cycles + instr.base_clocks;
+        self.clocks += execute_cycles + instr.base_clocks;
+
+        if instr.has_extra_fetch_cycles {
+            self.clocks += fetch_cycles;
+        }
     }
 
     // GETTER/SETTER FUNCTIONS
@@ -410,6 +414,10 @@ impl CPU {
             }
         };
         out_str.push_str(&temp);
+
+        if self.current_instr.is_illegal {
+            out_str.push_str(" <ILLEGAL>");
+        }
 
         out_str
     }

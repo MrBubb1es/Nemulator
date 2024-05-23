@@ -62,8 +62,6 @@ impl NES {
 mod tests {
     use std::fs::read_to_string;
 
-    use crate::run_debug;
-
     use super::NES;
 
     #[test]
@@ -91,6 +89,8 @@ mod tests {
 
     #[test]
     fn run_nes_test() {
+        // Big vector of the expected CPU states from start to finish of the nestest program.
+        // Stored as tuples of (PC, SP, ACC, X, Y, STATUS, CLOCKS)
         let mut expected_vals = Vec::new();
         
         for line in read_to_string("prg_tests/cpu_tests/expected_log.txt").unwrap().lines() {
@@ -119,12 +119,8 @@ mod tests {
         let mut test_nemulator = NES::new("prg_tests/nestest.nes");
         test_nemulator.cpu.set_pc(0xC000); // run tests automatically
 
-        let mut i = 0;
-        // I don't know how else to drive the cpu rn
-        while test_nemulator.cpu.clocks() < 100000 {
-            if test_nemulator.cpu.clocks() > 13000 {
-                // test_nemulator.get_cpu().print_state();
-            }
+        for i in 0..expected_vals.len() {
+            // test_nemulator.get_cpu().print_state();
 
             let (exp_pc, exp_sp, exp_acc, exp_x, exp_y, exp_flags, exp_clks) = expected_vals[i];
 
@@ -136,12 +132,8 @@ mod tests {
             assert_eq!(exp_flags, test_nemulator.get_cpu().get_flags());
             assert_eq!(exp_clks, test_nemulator.get_cpu().clocks());
 
-            i = i + 1;
-
             test_nemulator.cycle();
         }
-
-        // run_debug(&mut test_nemulator);
 
         assert_eq!(test_nemulator.bus.read(0x0002), 0);
         assert_eq!(test_nemulator.bus.read(0x0003), 0);

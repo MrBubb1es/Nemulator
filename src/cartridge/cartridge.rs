@@ -83,8 +83,6 @@ impl Cartridge {
             return Err(String::from("Cartridge file not NES 2.0 (or INES) format"));
         }
 
-        println!("{} {} {} {}", data[0], data[1], data[2], data[3]);
-
         // Identifier should be 'NES<EOF>'
         let mut format = CartFormat::Unknown;
         if data[..4] == NES_2V0_IDENT {

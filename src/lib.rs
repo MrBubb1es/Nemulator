@@ -18,6 +18,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 
 // use app::window::Window;
 
+#[cfg(debug_assertions)]
 pub fn run() {
     env_logger::init();
 
@@ -26,55 +27,13 @@ pub fn run() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    println!("Starting");
+    nes_app.nestest_init();
 
     event_loop.run_app(&mut nes_app).unwrap();
 }
 
-pub fn run_debug(nes: &mut NES) {
-    // let mut window = Window::new(true);
-    // let mut tick = 0;
-
-    // let mut zoom = false;
-
-    // 'running: loop {
-    //     for event in window.event_iter() {
-    //         match event {
-    //             Event::Quit { .. } => break 'running,
-
-    //             Event::KeyDown {
-    //                 keycode: Some(Keycode::Space),
-    //                 keymod: Mod::LSHIFTMOD,
-    //                 ..
-    //             } => {
-    //                 if !zoom {
-    //                     nes.cycle();
-    //                 }
-    //             }
-
-    //             Event::KeyDown {
-    //                 keycode: Some(Keycode::Space),
-    //                 ..
-    //             } => {
-    //                 zoom = !zoom;
-    //             }
-
-    //             _ => {}
-    //         }
-    //     }
-
-    //     if zoom {
-    //         nes.cycle();
-    //     }
-
-    //     // The rest of the game loop goes here...
-    //     // system::tick();
-    //     // bus.write(0, tick as u8);
-    //     window.draw(&nes);
-
-    //     tick += 1;
-
-    //     std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
-    // }
+#[cfg(not(debug_assertions))]
+pub fn run(nes: &mut NES) {
+    
 }
 

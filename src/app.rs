@@ -1,14 +1,15 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
-use wgpu_text::{glyph_brush::{ab_glyph::FontRef, Extra, Section as TextSection, Text}, BrushBuilder, TextBrush};
+use wgpu_text::{glyph_brush::{ab_glyph::FontRef, Color, OwnedSection, OwnedText, Section as TextSection, Text}, BrushBuilder, TextBrush};
 
-use winit::application::ApplicationHandler;
+use winit::{application::ApplicationHandler, dpi::PhysicalSize};
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 use crate::system::nes::NES;
 
+// #[derive(Debug)]
 pub struct State {
     instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
@@ -18,7 +19,10 @@ pub struct State {
     size: winit::dpi::PhysicalSize<u32>,
 
     brush: TextBrush<FontRef<'static>>,
-    section: wgpu_text::glyph_brush::Section<'static>,
+    font_size: f32,
+    zpage_sec: OwnedSection,
+    cpu_sec: OwnedSection,
+    instr_sec: OwnedSection,
 }
 
 impl State {
@@ -79,6 +83,8 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
+        surface.configure(&device, &config); // Fuck you, God; You asshole.
+
         let font = include_bytes!("fonts/FiraCode-VariableFont_wght.ttf");
 
         let brush = BrushBuilder::using_font_bytes(font).unwrap()
@@ -86,7 +92,12 @@ impl State {
             .build(&device, config.width, config.height, config.format);
 
         // Directly implemented from glyph_brush.
-        let section = TextSection::default().add_text(Text::new("Hello World"));
+        let zpage_sec = OwnedSection::default()
+            .with_screen_position((10.0, 10.0));
+        let cpu_sec = OwnedSection::default()
+            .with_screen_position((10.0, config.height as f32 * 0.65));
+        let instr_sec = OwnedSection::default()
+            .with_screen_position((config.width as f32 * 0.3, config.height as f32 * 0.65));
 
         Self {
             instance,
@@ -95,8 +106,12 @@ impl State {
             queue,
             config,
             size,
+
+            font_size: 40.0,
             brush,
-            section,
+            zpage_sec,
+            cpu_sec,
+            instr_sec,
         }
     }
 
@@ -115,23 +130,77 @@ impl State {
         false
     }
 
-    fn update(&mut self) {
-        //todo!()
+    fn update(&mut self, nes: &NES) {
+        let zpage_str = nes.zpage_str();
+        self.zpage_sec.text.clear();
+        self.zpage_sec.text.push(OwnedText::new(zpage_str)
+            .with_scale(self.font_size));
+
+        let mut cpu_str = String::with_capacity(200);
+        cpu_str.push_str(&format!("     X: {:#06X}\n", nes.get_cpu().unwrap().get_x_reg()));
+        cpu_str.push_str(&format!("     Y: {:#06X}\n", nes.get_cpu().unwrap().get_y_reg()));
+        cpu_str.push_str(&format!("   ACC: {:#06X}\n", nes.get_cpu().unwrap().get_acc()));
+        cpu_str.push_str(&format!("    SP: {:#06X}\n", nes.get_cpu().unwrap().get_sp()));
+        cpu_str.push_str(&format!("    PC: {:#06X}\n", nes.get_cpu().unwrap().get_pc()));
+
+        const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+        const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+
+        self.cpu_sec.text.clear();
+        self.cpu_sec.text.push(OwnedText::new("CPU Info:\n")
+            .with_scale(self.font_size+5.0));
+        self.cpu_sec.text.push(OwnedText::new(cpu_str)
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new(" Flags: ")
+            .with_scale(self.font_size+5.0));
+        
+        self.cpu_sec.text.push(OwnedText::new("N")
+            .with_color(if nes.get_cpu().unwrap().get_negative_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new("V")
+            .with_color(if nes.get_cpu().unwrap().get_overflow_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new("U")
+            .with_color(if nes.get_cpu().unwrap().get_unused_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new("B")
+            .with_color(if nes.get_cpu().unwrap().get_b_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new("D")
+            .with_color(if nes.get_cpu().unwrap().get_decimal_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new("I")
+            .with_color(if nes.get_cpu().unwrap().get_interrupt_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new("Z")
+            .with_color(if nes.get_cpu().unwrap().get_zero_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+        self.cpu_sec.text.push(OwnedText::new("C")
+            .with_color(if nes.get_cpu().unwrap().get_carry_flag() == 1 { GREEN } else { RED })
+            .with_scale(self.font_size));
+
+
+        let instr_str = nes.get_cpu().unwrap().current_instr_str();
+        let clks_str = format!("\n\nClocks: {}", nes.get_clks());
+
+        self.instr_sec.text.clear();
+        self.instr_sec.text.push(OwnedText::new("Last Instr:\n")
+            .with_scale(self.font_size+5.0));   
+        self.instr_sec.text.push(OwnedText::new(instr_str)
+            .with_scale(self.font_size));
+        self. instr_sec.text.push(OwnedText::new(clks_str)
+            .with_scale(self.font_size));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        println!("Here0");
         let output = self.surface.get_current_texture()?;
-        println!("Here1");
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        println!("Here2");
         let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("NES Render Encoder"),
         });
-        println!("Here3");
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("NES Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -150,32 +219,19 @@ impl State {
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
+
+            self.brush.draw(&mut render_pass);
         }
 
-        println!("Here4");
+        // Crashes if inner cache exceeds limits.
+        self.brush.queue(&self.device, &self.queue, vec![&self.zpage_sec, &self.cpu_sec, &self.instr_sec]).unwrap();
 
         // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));
-
-        println!("Here5");
-
         output.present();
-
-        println!("Here6");
 
         Ok(())
     }
-    
-        // Crashes if inner cache exceeds limits.
-    //     self.brush.queue(&self.device, &self.queue, vec![&self.section]).unwrap();
-
-    //     {
-    //         self.brush.draw(&mut rpass);
-    //     }
-
-    //     queue.submit([encoder.finish()]);
-    //     frame.present();
-    // }
 }
 
 #[derive(Default)]
@@ -189,14 +245,12 @@ pub struct NesApp {
 impl<'a> ApplicationHandler for NesApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window_attributes = Window::default_attributes()
-            .with_title("NEmulator");
+            .with_title("NEmulator")
+            .with_inner_size(PhysicalSize::new(1920, 1080));
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
         let state = pollster::block_on(State::new(Arc::clone(&window)));
 
         window.request_redraw();
-
-        println!("Anything abt window: {}", window.has_focus());
-        println!("Anything abt state: {}", state.config.height);
 
         self.window = Some(window);
         self.state = Some(state);
@@ -215,10 +269,9 @@ impl<'a> ApplicationHandler for NesApp {
                 },
                 WindowEvent::RedrawRequested => {
                     // Draw.
-                    state.update();
-                    println!("Updated Ok");
+                    state.update(&self.nes);
                     match state.render() {
-                        Ok(_) => { println!("Rendered Ok"); }
+                        Ok(_) => {}
                         // Reconfigure the surface if lost
                         Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
                         // The system is out of memory, we should probably quit
@@ -236,5 +289,18 @@ impl<'a> ApplicationHandler for NesApp {
                 _ => (),
             }
         }
+
+        self.nes.cycle();
+    }
+}
+
+impl NesApp {
+    pub fn load_cart(&mut self, cart_path_str: &str) {
+        self.nes.load_cart(cart_path_str);
+    }
+
+    pub fn nestest_init(&mut self) {
+        self.nes.load_cart("prg_tests/nestest.nes");
+        self.nes.set_cpu_state(Some(0xC000), None, None, None, None, None, None);
     }
 }

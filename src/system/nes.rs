@@ -133,6 +133,29 @@ impl NES {
             self.cpu.as_mut().unwrap().cycle();
         }
     }
+
+    /// Create a zpage string for the debug view given the bus
+    pub fn zpage_str(&self) -> String {
+        if let Some(bus) = &self.bus {
+            let mut mem_str: String = String::from("");
+    
+            for i in 0..16 {
+                let prefix = format!("{:#06X}:", i*16);
+                mem_str.push_str(&prefix);
+                for j in 0..16 {
+                    let mem_val = bus.read(i * 16 + j);
+                    let val_str = format!("  {mem_val:02X}");
+                    mem_str.push_str(&val_str);
+                }
+                let suffix = "\n";
+                mem_str.push_str(&suffix);
+            }
+    
+            mem_str
+        } else {
+            String::new()
+        }
+    }
 }
 
 #[cfg(test)]

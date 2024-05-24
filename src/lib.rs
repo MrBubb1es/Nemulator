@@ -1,20 +1,8 @@
 pub mod cartridge;
-// pub mod app;
 pub mod system;
 pub mod app;
 
-// use sdl2::{
-//     event::Event,
-//     keyboard::{Keycode, Mod},
-//     sys::KeyCode,
-// };
-use std::time::Duration;
-use system::{
-    bus::Bus,
-    cpu::CPU,
-    nes::{self, NES},
-};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ControlFlow, EventLoop};
 
 // use app::window::Window;
 

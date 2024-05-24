@@ -439,21 +439,20 @@ impl CPU {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::io::Read;
+    // use std::fs;
+    // use std::io::Read;
 
-    use super::Bus;
-    use super::CPU;
+    // use super::CPU;
 
-    fn load_raw_mem_to_cpu(cpu: &CPU, path_str: &str) {
-        let mut mem_file = fs::File::open(path_str).unwrap();
-        let mut data: Vec<u8> = Vec::new();
-        mem_file.read_to_end(&mut data).unwrap();
+    // fn load_raw_mem_to_cpu(cpu: &CPU, path_str: &str) {
+    //     let mut mem_file = fs::File::open(path_str).unwrap();
+    //     let mut data: Vec<u8> = Vec::new();
+    //     mem_file.read_to_end(&mut data).unwrap();
 
-        data.into_iter()
-            .enumerate()
-            .for_each(|(addr, byte)| cpu.write(addr as u16, byte));
-    }
+    //     data.into_iter()
+    //         .enumerate()
+    //         .for_each(|(addr, byte)| cpu.write(addr as u16, byte));
+    // }
 
     #[test]
     // Test program that multiplies 3 and 10 and stores the result in Accumulator

@@ -58,14 +58,14 @@ pub struct Header {
 
 /// Representation of a standard NES Cartridge.
 pub struct Cartridge {
-    format: CartFormat,
+    _format: CartFormat,
 
-    header: Header,
+    _header: Header,
 
     // trainer_area: Option<[u8; 512]>,
     prg_rom: Memory,
     chr_rom: Memory,
-    misc_rom: Memory,
+    _misc_rom: Memory,
     mapper: Box<dyn Mapper>,
 }
 
@@ -84,7 +84,7 @@ impl Cartridge {
         }
 
         // Identifier should be 'NES<EOF>'
-        let mut format = CartFormat::Unknown;
+        let mut format: CartFormat;
         if data[..4] == NES_2V0_IDENT {
             format = CartFormat::INES;
             // Identifier flags are NES 2.0
@@ -173,12 +173,12 @@ impl Cartridge {
         println!("Misc ROM Size: {}", misc_rom_vec.len());
 
         Ok(Cartridge {
-            format: format,
-            header: header,
+            _format: format,
+            _header: header,
             // trainer_area: None,
             prg_rom: Memory::from_vec(prg_rom_vec),
             chr_rom: Memory::from_vec(chr_rom_vec),
-            misc_rom: Memory::from_vec(misc_rom_vec),
+            _misc_rom: Memory::from_vec(misc_rom_vec),
             mapper: mapper,
         })
     }
@@ -212,11 +212,11 @@ impl Cartridge {
         }
     }
 
-    pub fn ppu_read(&self, address: u16) -> u8 {
+    pub fn ppu_read(&self, _address: u16) -> u8 {
         0
     }
 
-    pub fn ppu_write(&self, address: u16, data: u8) {
+    pub fn ppu_write(&self, _address: u16, _data: u8) {
 
     }
 

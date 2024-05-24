@@ -1,8 +1,8 @@
-use std::{any::Any, sync::Arc};
+use std::sync::Arc;
 
-use wgpu_text::{glyph_brush::{ab_glyph::FontRef, Color, OwnedSection, OwnedText, Section as TextSection, Text}, BrushBuilder, TextBrush};
+use wgpu_text::{glyph_brush::{ab_glyph::FontRef, OwnedSection, OwnedText}, BrushBuilder, TextBrush};
 
-use winit::{application::ApplicationHandler, dpi::PhysicalSize};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::ElementState, keyboard::{Key, ModifiersState}, platform::modifier_supplement::KeyEventExtModifierSupplement};
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
@@ -11,7 +11,7 @@ use crate::system::nes::NES;
 
 // #[derive(Debug)]
 pub struct State {
-    instance: wgpu::Instance,
+    _instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -100,7 +100,7 @@ impl State {
             .with_screen_position((config.width as f32 * 0.3, config.height as f32 * 0.65));
 
         Self {
-            instance,
+            _instance: instance,
             surface,
             device,
             queue,
@@ -126,7 +126,7 @@ impl State {
         }
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool {
+    fn input(&mut self, _event: &WindowEvent) -> bool {
         false
     }
 
@@ -238,8 +238,10 @@ impl State {
 pub struct NesApp {
     window: Option<Arc<Window>>,
     state: Option<State>,
+    modifiers: Option<ModifiersState>,
 
     nes: NES,
+    paused: bool,
 }
 
 impl<'a> ApplicationHandler for NesApp {
@@ -254,9 +256,11 @@ impl<'a> ApplicationHandler for NesApp {
 
         self.window = Some(window);
         self.state = Some(state);
+
+        self.paused = true;
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
         if let Some(state) = self.state.as_mut() {
             if state.input(&event) {
                 return; // State handled event
@@ -266,6 +270,23 @@ impl<'a> ApplicationHandler for NesApp {
                 WindowEvent::CloseRequested => {
                     println!("The close button was pressed; stopping");
                     event_loop.exit();
+                },
+                WindowEvent::ModifiersChanged(new) => {
+                    self.modifiers = Some(new.state());
+                },
+                WindowEvent::KeyboardInput { event, .. } => {
+                    if event.state == ElementState::Pressed && !event.repeat {
+                        match event.key_without_modifiers().as_ref() {
+                            Key::Named(winit::keyboard::NamedKey::Space) => { 
+                                if self.modifiers.unwrap().shift_key() && self.paused {
+                                    self.nes.cycle();
+                                } else {
+                                    self.paused = !self.paused; 
+                                }
+                            },
+                            _ => (),
+                        }
+                    }
                 },
                 WindowEvent::RedrawRequested => {
                     // Draw.
@@ -290,7 +311,9 @@ impl<'a> ApplicationHandler for NesApp {
             }
         }
 
-        self.nes.cycle();
+        if !self.paused {
+            self.nes.cycle();
+        }
     }
 }
 

@@ -2,8 +2,6 @@ use std::rc::Rc;
 
 use crate::cartridge::cartridge;
 use super::mem::Memory;
-use super::ppu::PPU;
-
 
 /// Main bus struct connecting CPU, main memory, the cartridge, the PPU
 pub struct Bus {

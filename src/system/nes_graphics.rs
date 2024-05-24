@@ -1,5 +1,5 @@
 pub const DEFAULT_PALETTE: NESPalette = NESPalette{ 
-    colors: [
+    _colors: [
         NESColor{r: 124, g: 124, b: 124},
         NESColor{r: 0, g: 0, b: 252},
         NESColor{r: 0, g: 0, b: 188},
@@ -75,11 +75,11 @@ pub struct NESColor {
 }
 
 pub struct NESPalette {
-    colors: [NESColor; 64],
+    _colors: [NESColor; 64],
 }
 
 impl NESPalette {
-    pub fn read(&self, address: u16) -> NESColor {
+    pub fn _read(&self, address: u16) -> NESColor {
         // $3F00 	Universal background color
         // $3F01-$3F03 	Background palette 0
         // $3F04 	Normally unused color 1
@@ -97,6 +97,6 @@ impl NESPalette {
         // $3F1C 	Mirror of unused color 3
         // $3F1D-$3F1F 	Sprite palette 3
 
-        self.colors[address as usize & 0x1F]
+        self._colors[address as usize & 0x1F]
     }
 }

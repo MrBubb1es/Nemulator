@@ -67,6 +67,6 @@ impl Mapper for Mapper0 {
     }
 }
 
-pub fn get_mapper(mapper_id: u16) -> impl Mapper {
+pub fn get_mapper(_mapper_id: u16) -> impl Mapper {
     Mapper0
 }

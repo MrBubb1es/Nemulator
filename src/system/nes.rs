@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn test_nes_build() {
-        let mut test_nemulator = NES::with_cart("prg_tests/cpu_tests/my_file.bin");
+        let test_nemulator = NES::with_cart("prg_tests/cpu_tests/my_file.bin");
 
         let (prg_size, chr_size) = test_nemulator.cart.unwrap().get_rom_sizes();
 

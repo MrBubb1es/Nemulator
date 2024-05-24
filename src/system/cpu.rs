@@ -86,6 +86,11 @@ impl CPU {
         self.clocks
     }
 
+    /// Manually set the number of clock cycles since turn-on
+    pub fn set_clocks(&mut self, clks: usize) {
+        self.clocks = clks;
+    }
+
     /// Get the carry flag as a 0 or 1 value
     pub fn get_carry_flag(&self) -> u8 {
         self.flags & 0x01

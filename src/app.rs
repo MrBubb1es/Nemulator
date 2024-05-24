@@ -9,7 +9,7 @@ use winit::window::{Window, WindowId};
 
 use crate::system::nes::NES;
 
-// #[derive(Debug)]
+#[cfg(feature = "debug")]
 pub struct State {
     _instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
@@ -18,11 +18,21 @@ pub struct State {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
 
-    brush: TextBrush<FontRef<'static>>,
+    brush: TextBrush<FontRef<'static>>, 
     font_size: f32,
     zpage_sec: OwnedSection,
     cpu_sec: OwnedSection,
     instr_sec: OwnedSection,
+}
+
+#[cfg(not(feature = "debug"))]
+pub struct State {
+    _instance: wgpu::Instance,
+    surface: wgpu::Surface<'static>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    size: winit::dpi::PhysicalSize<u32>,
 }
 
 impl State {
@@ -83,35 +93,49 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        surface.configure(&device, &config); // Fuck you, God; You asshole.
+        surface.configure(&device, &config);
 
-        let font = include_bytes!("fonts/FiraCode-VariableFont_wght.ttf");
+        #[cfg(feature = "debug")]
+        {
+            let font = include_bytes!("fonts/FiraCode-VariableFont_wght.ttf");
 
-        let brush = BrushBuilder::using_font_bytes(font).unwrap()
-        /* .initial_cache_size((16_384, 16_384))) */ // use this to avoid resizing cache texture
-            .build(&device, config.width, config.height, config.format);
+            let brush = BrushBuilder::using_font_bytes(font).unwrap()
+            /* .initial_cache_size((16_384, 16_384))) */ // use this to avoid resizing cache texture
+                .build(&device, config.width, config.height, config.format);
 
-        // Directly implemented from glyph_brush.
-        let zpage_sec = OwnedSection::default()
-            .with_screen_position((10.0, 10.0));
-        let cpu_sec = OwnedSection::default()
-            .with_screen_position((10.0, config.height as f32 * 0.65));
-        let instr_sec = OwnedSection::default()
-            .with_screen_position((config.width as f32 * 0.3, config.height as f32 * 0.65));
-
-        Self {
-            _instance: instance,
-            surface,
-            device,
-            queue,
-            config,
-            size,
-
-            font_size: 40.0,
-            brush,
-            zpage_sec,
-            cpu_sec,
-            instr_sec,
+            // Directly implemented from glyph_brush.
+            let zpage_sec = OwnedSection::default()
+                .with_screen_position((10.0, 10.0));
+            let cpu_sec = OwnedSection::default()
+                .with_screen_position((10.0, config.height as f32 * 0.65));
+            let instr_sec = OwnedSection::default()
+                .with_screen_position((config.width as f32 * 0.3, config.height as f32 * 0.65));
+        
+            Self {
+                _instance: instance,
+                surface,
+                device,
+                queue,
+                config,
+                size,
+    
+                font_size: 40.0,
+                brush,
+                zpage_sec,
+                cpu_sec,
+                instr_sec,
+            }
+        }
+        #[cfg(not(feature = "debug"))]
+        {
+            Self {
+                _instance: instance,
+                surface,
+                device,
+                queue,
+                config,
+                size,
+            }
         }
     }
 
@@ -122,6 +146,7 @@ impl State {
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
 
+            #[cfg(feature = "debug")]
             self.brush.resize_view(self.config.width as f32, self.config.height as f32, &self.queue);
         }
     }
@@ -130,6 +155,7 @@ impl State {
         false
     }
 
+    #[cfg(feature = "debug")]
     fn update(&mut self, nes: &NES) {
         let zpage_str = nes.zpage_str();
         self.zpage_sec.text.clear();
@@ -192,6 +218,11 @@ impl State {
             .with_scale(self.font_size));
     }
 
+    #[cfg(not(feature = "debug"))]
+    fn update(&mut self, nes: &NES) {
+        
+    }
+
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -220,10 +251,12 @@ impl State {
                 timestamp_writes: None,
             });
 
+            #[cfg(feature = "debug")]
             self.brush.draw(&mut render_pass);
         }
 
         // Crashes if inner cache exceeds limits.
+        #[cfg(feature = "debug")]
         self.brush.queue(&self.device, &self.queue, vec![&self.zpage_sec, &self.cpu_sec, &self.instr_sec]).unwrap();
 
         // submit will accept anything that implements IntoIter
@@ -278,7 +311,7 @@ impl<'a> ApplicationHandler for NesApp {
                     if event.state == ElementState::Pressed && !event.repeat {
                         match event.key_without_modifiers().as_ref() {
                             Key::Named(winit::keyboard::NamedKey::Space) => { 
-                                if self.modifiers.unwrap().shift_key() && self.paused {
+                                if self.modifiers.is_some() && self.modifiers.unwrap().shift_key() && self.paused {
                                     self.nes.cycle();
                                 } else {
                                     self.paused = !self.paused; 

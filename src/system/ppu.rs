@@ -196,7 +196,7 @@ impl PpuRegisters {
 pub struct PPU {
     // To keep track of scanline rendering
     dot: usize,
-    scanline: isize,
+    scanline: usize,
 
     // Registers
     vram: Memory,
@@ -298,12 +298,11 @@ impl PPU {
         }
 
         if self.scanline > SCANLINES {
-            self.scanlines = -1;
             self.vblank_begin();
         }
     }
 
-    fn vblank_begin() {
+    fn vblank_begin(&mut self) {
         // TODO: write code here
     }
 
@@ -329,7 +328,7 @@ impl PPU {
                     .write((sprites_found * 4) as u16, y_coord);
 
                 // Check if y coordinate is within range of this scanline.
-                let y_diff = self.scanline - y_coord as isize;
+                let y_diff = self.scanline as isize - y_coord as isize;
                 if y_diff >= 0 && y_diff < 8 {
                     // TODO: Ensure this works for 8-pixel and 16-pixel.
                     sprites_found += 1;
@@ -357,5 +356,37 @@ impl PPU {
 
         // Part 4: cycles 321-340
         //   ¯\_(ツ)_/¯
+    }
+
+    /// Renders a single scanline. Returns the rendered line as a vector of bytes corresponding to
+    /// NES palette color codes (see https://www.nesdev.org/wiki/PPU_palettes for details), each
+    /// byte corresponding to a single pixel to be rendered.
+    fn render_scanline(&mut self) -> Vec<u8> {
+        let mut rendered_line: Vec<u8> = Vec::new();
+        for v in 0..33 {
+            // Fetch the nametable and attribute table entry for the next background sprite.
+            let nt_entry = self.read((0x2000 + v + (self.scanline / 8) * 32) as u16);
+            let at_entry = self.read(((0x23C0 + (v & 0xFC)) >> (2 * (v & 3))) as u16); // Trust, bro.
+
+            // Use nametable entry to fetch background sprite data.
+            let pt_address = nt_entry as u16 * 16 + (self.scanline as u16) & 7;
+            let pt_entry_lo = self.read(pt_address);
+            let pt_entry_hi = self.read(pt_address + 8);
+
+            // TODO: Sprite evaluation. For now we just render the background.
+            for i in 0..8 {
+                let palette_lookup = at_entry << 2
+                    | ((pt_entry_hi >> (7 - i)) & 1) << 1
+                    | (pt_entry_lo >> (7 - i)) & 1;
+                if palette_lookup & 0x11 == 0 {
+                    rendered_line.push(self.read(0x3F00)); // transparent pixel, render bg color
+                } else {
+                    rendered_line.push(self.read(0x3F00 | palette_lookup as u16));
+                    // get bg sprite color
+                }
+            }
+        }
+
+        rendered_line
     }
 }

@@ -2,7 +2,6 @@ pub mod cartridge;
 pub mod system;
 pub mod app;
 
-use system::nes;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 // use app::window::Window;

@@ -91,7 +91,7 @@ impl NES {
             cpu.set_x_reg(x.unwrap_or(cpu.get_x_reg()));
             cpu.set_y_reg(y.unwrap_or(cpu.get_y_reg()));
             cpu.set_status(status.unwrap_or(cpu.get_status()));
-            cpu.set_clocks(clocks.unwrap_or(cpu.clocks()));
+            cpu.set_total_clocks(clocks.unwrap_or(cpu.total_clocks()));
         }
     }
 
@@ -103,16 +103,19 @@ impl NES {
     /// Get the number of CPU cLocks
     pub fn get_clks(&self) -> usize {
         if let Some(cpu) = self.cpu.borrow() {
-            cpu.clocks()
+            cpu.total_clocks()
         } else {
             0
         }
     }
 
-    /// Cycle the CPU if cart is loaded
-    pub fn cycle(&mut self) {
+    /// Cycle the CPU if cart is loaded. Returns a bool reporting whether a new
+    /// instruction was executed by the CPU.
+    pub fn cycle(&mut self) -> bool {
         if self.cart_loaded {
-            self.cpu.as_mut().unwrap().cycle();
+            self.cpu.as_mut().unwrap().cycle()
+        } else {
+            false
         }
     }
 
@@ -212,7 +215,7 @@ mod tests {
         test_nemulator.set_cpu_state(Some(0xC000), None, None, None, None, None, None); // run tests automatically
 
         for i in 0..expected_vals.len() {
-            test_nemulator.cpu.as_ref().unwrap().print_state();
+            // test_nemulator.cpu.as_ref().unwrap().print_state();
 
             let (exp_pc, exp_sp, exp_acc, exp_x, exp_y, exp_flags, exp_clks) = expected_vals[i];
 
@@ -222,9 +225,9 @@ mod tests {
             assert_eq!(exp_x, test_nemulator.get_cpu().unwrap().get_x_reg());
             assert_eq!(exp_y, test_nemulator.get_cpu().unwrap().get_y_reg());
             assert_eq!(exp_flags, test_nemulator.get_cpu().unwrap().get_status());
-            assert_eq!(exp_clks, test_nemulator.get_cpu().unwrap().clocks());
+            assert_eq!(exp_clks, test_nemulator.get_cpu().unwrap().total_clocks());
 
-            test_nemulator.cycle();
+            while !test_nemulator.cycle() {}
         }
 
         assert_eq!(test_nemulator.get_cpu().unwrap().read(0x0002), 0);

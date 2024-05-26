@@ -1,5 +1,6 @@
+use bitfield_struct::bitfield;
 use winit::event::{ElementState, KeyEvent, Modifiers, WindowEvent};
-use winit::keyboard::{Key, ModifiersKeyState, ModifiersState, NamedKey};
+use winit::keyboard::{Key, KeyCode, ModifiersKeyState, ModifiersState, NamedKey, PhysicalKey, SmolStr};
 use winit::{application::ApplicationHandler, window::WindowId};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
@@ -13,13 +14,36 @@ use crate::system::nes::NES;
 use super::draw;
 
 #[derive(Default)]
+pub enum ViewMode {
+    #[default]
+    NORMAL,
+    DEBUG,
+}
+
+#[bitfield(u8)]
+pub struct ControllerState {
+    pub up: bool,
+    pub down: bool,
+    pub left: bool,
+    pub right: bool,
+    pub start: bool,
+    pub select: bool,
+    pub a: bool,
+    pub b: bool,
+}
+
+#[derive(Default)]
 pub struct NesApp {
     window: Option<Window>,
     pixel_buf: Option<Pixels>,
     modifiers: Option<Modifiers>,
 
+    player1_controller: Option<ControllerState>,
+    player2_controller: Option<ControllerState>,
+
     nes: NES,
     paused: bool,
+    view_mode: ViewMode,
 }
 
 impl ApplicationHandler for NesApp {
@@ -31,15 +55,7 @@ impl ApplicationHandler for NesApp {
         let size = window.inner_size();
 
         self.window = Some(window);
-
-        let pixel_surface = SurfaceTexture::new(size.width, size.height, self.window.as_ref().unwrap());
-
-        self.pixel_buf = Some(Pixels::new(
-            draw::DEBUG_FRAME_WIDTH as u32, 
-            draw::DEBUG_FRAME_HEIGHT as u32, 
-            pixel_surface)
-            .unwrap());
-
+        
         let bg_col = draw::DEFAULT_DEBUG_PAL.bg_col;
         let wgpu_bg_col = pixels::wgpu::Color{
             r: (bg_col.r as f64) / 255.0, 
@@ -48,14 +64,37 @@ impl ApplicationHandler for NesApp {
             a: 1.0
         };
 
-        dbg!(bg_col);
-        dbg!(wgpu_bg_col);
+        let pixel_surface = SurfaceTexture::new(size.width, size.height, self.window.as_ref().unwrap());
 
-        self.pixel_buf.as_mut().unwrap().clear_color(wgpu_bg_col);
+        match self.view_mode {
+            ViewMode::DEBUG => {
+                self.pixel_buf = Some(Pixels::new(
+                    draw::DEBUG_FRAME_WIDTH as u32, 
+                    draw::DEBUG_FRAME_HEIGHT as u32, 
+                    pixel_surface)
+                    .unwrap());
+        
+                self.pixel_buf.as_mut().unwrap().clear_color(wgpu_bg_col);
 
-        draw::draw_debug_bg(self.pixel_buf.as_mut().unwrap().frame_mut(), DEFAULT_DEBUG_PAL, &self.nes);
+                draw::draw_debug_bg(self.pixel_buf.as_mut().unwrap().frame_mut(), DEFAULT_DEBUG_PAL, &self.nes);
+            },
+            ViewMode::NORMAL => {
+                self.pixel_buf = Some(Pixels::new(
+                    draw::GAME_FRAME_WIDTH as u32, 
+                    draw::GAME_FRAME_HEIGHT as u32, 
+                    pixel_surface)
+                    .unwrap());
+                
+                self.pixel_buf.as_mut().unwrap().clear_color(wgpu_bg_col);
+
+                draw::draw_game_view_bg(self.pixel_buf.as_mut().unwrap().frame_mut(), DEFAULT_DEBUG_PAL);
+            },
+        }
 
         self.window.as_ref().unwrap().request_redraw();
+
+        self.player1_controller = Some(ControllerState::default());
+        self.player2_controller = Some(ControllerState::default());
 
         self.modifiers = Some(Modifiers::default());
         self.paused = true;
@@ -81,6 +120,7 @@ impl ApplicationHandler for NesApp {
                 },
                 ..
             } => {
+                // if !self.nes.handle_input()
                 if self.modifiers.unwrap().state().shift_key() {
                     if self.paused {
                         self.nes.cycle();
@@ -91,11 +131,30 @@ impl ApplicationHandler for NesApp {
                     self.paused = !self.paused;
                 }
             },
+            WindowEvent::KeyboardInput {
+                event: KeyEvent {
+                    physical_key: PhysicalKey::Code(KeyCode::KeyV),
+                    state: ElementState::Pressed,
+                    repeat: false,
+                    ..
+                },
+                ..
+            } => {
+                self.switch_view_mode();
+            },
             WindowEvent::RedrawRequested => {
                 // Draw.
                 if let Some(buf) = self.pixel_buf.as_mut() {
                     let frame = buf.frame_mut();
-                    draw::draw_debug(frame, draw::DEFAULT_DEBUG_PAL, &self.nes);
+
+                    match self.view_mode {
+                        ViewMode::DEBUG => {
+                            draw::draw_debug(frame, draw::DEFAULT_DEBUG_PAL, &self.nes);
+                        },
+                        ViewMode::NORMAL => {
+                            draw::draw_game_view(frame, &self.nes);
+                        }
+                    }
 
                     buf.render().unwrap();
                 }
@@ -123,5 +182,9 @@ impl NesApp {
     pub fn nestest_init(&mut self) {
         self.nes.load_cart("prg_tests/nestest.nes");
         self.nes.set_cpu_state(Some(0xC000), None, None, None, None, None, None);
+    }
+
+    pub fn switch_view_mode(&mut self) {
+
     }
 }

@@ -5,6 +5,11 @@ use crate::system::nes::NES;
 pub const DEBUG_FRAME_WIDTH: usize = 960;
 pub const DEBUG_FRAME_HEIGHT: usize = 540;
 
+// 256 pixels for NES + 32 pixels padding on either size
+pub const GAME_FRAME_WIDTH: usize = 256;
+// 240 pixels for NES + 24 pixels padding on either size
+pub const GAME_FRAME_HEIGHT: usize = 240;
+
 pub mod chars {
     pub const CHAR_WIDTH: usize = 7;
     pub const CHAR_HEIGHT: usize = 8;
@@ -870,13 +875,13 @@ pub fn draw_nes_screen(frame: &mut [u8], frame_width: usize, frame_height: usize
         // Top line
         dot(frame, frame_width, frame_height, x + i*2*scale_factor, y, scale_factor, RED);
         // Bottom line
-        dot(frame, frame_width, frame_height, x + i*2*scale_factor, y + 240*scale_factor, scale_factor, RED);
+        dot(frame, frame_width, frame_height, x + i*2*scale_factor, y + 239*scale_factor, scale_factor, RED);
 
         if i < 120 {
             // Left line
             dot(frame, frame_width, frame_height, x, y + i*2*scale_factor, scale_factor, RED);
             // Right line
-            dot(frame, frame_width, frame_height, x + 256*scale_factor, y + i*2*scale_factor, scale_factor, RED);
+            dot(frame, frame_width, frame_height, x + 255*scale_factor, y + i*2*scale_factor, scale_factor, RED);
         }
     }
 }
@@ -925,7 +930,7 @@ pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
     let mut text = String::with_capacity(200);
     text.push_str(&format!("A:0x{:02X}  X:0x{:02X}  Y:0x{:02X}\n", cpu_state.acc, cpu_state.x, cpu_state.y));
     text.push_str(&format!("SP:0x{:02X}  PC:0x{:04X}\n", cpu_state.sp, cpu_state.pc));
-    text.push_str(&format!("Total Clks:{}\nStatus:", cpu_state.clocks));
+    text.push_str(&format!("Total Clks:{}\nStatus:", cpu_state.total_clocks));
 
     let status_x = x + 7*2*chars::CHAR_WIDTH;
     let status_y = y + 3*(chars::CHAR_HEIGHT*2 + chars::NEWLINE_PADDING);
@@ -964,4 +969,25 @@ fn draw_zpage(frame: &mut [u8], frame_width: usize, frame_height: usize,
     let zpage_str = nes.zpage_str();
 
     draw_string(frame, frame_width, frame_height, &zpage_str, x, y, palette.txt_col, palette.bg_col, false);
+}
+
+
+/// Draw the background for the regular game view (i.e. everything in the game view)
+/// that won't change. This should only be called once when the frame is created.
+pub fn draw_game_view_bg(frame: &mut [u8], palette: DebugPalette) {
+    // // TITLE DECOR
+    // horizontal_line(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, 4, 144, 4, 2, palette.border_col);
+    // horizontal_line(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, 14, 134, 10, 2, palette.border_col);
+    
+    // draw_string(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, "NEmulator", 150, 2, palette.txt_col, palette.bg_col, true);
+
+    // horizontal_line(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, 270, 316, 4, 2, palette.border_col);
+    // horizontal_line(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, 280, 306, 10, 2, palette.border_col);
+
+    // // NES SCREEN DECOR
+    // draw_box(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, 30, 30, 259, 243, 2, palette, None);
+}
+
+pub fn draw_game_view(frame: &mut [u8], nes: &NES) {
+    draw_nes_screen(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, nes, 0, 0, false);
 }

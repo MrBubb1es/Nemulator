@@ -162,18 +162,22 @@ impl PpuRegisters {
                 if self.w.get() == 0 {
                     // 1st Write => write to low byte
                     self.ppu_scroll.set((self.ppu_scroll.get() & 0xFF00) | data as u16);
+                    self.w.set(1);
                 } else {
                     // 2nd Write => Write to high byte
                     self.ppu_scroll.set((self.ppu_scroll.get() & 0x00FF) | ((data as u16) << 8));
+                    self.w.set(0);
                 }
             },
             6 => {
                 if self.w.get() == 0 {
                     // 1st Write => write to low byte
                     self.ppu_address.set((self.ppu_address.get() & 0xFF00) | data as u16);
+                    self.w.set(1);
                 } else {
                     // 2nd Write => Write to high byte
                     self.ppu_address.set((self.ppu_address.get() & 0x00FF) | ((data as u16) << 8));
+                    self.w.set(0);
                 }
             },
             7 => self.ppu_data.set(data),

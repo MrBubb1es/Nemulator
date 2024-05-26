@@ -30,7 +30,8 @@ pub struct CpuState {
     pub sp: u8,
     pub pc: u16,
     pub status: CpuStatus,
-    pub clocks: usize,
+    pub cycles_remaining: usize,
+    pub total_clocks: usize,
 }
 
 /// Representation of the NES 6502 CPU. Thankfully, the good gentelmen down at
@@ -50,7 +51,8 @@ pub struct CPU {
     ppu_regs: Rc<PpuRegisters>,
     mapper: Rc<dyn Mapper>,
 
-    clocks: usize,
+    cycles_remaining: usize, // Number of CPU clocks before next instruction
+    total_clocks: usize, // Total number of clocks since CPU started running
 
     current_instr: Instruction,
     instr_data: OpcodeData,
@@ -72,7 +74,8 @@ impl CPU {
             ppu_regs: Rc::clone(&ppu_regs),
             mapper: Rc::clone(&mapper),
 
-            clocks: 0,
+            cycles_remaining: 0,
+            total_clocks: 0,
     
             current_instr: DEFAULT_ILLEGAL_OP,
             instr_data: OpcodeData {
@@ -89,47 +92,70 @@ impl CPU {
 
     /// Cycles the CPU through one whole instruction, taking as many clock
     /// cycles as that instruction requires. This function encapsulates all of
-    /// the fetch, decode, and execute stages of the CPU. Returns the total
-    /// number of clock cycles taken for the instruction run.
-    pub fn cycle(&mut self) {
-        let opcode = self.read(self.pc);
+    /// the fetch, decode, and execute stages of the CPU. Returns a bool 
+    /// reporting whether an instruction was excecuted.
+    pub fn cycle(&mut self) -> bool {
+        let mut excecuted = false;
 
-        // fetch - get the opcode we are running
-        let instr = &INSTRUCTION_TABLE[opcode as usize];
+        if self.cycles_remaining == 0 {
+            excecuted = true;
 
-        // decode - retrieve the neccesary data for the instruction
-        let (opcode_data, fetch_cycles) = (instr.addr_func)(self);
+            let opcode = self.read(self.pc);
+    
+            // fetch - get the opcode we are running
+            let instr = &INSTRUCTION_TABLE[opcode as usize];
+    
+            // decode - retrieve the neccesary data for the instruction
+            let (opcode_data, fetch_cycles) = (instr.addr_func)(self);
+    
+            // Increment pc before instruction execution
+            self.pc += instr.bytes as u16;
+    
+            // execute - run the instruction, updating memory and processor status
+            //           as defined by the instruction
+            let execute_cycles = (instr.func)(self, opcode_data);
+    
+            // store the instruction just executed (for debugging)
+            self.current_instr = instr.clone();
+            self.instr_data = opcode_data;
+    
+            self.cycles_remaining += execute_cycles + instr.base_clocks;
+    
+            if instr.has_extra_fetch_cycles {
+                self.cycles_remaining += fetch_cycles;
+            }
 
-        // Increment pc before instruction execution
-        self.pc += instr.bytes as u16;
-
-        // execute - run the instruction, updating memory and processor status
-        //           as defined by the instruction
-        let execute_cycles = (instr.func)(self, opcode_data);
-
-        // store the instruction just executed (for debugging)
-        self.current_instr = instr.clone();
-        self.instr_data = opcode_data;
-
-        self.clocks += execute_cycles + instr.base_clocks;
-
-        if instr.has_extra_fetch_cycles {
-            self.clocks += fetch_cycles;
+            self.total_clocks += self.cycles_remaining;
         }
+
+        self.cycles_remaining -= 1;
+
+        excecuted
     }
 
     // GETTER/SETTER FUNCTIONS
 
     /// Get the current number of clock cycles since turn-on
-    pub fn clocks(&self) -> usize {
-        self.clocks
+    pub fn total_clocks(&self) -> usize {
+        self.total_clocks
     }
 
     /// Manually set the number of clock cycles since turn-on
-    pub fn set_clocks(&mut self, clks: usize) {
-        self.clocks = clks;
+    pub fn set_total_clocks(&mut self, clks: usize) {
+        self.total_clocks = clks;
+    }
+
+    /// Get the number of cycles until the next instruction
+    pub fn get_remaining_cycles(&self) -> usize {
+        self.cycles_remaining
+    }
+
+    /// Manually set the number of remaining cycles before next instruction
+    pub fn set_remaining_cycles(&mut self, cycles: usize) {
+        self.cycles_remaining = cycles;
     }
     
+    /// Get the CPU Status byte
     pub fn get_status(&self) -> u8 {
         self.status.0
     }
@@ -306,7 +332,7 @@ impl CPU {
 
         self.pc = self.read_word(RESET_PC_VECTOR);
 
-        self.clocks += 7;
+        self.total_clocks += 7;
     }
 
     // INTERRUPTS
@@ -335,7 +361,7 @@ impl CPU {
             self.pc = self.read_word(IRQ_PC_VECTOR);
 
             // Interrupts take 7 clock cycles
-            self.clocks += 7;
+            self.total_clocks += 7;
         }
     }
     /// Send a non-maskable interrupt to the CPU, which executes the defined
@@ -361,7 +387,7 @@ impl CPU {
         self.pc = self.read_word(NMI_PC_VECTOR);
 
         // Interrupts take 7 clock cycles
-        self.clocks += 7;
+        self.total_clocks += 7;
     }
 
     /// Get the instruction just executed as a string of 6502 assembly for
@@ -442,7 +468,8 @@ impl CPU {
             sp: self.sp,
             pc: self.pc,
             status: self.status,
-            clocks: self.clocks,
+            cycles_remaining: self.cycles_remaining,
+            total_clocks: self.total_clocks,
         }
     }
 
@@ -452,7 +479,7 @@ impl CPU {
         text.push_str(&format!("  SP: 0x{:02X}, PC: 0x{:04X}", self.sp, self.pc));
         text.push_str(&format!("  Status (NVUBDIZC): {:08b}", self.get_status()));
         text.push_str(&format!("  Last Instr: {}", self.current_instr_str()));
-        text.push_str(&format!("  Total Clks: {}", self.clocks));
+        text.push_str(&format!("  Total Clks: {}", self.total_clocks));
         text
     }
 

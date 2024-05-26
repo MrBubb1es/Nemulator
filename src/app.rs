@@ -304,35 +304,9 @@ impl<'a> ApplicationHandler for NesApp {
                     println!("The close button was pressed; stopping");
                     event_loop.exit();
                 },
-                WindowEvent::ModifiersChanged(new) => {
-                    self.modifiers = Some(new.state());
-                },
-                WindowEvent::KeyboardInput { event, .. } => {
-                    if event.state == ElementState::Pressed && !event.repeat {
-                        match event.key_without_modifiers().as_ref() {
-                            Key::Named(winit::keyboard::NamedKey::Space) => { 
-                                if self.modifiers.is_some() && self.modifiers.unwrap().shift_key() && self.paused {
-                                    self.nes.cycle();
-                                } else {
-                                    self.paused = !self.paused; 
-                                }
-                            },
-                            _ => (),
-                        }
-                    }
-                },
                 WindowEvent::RedrawRequested => {
                     // Draw.
                     state.update(&self.nes);
-                    match state.render() {
-                        Ok(_) => {}
-                        // Reconfigure the surface if lost
-                        Err(wgpu::SurfaceError::Lost) => state.resize(state.size),
-                        // The system is out of memory, we should probably quit
-                        Err(wgpu::SurfaceError::OutOfMemory) => event_loop.exit(),
-                        // All other errors (Outdated, Timeout) should be resolved by the next frame
-                        Err(e) => eprintln!("{:?}", e),
-                    }
                     // Queue a RedrawRequested event.
                     //
                     // You only need to call this if you've determined that you need to redraw in

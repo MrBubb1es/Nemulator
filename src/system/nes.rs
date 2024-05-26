@@ -1,15 +1,15 @@
 use std::{borrow::Borrow, fs, io::Read, rc::Rc};
 
-use crate::cartridge::cartridge::Cartridge;
+use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 
-use super::{bus::Bus, cpu::CPU, ppu::PPU};
+use super::{cpu::CPU, ppu::{PpuRegisters, PPU}};
 
 #[derive(Default)]
 pub struct NES {
-    cart: Option<Rc<Cartridge>>,
-    bus: Option<Rc<Bus>>,
     cpu: Option<CPU>,
     ppu: Option<PPU>,
+    ppu_regs: Option<Rc<PpuRegisters>>,
+    mapper: Option<Rc<dyn Mapper>>,
 
     cart_loaded: bool,
 }
@@ -17,30 +17,10 @@ pub struct NES {
 impl NES {
     /// Create a new NES object with a cart pre-loaded
     pub fn with_cart(cart_path_str: &str) -> Self {
-        let mut cart_file = match fs::File::open(cart_path_str) {
-            Ok(v) => v,
-            Err(..) => panic!("Could not find file '{cart_path_str}'"),
-        };
+        let mut nes = NES::default();
+        nes.load_cart(cart_path_str);
 
-        let mut data = Vec::new();
-
-        if let Err(..) = cart_file.read_to_end(&mut data) {
-            panic!("Failed to read cartridge from '{cart_path_str}' to buffer");
-        }
-
-        let cart = Rc::new(Cartridge::from_bytes(data.as_slice()).unwrap());
-        let bus = Rc::new(Bus::new(Rc::clone(&cart)));
-        let ppu = PPU::new(Rc::clone(&cart));
-        let cpu = CPU::new(Rc::clone(&bus));
-
-        NES {
-            cart: Some(cart),
-            bus: Some(bus),
-            cpu: Some(cpu),
-            ppu: Some(ppu),
-
-            cart_loaded: true,
-        }
+        nes
     }
 
     /// Load a new cart into this NES object
@@ -56,25 +36,26 @@ impl NES {
             panic!("Failed to read cartridge from '{cart_path_str}' to buffer");
         }
 
-        let cart = Rc::new(Cartridge::from_bytes(data.as_slice()).unwrap());
-        let bus = Rc::new(Bus::new(Rc::clone(&cart)));
-        let ppu = PPU::new(Rc::clone(&cart));
-        let cpu = CPU::new(Rc::clone(&bus));
+        let cart = Cartridge::from_bytes(data.as_slice()).unwrap();
+        let ppu_regs = Rc::new(PpuRegisters::default());
+        let mapper: Rc<dyn Mapper> = Rc::new(cart.get_mapper());
+        let ppu = PPU::new(cart.chr_rom, Rc::clone(&ppu_regs), Rc::clone(&mapper));
+        let cpu = CPU::new(cart.prg_rom, Rc::clone(&ppu_regs), Rc::clone(&mapper));
 
-        self.cart = Some(cart);
-        self.bus = Some(bus);
         self.cpu = Some(cpu);
         self.ppu = Some(ppu);
+        self.mapper = Some(mapper);
+        self.ppu_regs = Some(ppu_regs);
 
         self.cart_loaded = true;
     }
 
     /// Remove the loaded cartridge from this NES
     pub fn remove_cart(&mut self) {
-        self.cart = None;
-        self.bus = None;
         self.cpu = None;
         self.ppu = None;
+        self.mapper = None;
+        self.ppu_regs = None;
 
         self.cart_loaded = false;
     }
@@ -113,11 +94,6 @@ impl NES {
         self.cpu.as_ref()
     }
 
-    /// Get a reference to the Bus if a cart is loaded
-    pub fn get_bus(&self) -> Option<&Bus> {
-        self.bus.as_deref()
-    }
-
     /// Get the number of CPU cLocks
     pub fn get_clks(&self) -> usize {
         if let Some(cpu) = self.cpu.borrow() {
@@ -134,28 +110,28 @@ impl NES {
         }
     }
 
-    /// Create a zpage string for the debug view given the bus
-    pub fn zpage_str(&self) -> String {
-        if let Some(bus) = &self.bus {
-            let mut mem_str: String = String::from("");
+    // /// Create a zpage string for the debug view given the bus
+    // pub fn zpage_str(&self) -> String {
+    //     if let Some(bus) = &self.bus {
+    //         let mut mem_str: String = String::from("");
     
-            for i in 0..16 {
-                let prefix = format!("{:#06X}:", i*16);
-                mem_str.push_str(&prefix);
-                for j in 0..16 {
-                    let mem_val = bus.read(i * 16 + j);
-                    let val_str = format!("  {mem_val:02X}");
-                    mem_str.push_str(&val_str);
-                }
-                let suffix = "\n";
-                mem_str.push_str(&suffix);
-            }
+    //         for i in 0..16 {
+    //             let prefix = format!("{:#06X}:", i*16);
+    //             mem_str.push_str(&prefix);
+    //             for j in 0..16 {
+    //                 let mem_val = bus.read(i * 16 + j);
+    //                 let val_str = format!("  {mem_val:02X}");
+    //                 mem_str.push_str(&val_str);
+    //             }
+    //             let suffix = "\n";
+    //             mem_str.push_str(&suffix);
+    //         }
     
-            mem_str
-        } else {
-            String::new()
-        }
-    }
+    //         mem_str
+    //     } else {
+    //         String::new()
+    //     }
+    // }
 }
 
 #[cfg(test)]
@@ -163,20 +139,6 @@ mod tests {
     use std::fs::read_to_string;
 
     use super::NES;
-
-    #[test]
-    fn test_nes_build() {
-        let test_nemulator = NES::with_cart("prg_tests/cpu_tests/my_file.bin");
-
-        let (prg_size, chr_size) = test_nemulator.cart.unwrap().get_rom_sizes();
-
-        assert_eq!(prg_size, 0xE15);
-        assert_eq!(chr_size, 0xA54);
-
-        test_nemulator.cpu.unwrap().reset();
-
-        // run_debug(&mut test_nemulator);
-    }
 
     #[test]
     fn test_load_cart() {
@@ -220,7 +182,7 @@ mod tests {
         test_nemulator.set_cpu_state(Some(0xC000), None, None, None, None, None, None); // run tests automatically
 
         for i in 0..expected_vals.len() {
-            // test_nemulator.cpu.print_state();
+            test_nemulator.cpu.as_ref().unwrap().print_state();
 
             let (exp_pc, exp_sp, exp_acc, exp_x, exp_y, exp_flags, exp_clks) = expected_vals[i];
 
@@ -235,7 +197,7 @@ mod tests {
             test_nemulator.cycle();
         }
 
-        assert_eq!(test_nemulator.get_bus().unwrap().read(0x0002), 0);
-        assert_eq!(test_nemulator.get_bus().unwrap().read(0x0003), 0);
+        assert_eq!(test_nemulator.get_cpu().unwrap().read(0x0002), 0);
+        assert_eq!(test_nemulator.get_cpu().unwrap().read(0x0003), 0);
     }
 }

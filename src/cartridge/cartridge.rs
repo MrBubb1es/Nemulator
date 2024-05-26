@@ -63,8 +63,8 @@ pub struct Cartridge {
     _header: Header,
 
     // trainer_area: Option<[u8; 512]>,
-    prg_rom: Memory,
-    chr_rom: Memory,
+    pub prg_rom: Memory,
+    pub chr_rom: Memory,
     _misc_rom: Memory,
     mapper: Box<dyn Mapper>,
 }
@@ -181,6 +181,10 @@ impl Cartridge {
             _misc_rom: Memory::from_vec(misc_rom_vec),
             mapper: mapper,
         })
+    }
+
+    pub fn get_mapper(&self) -> impl Mapper {
+        mapper::get_mapper(self._header.mapper_num)
     }
 
     /// Translates from the prg/chr ROM size specified by the header to the

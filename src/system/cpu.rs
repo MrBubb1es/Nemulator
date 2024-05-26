@@ -1,8 +1,11 @@
 use std::rc::Rc;
 
+use crate::cartridge::mapper::Mapper;
+
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
-use super::bus::Bus;
+use super::mem::Memory;
+use super::ppu::PpuRegisters;
 
 /// Representation of the NES 6502 CPU. Thankfully, the good gentelmen down at
 /// the lab have already done extensive research and documentation of this
@@ -16,7 +19,10 @@ pub struct CPU {
     pc: u16,
     flags: u8,
 
-    bus: Rc<Bus>,
+    sys_ram: Memory,
+    prg_rom: Memory,
+    ppu_regs: Rc<PpuRegisters>,
+    mapper: Rc<dyn Mapper>,
 
     clocks: usize,
 
@@ -25,16 +31,23 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub fn new(bus: Rc<Bus>) -> Self {
-        let mut new_cpu = CPU {
+    /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
+    pub fn new(prg_rom: Memory, ppu_regs: Rc<PpuRegisters>, mapper: Rc<dyn Mapper>) -> Self {
+        let mut new_cpu = CPU{
             acc: 0,
             x: 0,
             y: 0,
             sp: 0, // will be set to 0xFD in reset due to wrapping sub
             pc: 0,
             flags: 0x20, // start w/ unused flag on cuz why not ig (fixes nesdev tests)
+
+            sys_ram: Memory::new(0x800), // NES has 2KiB of internal memory that only the CPU can access
+            prg_rom: prg_rom,
+            ppu_regs: Rc::clone(&ppu_regs),
+            mapper: Rc::clone(&mapper),
+
             clocks: 0,
-            bus: bus,
+    
             current_instr: DEFAULT_ILLEGAL_OP,
             instr_data: OpcodeData {
                 data: None,
@@ -219,30 +232,71 @@ impl CPU {
 
     /// Read a single byte from a given address off the bus
     pub fn read(&self, address: u16) -> u8 {
-        self.bus.read(address)
+        match address {
+            0x0000..=0x1FFF => {
+                // First 2KiB of memory (0x0800) are mirrored until 0x2000
+                self.sys_ram.read(address & 0x07FF)
+            },
+            0x2000..=0x3FFF => {
+                // PPU Registers mirrored over 8KiB
+                self.ppu_regs.read(address & 0x0007)
+            }
+            // 0x4000..=0x401F => {
+            //     // APU or I/O Reads
+            //     println!("APU READ OCCURED");
+            //     0xEE
+            // },
+            0x4000..=0xFFFF => {
+                // Read to program ROM through mapper
+                if let Some(mapped_addr) = self.mapper.get_cpu_read_addr(address) {
+                    self.prg_rom.read(mapped_addr)
+                } else {
+                    0
+                }
+            },
+        }
     }
     /// Write a single byte to the bus at a given address
     pub fn write(&self, address: u16, data: u8) {
-        self.bus.write(address, data)
+        match address {
+            0x0000..=0x1FFF => {
+                // First 2KiB of memory (0x0800) are mirrored until 0x2000
+                self.sys_ram.write(address & 0x07FF, data);
+            },
+            0x2000..=0x3FFF => {
+                // PPU Registers mirrored over 8KiB
+                self.ppu_regs.write(address & 0x0007, data);
+            }
+            // 0x4000..=0x401F => {
+            //     // APU or I/O Writes
+            //     println!("APU WRITE OCCURED");
+            // },
+            0x4000..=0xFFFF => {
+                // Read to program ROM through mapper
+                if let Some(mapped_addr) = self.mapper.get_cpu_write_addr(address, data) {
+                    self.prg_rom.write(mapped_addr, data);
+                }
+            },
+        };
     }
     /// Read a 2 byte value starting at the given address in LLHH (little-endian) form
     pub fn read_word(&self, address: u16) -> u16 {
-        let lo = self.bus.read(address) as u16;
-        let hi = self.bus.read(address + 1) as u16;
+        let lo = self.read(address) as u16;
+        let hi = self.read(address + 1) as u16;
         (hi << 8) | lo
     }
     /// Write a 2 byte value to a given address in LLHH form
     pub fn write_word(&self, address: u16, data: u16) {
         let lo = data as u8;
         let hi = (data >> 8) as u8;
-        self.bus.write(address, lo);
-        self.bus.write(address + 1, hi);
+        self.write(address, lo);
+        self.write(address + 1, hi);
     }
     /// Read a 2 byte value from the zero-page of memory. If the address being read from is 0xFF,
     /// then the high byte will be taken from address 0x00 (wrap around zero-page)
     pub fn read_zpage_word(&self, zpage_address: u8) -> u16 {
-        let lo = self.bus.read(zpage_address as u16) as u16;
-        let hi = self.bus.read(zpage_address.wrapping_add(1) as u16) as u16;
+        let lo = self.read(zpage_address as u16) as u16;
+        let hi = self.read(zpage_address.wrapping_add(1) as u16) as u16;
         (hi << 8) | lo
     }
     /// Write a 2 byte value to the z-page in memory at given address. If address is 0xFF, the
@@ -250,8 +304,8 @@ impl CPU {
     pub fn write_zpage_word(&self, zpage_address: u8, data: u16) {
         let lo = data as u8;
         let hi = (data >> 8) as u8;
-        self.bus.write(zpage_address as u16, lo);
-        self.bus.write(zpage_address.wrapping_add(1) as u16, hi);
+        self.write(zpage_address as u16, lo);
+        self.write(zpage_address.wrapping_add(1) as u16, hi);
     }
     /// Push a byte to the stack in main memory. The stack is the first page of
     /// memory (i.e. 0x0100-0x01FF, right after the zero page). Decrements the
@@ -261,14 +315,14 @@ impl CPU {
         // println!("Pushing 0x{:02X} to stk", data);
 
         let stk_address = 0x0100 | self.sp as u16;
-        self.bus.write(stk_address, data);
+        self.write(stk_address, data);
         self.sp = self.sp.wrapping_sub(1);
     }
     /// Pop or 'pull' a value from the stack.
     pub fn pop_from_stack(&mut self) -> u8 {
         self.sp = self.sp.wrapping_add(1);
         let stk_address = 0x0100 | self.sp as u16;
-        let data = self.bus.read(stk_address);
+        let data = self.read(stk_address);
 
         // println!("Popping 0x{:02X} from stk", data);
 

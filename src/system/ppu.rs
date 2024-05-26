@@ -13,6 +13,8 @@ use super::nes_graphics;
 // be off by one.
 const SCANWIDTH: usize = 340;
 const SCANLINES: usize = 262;
+const PRIMARY_OAM_SIZE: usize = 256;
+const SECONDARY_OAM_SIZE: usize = 32;
 
 // PPUCTRL Register (write only)
 //     7  bit  0
@@ -200,6 +202,8 @@ pub struct PPU {
     vram: Memory,
     chr_rom: Memory,
     registers: Rc<PpuRegisters>,
+    primary_oam: Memory,
+    secondary_oam: Memory,
     mapper: Rc<dyn Mapper>,
 
     palette: nes_graphics::NESPalette,
@@ -215,6 +219,8 @@ impl PPU {
             vram: Memory::new(0x800), // 2KiB ppu ram
             chr_rom: chr_rom,
             registers: Rc::clone(&ppu_regs),
+            primary_oam: Memory::new(PRIMARY_OAM_SIZE),
+            secondary_oam: Memory::new(SECONDARY_OAM_SIZE),
             mapper: Rc::clone(&mapper),
 
             palette: nes_graphics::DEFAULT_PALETTE,
@@ -300,5 +306,56 @@ impl PPU {
     fn vblank_begin() {
         // TODO: write code here
     }
-}
 
+    /// Called every scanline.
+    /// Performs sprite evaluation as detailed here:
+    /// https://www.nesdev.org/wiki/PPU_sprite_evaluation. Scans through primary OAM to determine
+    /// which sprites to draw, and stores those sprites (normally up to 8) in the secondary OAM.
+    /// There are quirks about what happens when there are more than 8 sprites in a scanline - see
+    /// the link for details.
+    fn sprite_evaluation(&mut self) {
+        // Part 1: cycles 1-64
+        for n in 0..SECONDARY_OAM_SIZE {
+            self.secondary_oam.write(n as u16, 0xFF); // The default, meaning "no sprite".
+        }
+
+        // Part 2: cycles 65-256
+        let mut secondary_full = false;
+        let mut sprites_found: usize = 0;
+        for n in 0..64 {
+            let y_coord = self.primary_oam.read(n * 4); // First byte of the nth sprite
+            if !secondary_full {
+                self.secondary_oam
+                    .write((sprites_found * 4) as u16, y_coord);
+
+                // Check if y coordinate is within range of this scanline.
+                let y_diff = self.scanline - y_coord as isize;
+                if y_diff >= 0 && y_diff < 8 {
+                    // TODO: Ensure this works for 8-pixel and 16-pixel.
+                    sprites_found += 1;
+                    if sprites_found == 8 {
+                        secondary_full = true;
+                    }
+                    // Copy the rest of the sprite data to secondary OAM.
+                    self.secondary_oam.write(
+                        (sprites_found * 4 + 1) as u16,
+                        self.primary_oam.read(n * 4 + 1),
+                    );
+                    self.secondary_oam.write(
+                        (sprites_found * 4 + 2) as u16,
+                        self.primary_oam.read(n * 4 + 2),
+                    );
+                    self.secondary_oam.write(
+                        (sprites_found * 4 + 3) as u16,
+                        self.primary_oam.read(n * 4 + 3),
+                    );
+                }
+            }
+        }
+        // Part 3: cycles 257-320
+        //   ¯\_(ツ)_/¯
+
+        // Part 4: cycles 321-340
+        //   ¯\_(ツ)_/¯
+    }
+}

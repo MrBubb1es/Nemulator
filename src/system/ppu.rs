@@ -9,6 +9,11 @@ use crate::cartridge::mapper::Mapper;
 use super::mem::Memory;
 use super::nes_graphics;
 
+// NOTE: We may be misunderstanding scanline rendering behavior, in which case these constants may
+// be off by one.
+const SCANWIDTH: usize = 340;
+const SCANLINES: usize = 262;
+
 // PPUCTRL Register (write only)
 //     7  bit  0
 //     ---- ----
@@ -144,11 +149,13 @@ impl PpuRegisters {
             5 => 0x00, // Can't read PPUSCROLL
             6 => 0x00, // Can't read PPUADDR
             7 => self.ppu_data.get(),
-            _ => unreachable!("If the laws of physics no longer apply in the future, God help you.")
+            _ => {
+                unreachable!("If the laws of physics no longer apply in the future, God help you.")
+            }
         }
     }
 
-    /// Write a single byte to the PPU Registers. Internal Registers cannot be 
+    /// Write a single byte to the PPU Registers. Internal Registers cannot be
     /// written to, and some registers depend on the internal write latch to
     /// determine which byte is being written.
     pub fn write(&self, address: u16, data: u8) {
@@ -185,6 +192,10 @@ impl PpuRegisters {
 /// Representation of the NES Picture Processing Unit. Details on how the PPU
 /// works can be found here: https://www.nesdev.org/wiki/PPU_registers
 pub struct PPU {
+    // To keep track of scanline rendering
+    dot: usize,
+    scanline: isize,
+
     // Registers
     vram: Memory,
     chr_rom: Memory,
@@ -195,10 +206,12 @@ pub struct PPU {
 }
 
 impl PPU {
-    /// Create a new PPU 
+    /// Create a new PPU
     ///  * `cart` - The cartridge to attatch to the PPU bus
     pub fn new(chr_rom: Memory, ppu_regs: Rc<PpuRegisters>, mapper: Rc<dyn Mapper>) -> Self {
-        PPU{
+        PPU {
+            dot: 0,
+            scanline: 0,
             vram: Memory::new(0x800), // 2KiB ppu ram
             chr_rom: chr_rom,
             registers: Rc::clone(&ppu_regs),
@@ -210,32 +223,26 @@ impl PPU {
 
     // GETTER / SETTER FUNCTIONS
 
-    /// Reads a single byte from a given address. The ram/rom accessed depends 
+    /// Reads a single byte from a given address. The ram/rom accessed depends
     /// on the address.
-    /// 
+    ///
     /// 0x0000-0x1FFF: Cartridge CHR ROM
-    /// 
+    ///
     /// 0x2000-0x2FFF: VRAM
-    /// 
+    ///
     /// 0x3000-0x3EFF: VRAM (Mirror of 0x2000-0x2EFF)
-    /// 
+    ///
     /// 0x3F00-0x3FFF: palette
-    /// 
+    ///
     ///  * `address` - 16 bit address used to access data
     pub fn read(&self, address: u16) -> u8 {
         let mapped_address = self.mapper.get_ppu_read_addr(address);
         let mapped_addr = mapped_address.unwrap_or(address);
 
         match mapped_addr {
-            0x0000..=0x1FFF => {
-                self.chr_rom.read(mapped_addr)
-            },
-            0x2000..=0x2FFF => {
-                self.vram.read(mapped_addr)
-            },
-            0x3000..=0x3EFF => {
-                self.vram.read(mapped_addr - 0x1000)
-            }
+            0x0000..=0x1FFF => self.chr_rom.read(mapped_addr),
+            0x2000..=0x2FFF => self.vram.read(mapped_addr),
+            0x3000..=0x3EFF => self.vram.read(mapped_addr - 0x1000),
             0x3F00..=0x3FFF => self.read_palette(address & 0x00FF),
             _ => 0xEE,
         }
@@ -245,15 +252,15 @@ impl PPU {
         0
     }
 
-    /// Write a single byte of data to a given address. The ram accessed depends 
+    /// Write a single byte of data to a given address. The ram accessed depends
     /// on the address.
-    /// 
+    ///
     /// 0x0000-0x1FFF: Cartridge CHR ROM
-    /// 
+    ///
     /// 0x2000-0x3EFF: VRAM
-    /// 
+    ///
     /// 0x3F00-0x3FFF: palettee
-    /// 
+    ///
     ///  * `address` - 16 bit address used to access data
     pub fn write(&self, address: u16, data: u8) {
         let mapped_address = self.mapper.get_ppu_write_addr(address, data);
@@ -262,23 +269,36 @@ impl PPU {
         match mapped_addr {
             0x0000..=0x1FFF => {
                 self.chr_rom.write(mapped_addr, data);
-            },
+            }
             0x2000..=0x2FFF => {
                 self.vram.write(mapped_addr, data);
-            },
+            }
             0x3000..=0x3EFF => {
                 self.vram.write(mapped_addr - 0x1000, data);
             }
             0x3F00..=0x3FFF => self.write_palette(address & 0x001F, data),
-            _ => {},
+            _ => {}
         }
     }
 
-    fn write_palette(&self, address: u16, data: u8) {
+    fn write_palette(&self, address: u16, data: u8) {}
 
+    pub fn render_to_arr(dest: &mut [u8; 256 * 240 * 3]) {}
+
+    pub fn cycle(&mut self) {
+        self.dot += 1;
+        if self.dot > SCANWIDTH {
+            self.scanline += 1;
+        }
+
+        if self.scanline > SCANLINES {
+            self.scanlines = -1;
+            self.vblank_begin();
+        }
     }
 
-    pub fn render_to_arr(dest: &mut [u8; 256*240*3]) {
-
+    fn vblank_begin() {
+        // TODO: write code here
     }
 }
+

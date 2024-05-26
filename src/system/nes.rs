@@ -11,6 +11,7 @@ pub struct NES {
     ppu_regs: Option<Rc<PpuRegisters>>,
     mapper: Option<Rc<dyn Mapper>>,
 
+    cart: Option<Cartridge>,
     cart_loaded: bool,
 }
 
@@ -36,17 +37,21 @@ impl NES {
             panic!("Failed to read cartridge from '{cart_path_str}' to buffer");
         }
 
+        // Parse cartridge from file bytes
         let cart = Cartridge::from_bytes(data.as_slice()).unwrap();
+
         let ppu_regs = Rc::new(PpuRegisters::default());
         let mapper: Rc<dyn Mapper> = Rc::new(cart.get_mapper());
-        let ppu = PPU::new(cart.chr_rom, Rc::clone(&ppu_regs), Rc::clone(&mapper));
-        let cpu = CPU::new(cart.prg_rom, Rc::clone(&ppu_regs), Rc::clone(&mapper));
+
+        let ppu = PPU::new(cart.get_chr_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
+        let cpu = CPU::new(cart.get_prg_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
 
         self.cpu = Some(cpu);
         self.ppu = Some(ppu);
         self.mapper = Some(mapper);
         self.ppu_regs = Some(ppu_regs);
 
+        self.cart = Some(cart);
         self.cart_loaded = true;
     }
 
@@ -57,6 +62,7 @@ impl NES {
         self.mapper = None;
         self.ppu_regs = None;
 
+        self.cart = None;
         self.cart_loaded = false;
     }
 

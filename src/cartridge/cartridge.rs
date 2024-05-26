@@ -63,10 +63,9 @@ pub struct Cartridge {
     _header: Header,
 
     // trainer_area: Option<[u8; 512]>,
-    pub prg_rom: Memory,
-    pub chr_rom: Memory,
+    prg_rom: Memory,
+    chr_rom: Memory,
     _misc_rom: Memory,
-    mapper: Box<dyn Mapper>,
 }
 
 impl Cartridge {
@@ -166,8 +165,6 @@ impl Cartridge {
 
         let misc_rom_vec = data[chr_rom_end..].to_vec();
 
-        let mapper = Box::new(mapper::get_mapper(header.mapper_num));
-
         println!("Prg ROM Size: {} (given by {})", prg_rom_vec.len(), header.prg_rom_size);
         println!("Chr ROM Size: {} (given by {})", chr_rom_vec.len(), header.chr_rom_size);
         println!("Misc ROM Size: {}", misc_rom_vec.len());
@@ -179,12 +176,7 @@ impl Cartridge {
             prg_rom: Memory::from_vec(prg_rom_vec),
             chr_rom: Memory::from_vec(chr_rom_vec),
             _misc_rom: Memory::from_vec(misc_rom_vec),
-            mapper: mapper,
         })
-    }
-
-    pub fn get_mapper(&self) -> impl Mapper {
-        mapper::get_mapper(self._header.mapper_num)
     }
 
     /// Translates from the prg/chr ROM size specified by the header to the
@@ -200,31 +192,15 @@ impl Cartridge {
         rom_size_bytes as usize
     }
 
-    /// Read data from PRG memory on the cartridge, through the mapper. Only the CPU can do this.
-    pub fn cpu_read(&self, address: u16) -> u8 {
-        if let Some(real_address) = self.mapper.get_cpu_read_addr(address) {
-            self.prg_rom.read(real_address)
-        } else {
-            0
-        }
+    pub fn get_prg_rom(&self) -> Memory {
+        self.prg_rom.clone()
     }
 
-    /// Write data to PRG memory on the cartridge, through the mapper. Only the CPU can do this.
-    pub fn cpu_write(&self, address: u16, data: u8) {
-        if let Some(real_address) = self.mapper.get_cpu_read_addr(address) {
-            self.prg_rom.write(real_address, data);
-        }
+    pub fn get_chr_rom(&self) -> Memory {
+        self.chr_rom.clone()
     }
 
-    pub fn ppu_read(&self, _address: u16) -> u8 {
-        0
-    }
-
-    pub fn ppu_write(&self, _address: u16, _data: u8) {
-
-    }
-
-    pub fn get_rom_sizes(&self) -> (usize, usize) {
-        (self.prg_rom.size(), self.chr_rom.size())
+    pub fn get_mapper(&self) -> impl Mapper {
+        mapper::get_mapper(self._header.mapper_num)
     }
 }

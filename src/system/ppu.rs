@@ -191,6 +191,10 @@ pub struct PPU {
     registers: Rc<PpuRegisters>,
     mapper: Rc<dyn Mapper>,
 
+    /// Pagetable 1 & 2 memory
+    pgtbl1: [u8; 0x1000],
+    pgtbl2: [u8; 0x1000],
+
     palette: nes_graphics::NESPalette,
 }
 
@@ -198,14 +202,24 @@ impl PPU {
     /// Create a new PPU 
     ///  * `cart` - The cartridge to attatch to the PPU bus
     pub fn new(chr_rom: Memory, ppu_regs: Rc<PpuRegisters>, mapper: Rc<dyn Mapper>) -> Self {
-        PPU{
+        let mut ppu = PPU{
             vram: Memory::new(0x800), // 2KiB ppu ram
             chr_rom: chr_rom,
             registers: Rc::clone(&ppu_regs),
             mapper: Rc::clone(&mapper),
 
+            pgtbl1: [0; 0x1000],
+            pgtbl2: [0; 0x1000],
+
             palette: nes_graphics::DEFAULT_PALETTE,
+        };
+
+        for i in 0..0x1000 {
+            ppu.pgtbl1[i as usize] = ppu.read(i);
+            ppu.pgtbl2[i as usize] = ppu.read(i | 0x1000);
         }
+
+        ppu
     }
 
     // GETTER / SETTER FUNCTIONS
@@ -274,11 +288,13 @@ impl PPU {
         }
     }
 
-    fn write_palette(&self, address: u16, data: u8) {
+    pub fn write_palette(&self, address: u16, data: u8) {}
 
+    pub fn get_pgtbl1(&self) -> [u8; 0x1000] {
+        self.pgtbl1.clone()
     }
 
-    pub fn render_to_arr(dest: &mut [u8; 256*240*3]) {
-
+    pub fn get_pgtbl2(&self) -> [u8; 0x1000] {
+        self.pgtbl2.clone()
     }
 }

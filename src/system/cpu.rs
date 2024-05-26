@@ -22,6 +22,17 @@ pub struct CpuStatus {
     pub negative: bool,
 }
 
+#[derive(Default)]
+pub struct CpuState {
+    pub acc: u8,
+    pub x: u8,
+    pub y: u8,
+    pub sp: u8,
+    pub pc: u16,
+    pub status: CpuStatus,
+    pub clocks: usize,
+}
+
 /// Representation of the NES 6502 CPU. Thankfully, the good gentelmen down at
 /// the lab have already done extensive research and documentation of this
 /// particular device, so if you ever have questions about why things are the
@@ -423,13 +434,31 @@ impl CPU {
         out_str
     }
 
+    pub fn get_state(&self) -> CpuState {
+        CpuState {
+            acc: self.acc,
+            x: self.x,
+            y: self.y,
+            sp: self.sp,
+            pc: self.pc,
+            status: self.status,
+            clocks: self.clocks,
+        }
+    }
+
+    pub fn state_str(&self) -> String {
+        let mut text = String::with_capacity(200);
+        text.push_str(&format!("  A: 0x{:02X}, X: 0x{:02X}, Y: 0x{:02X}", self.acc, self.x, self.y));
+        text.push_str(&format!("  SP: 0x{:02X}, PC: 0x{:04X}", self.sp, self.pc));
+        text.push_str(&format!("  Status (NVUBDIZC): {:08b}", self.get_status()));
+        text.push_str(&format!("  Last Instr: {}", self.current_instr_str()));
+        text.push_str(&format!("  Total Clks: {}", self.clocks));
+        text
+    }
+
     pub fn print_state(&self) {
         println!("CPU State:");
-        println!("  A: 0x{:02X}, X: 0x{:02X}, Y: 0x{:02X}", self.acc, self.x, self.y);
-        println!("  SP: 0x{:02X}, PC: 0x{:04X}", self.sp, self.pc);
-        println!("  Status (NVUBDIZC): {:08b}", self.get_status());
-        println!("  Last Instr: {}", self.current_instr_str());
-        println!("  Total Clks: {}", self.clocks);
+        println!("{}", self.state_str());
     }
 }
 

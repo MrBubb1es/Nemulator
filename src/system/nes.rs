@@ -2,7 +2,7 @@ use std::{borrow::Borrow, fs, io::Read, rc::Rc};
 
 use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 
-use super::{cpu::CPU, ppu::{PpuRegisters, PPU}};
+use super::{cpu::{self, CpuState, CPU}, ppu::{PpuRegisters, PPU}};
 
 #[derive(Default)]
 pub struct NES {
@@ -116,28 +116,52 @@ impl NES {
         }
     }
 
-    // /// Create a zpage string for the debug view given the bus
-    // pub fn zpage_str(&self) -> String {
-    //     if let Some(bus) = &self.bus {
-    //         let mut mem_str: String = String::from("");
+    pub fn get_cpu_state(&self) -> CpuState {
+        if let Some(cpu) = &self.cpu {
+            cpu.get_state()
+        } else {
+            CpuState::default()
+        }
+    }
+
+    pub fn get_pgtbl1(&self) -> [u8; 0x1000] {
+        if let Some(ppu) = &self.ppu {
+            ppu.get_pgtbl1()
+        } else {
+            [0; 0x1000]
+        }
+    }
+
+    pub fn get_pgtbl2(&self) -> [u8; 0x1000] {
+        if let Some(ppu) = &self.ppu {
+            ppu.get_pgtbl2()
+        } else {
+            [0; 0x1000]
+        }
+    }
+
+    /// Get a string showing the contents of the Zero Page of system ram
+    pub fn zpage_str(&self) -> String {
+        let mut mem_str: String = String::from("");
+
+        for i in 0..16 {
+            let prefix = format!("${:04X}:", i*16);
+            mem_str.push_str(&prefix);
+            for j in 0..16 {
+                let mem_val = if let Some(cpu) = &self.cpu {
+                    cpu.read(i * 16 + j)
+                } else {
+                    0xEE
+                };
+                let val_str = format!(" {mem_val:02X}");
+                mem_str.push_str(&val_str);
+            }
+            let suffix = "\n";
+            mem_str.push_str(&suffix);
+        }
     
-    //         for i in 0..16 {
-    //             let prefix = format!("{:#06X}:", i*16);
-    //             mem_str.push_str(&prefix);
-    //             for j in 0..16 {
-    //                 let mem_val = bus.read(i * 16 + j);
-    //                 let val_str = format!("  {mem_val:02X}");
-    //                 mem_str.push_str(&val_str);
-    //             }
-    //             let suffix = "\n";
-    //             mem_str.push_str(&suffix);
-    //         }
-    
-    //         mem_str
-    //     } else {
-    //         String::new()
-    //     }
-    // }
+        mem_str
+    }
 }
 
 #[cfg(test)]

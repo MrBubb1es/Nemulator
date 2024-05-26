@@ -2,11 +2,11 @@ pub mod cartridge;
 pub mod system;
 pub mod app;
 
+use system::nes;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 // use app::window::Window;
 
-#[cfg(debug_assertions)]
 pub fn run() {
     env_logger::init();
 
@@ -16,12 +16,7 @@ pub fn run() {
     event_loop.set_control_flow(ControlFlow::Poll);
 
     nes_app.nestest_init();
+    // nes_app.init("games/Super Mario Bros (E).nes");
 
     event_loop.run_app(&mut nes_app).unwrap();
 }
-
-#[cfg(not(debug_assertions))]
-pub fn run(nes: &mut NES) {
-    
-}
-

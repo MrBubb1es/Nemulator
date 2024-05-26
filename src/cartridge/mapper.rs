@@ -46,7 +46,7 @@ impl Mapper for Mapper0 {
 
     fn get_ppu_read_addr(&self, addr: u16) -> Option<u16> {
         match addr {
-            0x0000..=0x2000 => Some(addr - 0x8000),
+            0x0000..=0x2000 => Some(addr),
             _ => None,
         }
     }
@@ -61,7 +61,7 @@ impl Mapper for Mapper0 {
 
     fn get_ppu_write_addr(&self, addr: u16, _data: u8) -> Option<u16> {
         match addr {
-            0x0000..=0x2000 => Some(addr - 0x8000),
+            0x0000..=0x2000 => Some(addr),
             _ => None,
         }
     }

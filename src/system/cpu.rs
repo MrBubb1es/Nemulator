@@ -1,11 +1,26 @@
 use std::rc::Rc;
 
+use bitfield_struct::bitfield;
+
 use crate::cartridge::mapper::Mapper;
 
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
 use super::mem::Memory;
 use super::ppu::PpuRegisters;
+
+// NVUBDIZC
+#[bitfield(u8)]
+pub struct CpuStatus {
+    pub carry: bool,
+    pub zero: bool,
+    pub interrupt: bool,
+    pub decimal: bool,
+    pub b: bool,
+    pub unused: bool,
+    pub overflow: bool,
+    pub negative: bool,
+}
 
 /// Representation of the NES 6502 CPU. Thankfully, the good gentelmen down at
 /// the lab have already done extensive research and documentation of this
@@ -17,7 +32,7 @@ pub struct CPU {
     y: u8,
     sp: u8,
     pc: u16,
-    flags: u8,
+    pub status: CpuStatus,
 
     sys_ram: Memory,
     prg_rom: Memory,
@@ -39,7 +54,7 @@ impl CPU {
             y: 0,
             sp: 0, // will be set to 0xFD in reset due to wrapping sub
             pc: 0,
-            flags: 0x20, // start w/ unused flag on cuz why not ig (fixes nesdev tests)
+            status: CpuStatus::from_bits(0x20), // start w/ unused flag on cuz why not ig (fixes nesdev tests)
 
             sys_ram: Memory::new(0x800), // NES has 2KiB of internal memory that only the CPU can access
             prg_rom: prg_rom,
@@ -103,87 +118,14 @@ impl CPU {
     pub fn set_clocks(&mut self, clks: usize) {
         self.clocks = clks;
     }
-
-    /// Get the carry flag as a 0 or 1 value
-    pub fn get_carry_flag(&self) -> u8 {
-        self.flags & 0x01
+    
+    pub fn get_status(&self) -> u8 {
+        self.status.0
     }
-    /// Get the zero flag as a 0 or 1 value
-    pub fn get_zero_flag(&self) -> u8 {
-        (self.flags & 0x02) >> 1
-    }
-    /// Get the interrupt flag as a 0 or 1 value
-    pub fn get_interrupt_flag(&self) -> u8 {
-        (self.flags & 0x04) >> 2
-    }
-    /// Get the decimal flag as a 0 or 1 value
-    pub fn get_decimal_flag(&self) -> u8 {
-        (self.flags & 0x08) >> 3
-    }
-    /// Get the 'b' flag as a 0 or 1 value
-    pub fn get_b_flag(&self) -> u8 {
-        (self.flags & 0x10) >> 4
-    }
-    /// Get the unused flag as a 0 or 1 value
-    pub fn get_unused_flag(&self) -> u8 {
-        (self.flags & 0x20) >> 5
-    }
-    /// Get the overflow flag as a 0 or 1 value
-    pub fn get_overflow_flag(&self) -> u8 {
-        (self.flags & 0x40) >> 6
-    }
-    /// Get the negative flag as a 0 or 1 value
-    pub fn get_negative_flag(&self) -> u8 {
-        (self.flags & 0x80) >> 7
-    }
-    /// Get the whole flags byte (processor status byte)
-    pub fn get_flags(&self) -> u8 {
-        self.flags
-    }
-
-    /// Set the carry flag as a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_carry_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0xFE) | (val << 0);
-    }
-    /// Set the zero flag as a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_zero_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0xFD) | (val << 1);
-    }
-    /// Set the interrupt flag as a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_interrupt_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0xFB) | (val << 2);
-    }
-    /// Set the decimal flag to a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_decimal_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0xF7) | (val << 3);
-    }
-    /// Set the 'B' flag to a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_b_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0xEF) | (val << 4);
-    }
-    /// Set the unused flag to a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_unused_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0xDF) | (val << 5);
-    }
-    /// Set the overflow flag to a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_overflow_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0xBF) | (val << 6);
-    }
-    /// Set the negative flag to a 0 or 1. (Technically, any u8 value can be
-    /// passed to this function, but this is seen as undefined behavior)
-    pub fn set_negative_flag(&mut self, val: u8) {
-        self.flags = (self.flags & 0x7F) | (val << 7);
-    }
+    
     /// Set the whole processor status byte
-    pub fn set_flags(&mut self, val: u8) {
-        self.flags = val;
+    pub fn set_status(&mut self, val: u8) {
+        self.status = CpuStatus::from_bits(val);
     }
 
     /// Get the current value of the accumulator
@@ -342,14 +284,14 @@ impl CPU {
         self.sp = self.sp.wrapping_sub(3);
 
         // Interrupt flag set and unused flag unchanged, set the rest to 0
-        self.set_carry_flag(0);
-        self.set_zero_flag(0);
-        self.set_interrupt_flag(1);
-        self.set_decimal_flag(0);
-        self.set_b_flag(0);
+        self.status.set_carry(false);
+        self.status.set_zero(false);
+        self.status.set_interrupt(true);
+        self.status.set_decimal(false);
+        self.status.set_b(false);
         // leave unused flag alone
-        self.set_overflow_flag(0);
-        self.set_negative_flag(0);
+        self.status.set_overflow(false);
+        self.status.set_negative(false);
 
         self.pc = self.read_word(RESET_PC_VECTOR);
 
@@ -363,7 +305,7 @@ impl CPU {
     /// https://www.nesdev.org/wiki/CPU_interrupts
     pub fn irq(&mut self) {
         // Check interrupt disable flag
-        if self.get_interrupt_flag() == 0 {
+        if !self.status.interrupt() {
             const IRQ_PC_VECTOR: u16 = 0xFFFE;
 
             // Store PC
@@ -373,10 +315,10 @@ impl CPU {
             self.push_to_stack(lo);
 
             // Set flags and store status
-            self.set_b_flag(0);
-            self.set_unused_flag(1);
-            self.set_interrupt_flag(1);
-            self.push_to_stack(self.flags);
+            self.status.set_b(false);
+            self.status.set_unused(true);
+            self.status.set_interrupt(true);
+            self.push_to_stack(self.get_status());
 
             // Set PC to whatever is at addr 0xFFFE
             self.pc = self.read_word(IRQ_PC_VECTOR);
@@ -399,10 +341,10 @@ impl CPU {
         self.push_to_stack(lo);
 
         // Set flags and store status
-        self.set_b_flag(0);
-        self.set_unused_flag(1);
-        self.set_interrupt_flag(1);
-        self.push_to_stack(self.flags);
+        self.status.set_b(false);
+        self.status.set_unused(true);
+        self.status.set_interrupt(true);
+        self.push_to_stack(self.get_status());
 
         // Set PC to whatever is at addr 0xFFFE
         self.pc = self.read_word(NMI_PC_VECTOR);
@@ -485,7 +427,7 @@ impl CPU {
         println!("CPU State:");
         println!("  A: 0x{:02X}, X: 0x{:02X}, Y: 0x{:02X}", self.acc, self.x, self.y);
         println!("  SP: 0x{:02X}, PC: 0x{:04X}", self.sp, self.pc);
-        println!("  Status (NVUBDIZC): {:08b}", self.get_flags());
+        println!("  Status (NVUBDIZC): {:08b}", self.get_status());
         println!("  Last Instr: {}", self.current_instr_str());
         println!("  Total Clks: {}", self.clocks);
     }

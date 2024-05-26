@@ -90,7 +90,7 @@ impl NES {
             cpu.set_acc(acc.unwrap_or(cpu.get_acc()));
             cpu.set_x_reg(x.unwrap_or(cpu.get_x_reg()));
             cpu.set_y_reg(y.unwrap_or(cpu.get_y_reg()));
-            cpu.set_flags(status.unwrap_or(cpu.get_flags()));
+            cpu.set_status(status.unwrap_or(cpu.get_status()));
             cpu.set_clocks(clocks.unwrap_or(cpu.clocks()));
         }
     }
@@ -197,7 +197,7 @@ mod tests {
             assert_eq!(exp_acc, test_nemulator.get_cpu().unwrap().get_acc());
             assert_eq!(exp_x, test_nemulator.get_cpu().unwrap().get_x_reg());
             assert_eq!(exp_y, test_nemulator.get_cpu().unwrap().get_y_reg());
-            assert_eq!(exp_flags, test_nemulator.get_cpu().unwrap().get_flags());
+            assert_eq!(exp_flags, test_nemulator.get_cpu().unwrap().get_status());
             assert_eq!(exp_clks, test_nemulator.get_cpu().unwrap().clocks());
 
             test_nemulator.cycle();

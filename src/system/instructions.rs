@@ -542,16 +542,16 @@ fn relative(cpu: &CPU) -> (OpcodeData, usize) {
 fn adc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
-    let result = (data as u16) + (cpu.get_acc() as u16) + (cpu.get_carry_flag() as u16);
-    cpu.set_carry_flag(if result & 0xFF00 > 0 { 1 } else { 0 });
-    cpu.set_zero_flag(if result & 0xFF == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    let result = (data as u16) + (cpu.get_acc() as u16) + (cpu.status.carry() as u16);
+    cpu.status.set_carry(result & 0xFF00 > 0);
+    cpu.status.set_zero(result & 0xFF == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     
     // Set V flag if acc and data are same sign, but result is different sign
     let a = cpu.get_acc() & 0x80 != 0;
     let r = (result & 0x80) != 0;
     let d = data & 0x80 != 0;
-    cpu.set_overflow_flag(if !(a^d)&(a^r) { 1 } else { 0 });
+    cpu.status.set_overflow( !(a^d)&(a^r) ); // Trust, bro
 
     cpu.set_acc(result as u8);
 
@@ -562,8 +562,8 @@ fn and(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = cpu.get_acc() & data;
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_acc(result);
     0
 }
@@ -571,17 +571,17 @@ fn and(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn asl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
         let result = data << 1;
-        cpu.set_carry_flag((data & 0x80) >> 7);
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        cpu.status.set_carry((data & 0x80) != 0);
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(result & 0x80 != 0);
         cpu.write(address, result);
     }
     // Otherwise, Accumulator version
     else {
         let result = cpu.get_acc() << 1;
-        cpu.set_carry_flag((cpu.get_acc() & 0x80) >> 7);
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        cpu.status.set_carry((cpu.get_acc() & 0x80) != 0);
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(result & 0x80 != 0);
         cpu.set_acc(result);
     }
     0
@@ -590,7 +590,7 @@ fn asl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn bcc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_carry_flag() != 1 {
+    if !cpu.status.carry() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -608,7 +608,7 @@ fn bcc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn bcs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_carry_flag() == 1 {
+    if cpu.status.carry() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -627,7 +627,7 @@ fn bcs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn beq(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_zero_flag() == 1 {
+    if cpu.status.zero() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -646,16 +646,16 @@ fn beq(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn bit(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
-    cpu.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
-    cpu.set_overflow_flag(if data & 0x40 > 0 { 1 } else { 0 });
-    cpu.set_zero_flag(if data & cpu.get_acc() == 0 { 1 } else { 0 });
+    cpu.status.set_negative(data & 0x80 != 0);
+    cpu.status.set_overflow(data & 0x40 != 0);
+    cpu.status.set_zero(data & cpu.get_acc() == 0);
     0
 }
 // BMI - Branch on Result Minus (Negative flag set)
 fn bmi(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_negative_flag() == 1 {
+    if cpu.status.negative() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -673,7 +673,7 @@ fn bmi(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn bne(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_zero_flag() == 0 {
+    if !cpu.status.zero() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -691,7 +691,7 @@ fn bne(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn bpl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_negative_flag() == 0 {
+    if !cpu.status.negative() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -715,7 +715,7 @@ fn brk(cpu: &mut CPU, _: OpcodeData) -> usize {
 fn bvc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_overflow_flag() == 0 {
+    if !cpu.status.overflow() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -733,7 +733,7 @@ fn bvc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn bvs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
-    if cpu.get_overflow_flag() == 1 {
+    if cpu.status.overflow() {
         let prev_pc = cpu.get_pc();
         cpu.set_pc((cpu.get_pc() as i32 + offset as i32) as u16);
         
@@ -749,22 +749,22 @@ fn bvs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 // CLC - Clear Carry Flag
 fn clc(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.set_carry_flag(0);
+    cpu.status.set_carry(false);
     0
 }
 // CLD - Clear Decimal Mode
 fn cld(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.set_decimal_flag(0);
+    cpu.status.set_decimal(false);
     0
 }
 // CLI - Clear Interrupt Disable Bit
 fn cli(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.set_interrupt_flag(0);
+    cpu.status.set_interrupt(false);
     0
 }
 // CLV - Clear Overflow Flag
 fn clv(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.set_overflow_flag(0);
+    cpu.status.set_overflow(false);
     0
 }
 // CMP - Compare Memory with Accumulator
@@ -772,9 +772,9 @@ fn cmp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (cpu.get_acc() as i16) - (data as i16);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
-    cpu.set_carry_flag(if result >= 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.status.set_carry(result >= 0);
     0
 }
 // CPX - Compare Memory and Index X
@@ -782,9 +782,9 @@ fn cpx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (cpu.get_x_reg() as i16) - (data as i16);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
-    cpu.set_carry_flag(if result >= 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.status.set_carry(result >= 0);
     0
 }
 // CPY - Compare Memory and Index Y
@@ -792,9 +792,9 @@ fn cpy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (cpu.get_y_reg() as i16) - (data as i16);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
-    cpu.set_carry_flag(if result >= 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.status.set_carry(result >= 0);
     0
 }
 // DEC - Decrement Memory
@@ -803,8 +803,8 @@ fn dec(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
 
     let result = data.wrapping_sub(1);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.write(address, result);
     0
 }
@@ -812,16 +812,16 @@ fn dec(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn dex(cpu: &mut CPU, _: OpcodeData) -> usize {
     let result = cpu.get_x_reg().wrapping_sub(1);
     
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_x_reg(result);
     0
 }
 // DEY - Decrement Y Register
 fn dey(cpu: &mut CPU, _: OpcodeData) -> usize {
     let result = cpu.get_y_reg().wrapping_sub(1);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_y_reg(result);
     0
 }
@@ -830,8 +830,8 @@ fn eor(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = cpu.get_acc() ^ data;
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_acc(result);
     0
 }
@@ -841,8 +841,8 @@ fn inc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
 
     let result = data.wrapping_add(1);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.write(address, result);
     0
 }
@@ -850,16 +850,16 @@ fn inc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn inx(cpu: &mut CPU, _: OpcodeData) -> usize {
     let result = cpu.get_x_reg().wrapping_add(1);
 
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_x_reg(result);
     0
 }
 // INY - Increment Y Register
 fn iny(cpu: &mut CPU, _: OpcodeData) -> usize {
     let result = cpu.get_y_reg().wrapping_add(1);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_y_reg(result);
     0
 }
@@ -888,8 +888,8 @@ fn jsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn lda(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
-    cpu.set_zero_flag(if data == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(data == 0);
+    cpu.status.set_negative(data & 0x80 != 0);
     cpu.set_acc(data);
     0
 }
@@ -897,8 +897,8 @@ fn lda(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn ldx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
-    cpu.set_zero_flag(if data == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(data == 0);
+    cpu.status.set_negative(data & 0x80 != 0);
     cpu.set_x_reg(data);
     0
 }
@@ -906,8 +906,8 @@ fn ldx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn ldy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
-    cpu.set_zero_flag(if data == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(data == 0);
+    cpu.status.set_negative(data & 0x80 != 0);
     cpu.set_y_reg(data);
     0
 }
@@ -916,17 +916,17 @@ fn lsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     // Memory version if data & address given
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
         let result = data >> 1;
-        cpu.set_carry_flag(data & 0x01);
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(0); // result will always have bit 7 == 0
+        cpu.status.set_carry(data & 0x01 == 1);
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(false); // result will always have bit 7 == 0
         cpu.write(address, result);
     }
     // Otherwise, Accumulator version
     else {
         let result = cpu.get_acc() >> 1;
-        cpu.set_carry_flag(cpu.get_acc() & 0x01);
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(0); // result will always have bit 7 == 0
+        cpu.status.set_carry(cpu.get_acc() & 0x01 == 1);
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(false); // result will always have bit 7 == 0
         cpu.set_acc(result);
     }
 
@@ -939,8 +939,8 @@ fn ora(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = cpu.get_acc() | data;
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_acc(result);
     0
 }
@@ -953,14 +953,14 @@ fn pha(cpu: &mut CPU, _: OpcodeData) -> usize {
 fn php(cpu: &mut CPU, _: OpcodeData) -> usize {
     // Bit 5 (unused flag) is always set to 1 when status pushed to stack
     // Bit 4 (break flag) is set when push to stk caused by php or brk
-    cpu.push_to_stack(cpu.get_flags() | 0x30);
+    cpu.push_to_stack(cpu.get_status() | 0x30);
     0
 }
 // PLA - Pull Accumulator
 fn pla(cpu: &mut CPU, _: OpcodeData) -> usize {
     let result = cpu.pop_from_stack();
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.set_acc(result);
     0
 }
@@ -969,25 +969,25 @@ fn plp(cpu: &mut CPU, _: OpcodeData) -> usize {
     // Bit 5 is ignored when pulling into processor status
     // Bit 4 is cleared
     let data = cpu.pop_from_stack() & 0xCF;
-    cpu.set_flags(data | (cpu.get_flags() & 0x20));
+    cpu.set_status(data | (cpu.get_status() & 0x20));
     0
 }
 // ROL - Rotate Left
 fn rol(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     // Memory Version if data & address given
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
-        let result = (data << 1) | cpu.get_carry_flag();
-        cpu.set_carry_flag(data >> 7); // old bit 7 becomes new carry
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        let result = (data << 1) | if cpu.status.carry() { 1 } else { 0 };
+        cpu.status.set_carry(data >> 7 == 1); // old bit 7 becomes new carry
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(result & 0x80 != 0);
         cpu.write(address, result);
     }
     // Otherwise, Accumulator version
     else {
-        let result = (cpu.get_acc() << 1) | cpu.get_carry_flag();
-        cpu.set_carry_flag(cpu.get_acc() >> 7); // old bit 7 becomes new carry
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        let result = (cpu.get_acc() << 1) | if cpu.status.carry() { 1 } else { 0 };
+        cpu.status.set_carry(cpu.get_acc() >> 7 == 1); // old bit 7 becomes new carry
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(result & 0x80 != 0);
         cpu.set_acc(result);
     }
 
@@ -997,18 +997,18 @@ fn rol(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn ror(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     // Memory version if data & address given
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
-        let result = (cpu.get_carry_flag() << 7) | (data >> 1);
-        cpu.set_carry_flag(data & 0x01); // old bit 0 becomes new carry
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (data >> 1);
+        cpu.status.set_carry(data & 0x01 == 1); // old bit 0 becomes new carry
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(result & 0x80 != 0);
         cpu.write(address, result);
     } 
     // Otherwise, Accumulator Version
     else {
-        let result = (cpu.get_carry_flag() << 7) | (cpu.get_acc() >> 1);
-        cpu.set_carry_flag(cpu.get_acc() & 0x01); // old bit 0 becomes new carry
-        cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-        cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+        let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (cpu.get_acc() >> 1);
+        cpu.status.set_carry(cpu.get_acc() & 0x01 == 1); // old bit 0 becomes new carry
+        cpu.status.set_zero(result == 0);
+        cpu.status.set_negative(result & 0x80 != 0);
         cpu.set_acc(result);
     }
 
@@ -1018,7 +1018,7 @@ fn ror(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn rti(cpu: &mut CPU, _: OpcodeData) -> usize {
     // Restore processer status (Bit 5 ignored, bit 4 cleared)
     let prev_status = cpu.pop_from_stack() & 0xCF;
-    cpu.set_flags(prev_status | (cpu.get_flags() & 0x20));
+    cpu.set_status(prev_status | (cpu.get_status() & 0x20));
     // Return to previous PC
     let lo = cpu.pop_from_stack() as u16;
     let hi = cpu.pop_from_stack() as u16;
@@ -1054,17 +1054,17 @@ fn sbc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 // SEC - Set Carry Flag
 fn sec(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.set_carry_flag(1);
+    cpu.status.set_carry(true);
     0
 }
 // SED - Set Decimal Flag
 fn sed(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.set_decimal_flag(1);
+    cpu.status.set_decimal(true);
     0
 }
 // SEI - Set Interrupt Disable
 fn sei(cpu: &mut CPU, _: OpcodeData) -> usize {
-    cpu.set_interrupt_flag(1);
+    cpu.status.set_interrupt(true);
     0
 }
 // STA - Store Accumulator
@@ -1088,29 +1088,29 @@ fn sty(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 // TAX - Transfer Accumulator to X
 fn tax(cpu: &mut CPU, _: OpcodeData) -> usize {
     cpu.set_x_reg(cpu.get_acc());
-    cpu.set_zero_flag(if cpu.get_x_reg() == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if cpu.get_x_reg() & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(cpu.get_x_reg() == 0);
+    cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TAY - Transfer Accumulator to Y
 fn tay(cpu: &mut CPU, _: OpcodeData) -> usize {
     cpu.set_y_reg(cpu.get_acc());
-    cpu.set_zero_flag(if cpu.get_y_reg() == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if cpu.get_y_reg() & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(cpu.get_y_reg() == 0);
+    cpu.status.set_negative(cpu.get_y_reg() & 0x80 != 0);
     0
 }
 // TSX - Transfer Stack Pointer to X
 fn tsx(cpu: &mut CPU, _: OpcodeData) -> usize {
     cpu.set_x_reg(cpu.get_sp());
-    cpu.set_zero_flag(if cpu.get_x_reg() == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if cpu.get_x_reg() & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(cpu.get_x_reg() == 0);
+    cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TXA - Transfer X to Accumulator
 fn txa(cpu: &mut CPU, _: OpcodeData) -> usize {
     cpu.set_acc(cpu.get_x_reg());
-    cpu.set_zero_flag(if cpu.get_acc() == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if cpu.get_acc() & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(cpu.get_acc() == 0);
+    cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
     0
 }
 // TXS - Transfer X to Stack Pointer
@@ -1121,8 +1121,8 @@ fn txs(cpu: &mut CPU, _: OpcodeData) -> usize {
 // TYA - Transfer Y to Accumulator
 fn tya(cpu: &mut CPU, _: OpcodeData) -> usize {
     cpu.set_acc(cpu.get_y_reg());
-    cpu.set_zero_flag(if cpu.get_acc() == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if cpu.get_acc() & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(cpu.get_acc() == 0);
+    cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
     0
 }
 
@@ -1138,8 +1138,8 @@ fn xxx(_: &mut CPU, _: OpcodeData) -> usize { 0 }
 fn lax(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
-    cpu.set_zero_flag(if data == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if data & 0x80 != 0 { 1 } else { 0 });
+    cpu.status.set_zero(data == 0);
+    cpu.status.set_negative(data & 0x80 != 0);
     cpu.set_acc(data);
     cpu.set_x_reg(data);
     0
@@ -1208,10 +1208,10 @@ fn rla(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     // Doing the ROL here because result will be used here anyways
     // avoids computing result twice, plus there is no accumulator version
     // so there's no need to worry abt that
-    let result = (data << 1) | cpu.get_carry_flag();
-    cpu.set_carry_flag(data >> 7); // old bit 7 becomes new carry
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    let result = (data << 1) | if cpu.status.carry() { 1 } else { 0 };
+    cpu.status.set_carry(data >> 7 == 1); // old bit 7 becomes new carry
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.write(address, result);
 
     let new_op_data = OpcodeData{
@@ -1248,10 +1248,10 @@ fn rra(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     // Doing the ROR here because result will be used here anyways
     // avoids computing result twice, plus there is no accumulator version
     // so there's no need to worry abt that
-    let result = (cpu.get_carry_flag() << 7) | (data >> 1);
-    cpu.set_carry_flag(data & 0x01); // old bit 0 becomes new carry
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(if result & 0x80 != 0 { 1 } else { 0 });
+    let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (data >> 1);
+    cpu.status.set_carry(data & 0x01 == 1); // old bit 0 becomes new carry
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
     cpu.write(address, result);
 
     let new_op_data = OpcodeData{
@@ -1269,7 +1269,7 @@ fn rra(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn anc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     and(cpu, opcode_data);
 
-    cpu.set_carry_flag(cpu.get_negative_flag());
+    cpu.status.set_carry(cpu.status.negative());
 
     0
 }
@@ -1278,10 +1278,10 @@ fn anc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn asr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
-    let result = (data & cpu.get_acc()) >> 1 | (cpu.get_carry_flag() << 7);
-    cpu.set_carry_flag(data & cpu.get_acc() & 0x01);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(0);
+    let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);
+    cpu.status.set_carry(data & cpu.get_acc() & 0x01 == 1);
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(false);
     cpu.set_acc(result);
 
     0
@@ -1291,17 +1291,17 @@ fn asr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 fn arr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
     
-    let result = (data & cpu.get_acc()) >> 1 | (cpu.get_carry_flag() << 7);
-    cpu.set_zero_flag(if result == 0 { 1 } else { 0 });
-    cpu.set_negative_flag(0);
+    let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(false);
     cpu.set_acc(result);
     
-    if cpu.get_decimal_flag() == 1 {
-        cpu.set_carry_flag(if result & 0x40 != 0 { 1 } else { 0 });
-        cpu.set_overflow_flag(if result & 0x40 != result & 0x20 { 1 } else { 0 });
+    if cpu.status.decimal() {
+        cpu.status.set_carry(result & 0x40 != 0);
+        cpu.status.set_overflow(result & 0x40 != result & 0x20);
     } else {
-        cpu.set_carry_flag(if (result & 0xF0).wrapping_add(result & 0x10) > 0x50 { 1 } else { 0 });
-        cpu.set_overflow_flag(if result & 0x40 != data & 0x40 { 1 } else { 0 });
+        cpu.status.set_carry((result & 0xF0).wrapping_add(result & 0x10) > 0x50);
+        cpu.status.set_overflow(result & 0x40 != data & 0x40);
     }
 
     0

@@ -7,7 +7,14 @@ use crate::cartridge::cartridge::Cartridge;
 use crate::cartridge::mapper::Mapper;
 
 use super::mem::Memory;
-use super::nes_graphics;
+use super::nes_graphics::{self, DEFAULT_PALETTE};
+
+// NOTE: We may be misunderstanding scanline rendering behavior, in which case these constants may
+// be off by one.
+const SCANWIDTH: usize = 340;
+const SCANLINES: usize = 262;
+const PRIMARY_OAM_SIZE: usize = 256;
+const SECONDARY_OAM_SIZE: usize = 32;
 
 // PPUCTRL Register (write only)
 //     7  bit  0
@@ -144,11 +151,13 @@ impl PpuRegisters {
             5 => 0x00, // Can't read PPUSCROLL
             6 => 0x00, // Can't read PPUADDR
             7 => self.ppu_data.get(),
-            _ => unreachable!("If the laws of physics no longer apply in the future, God help you.")
+            _ => {
+                unreachable!("If the laws of physics no longer apply in the future, God help you.")
+            }
         }
     }
 
-    /// Write a single byte to the PPU Registers. Internal Registers cannot be 
+    /// Write a single byte to the PPU Registers. Internal Registers cannot be
     /// written to, and some registers depend on the internal write latch to
     /// determine which byte is being written.
     pub fn write(&self, address: u16, data: u8) {
@@ -189,33 +198,39 @@ impl PpuRegisters {
 /// Representation of the NES Picture Processing Unit. Details on how the PPU
 /// works can be found here: https://www.nesdev.org/wiki/PPU_registers
 pub struct PPU {
+    // To keep track of scanline rendering
+    dot: usize,
+    scanline: usize,
+
     // Registers
     vram: Memory,
     chr_rom: Memory,
     registers: Rc<PpuRegisters>,
+    primary_oam: Memory,
+    secondary_oam: Memory,
     mapper: Rc<dyn Mapper>,
 
     /// Pagetable 1 & 2 memory
     pgtbl1: [u8; 0x1000],
     pgtbl2: [u8; 0x1000],
-
-    palette: nes_graphics::NESPalette,
 }
 
 impl PPU {
-    /// Create a new PPU 
+    /// Create a new PPU
     ///  * `cart` - The cartridge to attatch to the PPU bus
     pub fn new(chr_rom: Memory, ppu_regs: Rc<PpuRegisters>, mapper: Rc<dyn Mapper>) -> Self {
-        let mut ppu = PPU{
+        let mut ppu = PPU {
+            dot: 0,
+            scanline: 0,
             vram: Memory::new(0x800), // 2KiB ppu ram
             chr_rom: chr_rom,
             registers: Rc::clone(&ppu_regs),
+            primary_oam: Memory::new(PRIMARY_OAM_SIZE),
+            secondary_oam: Memory::new(SECONDARY_OAM_SIZE),
             mapper: Rc::clone(&mapper),
 
             pgtbl1: [0; 0x1000],
             pgtbl2: [0; 0x1000],
-
-            palette: nes_graphics::DEFAULT_PALETTE,
         };
 
         for i in 0..0x1000 {
@@ -228,50 +243,40 @@ impl PPU {
 
     // GETTER / SETTER FUNCTIONS
 
-    /// Reads a single byte from a given address. The ram/rom accessed depends 
+    /// Reads a single byte from a given address. The ram/rom accessed depends
     /// on the address.
-    /// 
+    ///
     /// 0x0000-0x1FFF: Cartridge CHR ROM
-    /// 
+    ///
     /// 0x2000-0x2FFF: VRAM
-    /// 
+    ///
     /// 0x3000-0x3EFF: VRAM (Mirror of 0x2000-0x2EFF)
-    /// 
+    ///
     /// 0x3F00-0x3FFF: palette
-    /// 
+    ///
     ///  * `address` - 16 bit address used to access data
     pub fn read(&self, address: u16) -> u8 {
         let mapped_address = self.mapper.get_ppu_read_addr(address);
         let mapped_addr = mapped_address.unwrap_or(address);
 
         match mapped_addr {
-            0x0000..=0x1FFF => {
-                self.chr_rom.read(mapped_addr)
-            },
-            0x2000..=0x2FFF => {
-                self.vram.read(mapped_addr)
-            },
-            0x3000..=0x3EFF => {
-                self.vram.read(mapped_addr - 0x1000)
-            }
-            0x3F00..=0x3FFF => self.read_palette(address & 0x00FF),
+            0x0000..=0x1FFF => self.chr_rom.read(mapped_addr),
+            // All VRAM addresses should be mapped to the range 0x2000..=0x27FF
+            0x2000..=0x27FF => self.vram.read(mapped_addr & 0x7FF),
+            0x3F00..=0x3FFF => self.vram.read(address & 0x071F),
             _ => 0xEE,
         }
     }
 
-    fn read_palette(&self, address: u16) -> u8 {
-        0
-    }
-
-    /// Write a single byte of data to a given address. The ram accessed depends 
+    /// Write a single byte of data to a given address. The ram accessed depends
     /// on the address.
-    /// 
+    ///
     /// 0x0000-0x1FFF: Cartridge CHR ROM
-    /// 
+    ///
     /// 0x2000-0x3EFF: VRAM
-    /// 
+    ///
     /// 0x3F00-0x3FFF: palettee
-    /// 
+    ///
     ///  * `address` - 16 bit address used to access data
     pub fn write(&self, address: u16, data: u8) {
         let mapped_address = self.mapper.get_ppu_write_addr(address, data);
@@ -280,15 +285,15 @@ impl PPU {
         match mapped_addr {
             0x0000..=0x1FFF => {
                 self.chr_rom.write(mapped_addr, data);
-            },
+            }
             0x2000..=0x2FFF => {
                 self.vram.write(mapped_addr, data);
-            },
+            }
             0x3000..=0x3EFF => {
                 self.vram.write(mapped_addr - 0x1000, data);
             }
-            0x3F00..=0x3FFF => self.write_palette(address & 0x001F, data),
-            _ => {},
+            0x3F00..=0x3FFF => self.vram.write(address & 0x001F, data),
+            _ => {}
         }
     }
 
@@ -300,5 +305,118 @@ impl PPU {
 
     pub fn get_pgtbl2(&self) -> [u8; 0x1000] {
         self.pgtbl2.clone()
+    }
+
+    pub fn cycle(&mut self) {
+        self.dot += 1;
+        if self.dot > SCANWIDTH {
+            self.scanline += 1;
+        }
+
+        if self.scanline > SCANLINES {
+            self.vblank_begin();
+        }
+    }
+
+    fn vblank_begin(&mut self) {
+        // TODO: write code here
+    }
+
+    /// Called every scanline.
+    /// Performs sprite evaluation as detailed here:
+    /// https://www.nesdev.org/wiki/PPU_sprite_evaluation. Scans through primary OAM to determine
+    /// which sprites to draw, and stores those sprites (normally up to 8) in the secondary OAM.
+    /// There are quirks about what happens when there are more than 8 sprites in a scanline - see
+    /// the link for details.
+    fn sprite_evaluation(&mut self) {
+        // Part 1: cycles 1-64
+        for n in 0..SECONDARY_OAM_SIZE {
+            self.secondary_oam.write(n as u16, 0xFF); // The default, meaning "no sprite".
+        }
+
+        // Part 2: cycles 65-256
+        let mut secondary_full = false;
+        let mut sprites_found: usize = 0;
+        for n in 0..64 {
+            let y_coord = self.primary_oam.read(n * 4); // First byte of the nth sprite
+            if !secondary_full {
+                self.secondary_oam
+                    .write((sprites_found * 4) as u16, y_coord);
+
+                // Check if y coordinate is within range of this scanline.
+                let y_diff = self.scanline as isize - y_coord as isize;
+                if y_diff >= 0 && y_diff < 8 {
+                    // TODO: Ensure this works for 8-pixel and 16-pixel.
+                    sprites_found += 1;
+                    if sprites_found == 8 {
+                        secondary_full = true;
+                    }
+                    // Copy the rest of the sprite data to secondary OAM.
+                    self.secondary_oam.write(
+                        (sprites_found * 4 + 1) as u16,
+                        self.primary_oam.read(n * 4 + 1),
+                    );
+                    self.secondary_oam.write(
+                        (sprites_found * 4 + 2) as u16,
+                        self.primary_oam.read(n * 4 + 2),
+                    );
+                    self.secondary_oam.write(
+                        (sprites_found * 4 + 3) as u16,
+                        self.primary_oam.read(n * 4 + 3),
+                    );
+                }
+            }
+        }
+        // Part 3: cycles 257-320
+        //   ¯\_(ツ)_/¯
+
+        // Part 4: cycles 321-340
+        //   ¯\_(ツ)_/¯
+    }
+
+    /// Renders a single scanline. Returns the rendered line as a vector of bytes corresponding to
+    /// NES palette color codes (see https://www.nesdev.org/wiki/PPU_palettes for details), each
+    /// byte corresponding to a single pixel to be rendered.
+    fn render_scanline(&mut self) -> Vec<u8> {
+        let mut rendered_line: Vec<u8> = Vec::new();
+        for v in 0..33 {
+            // Fetch the nametable and attribute table entry for the next background sprite.
+            let nt_entry = self.read((0x2000 + v + (self.scanline / 8) * 32) as u16);
+            let at_entry = self.read(((0x23C0 + (v & 0xFC)) >> (2 * (v & 3))) as u16); // Trust, bro.
+
+            // Use nametable entry to fetch background sprite data.
+            let pt_address = nt_entry as u16 * 16 + (self.scanline as u16) & 7;
+            let pt_entry_lo = self.read(pt_address);
+            let pt_entry_hi = self.read(pt_address + 8);
+
+            // TODO: Sprite evaluation. For now we just render the background.
+            for i in 0..8 {
+                let palette_lookup = at_entry << 2
+                    | ((pt_entry_hi >> (7 - i)) & 1) << 1
+                    | (pt_entry_lo >> (7 - i)) & 1;
+                if palette_lookup & 0b11 == 0 {
+                    rendered_line.push(self.read(0x3F00)); // transparent pixel, render bg color
+                } else {
+                    rendered_line.push(self.read(0x3F00 | palette_lookup as u16));
+                    // get bg sprite color
+                }
+            }
+        }
+        rendered_line
+    }
+
+    pub fn render(&mut self, frame: &mut [u8]) {
+        for i in 0..240 {
+            let rendered_line = self.render_scanline();
+
+            for j in 0..256 {
+                let pix_idx = (i * 256 + j) * 4;
+                let col = DEFAULT_PALETTE[rendered_line[j] as usize];
+                frame[pix_idx + 0] = col.r; 
+                frame[pix_idx + 1] = col.g; 
+                frame[pix_idx + 2] = col.b; 
+                frame[pix_idx + 3] = 0xFF; 
+            }
+        }
     }
 }

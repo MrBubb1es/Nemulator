@@ -14,8 +14,8 @@ pub fn run() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    nes_app.nestest_init();
-    // nes_app.init("games/Super Mario Bros (E).nes");
+    // nes_app.nestest_init();
+    nes_app.init("games/Super Mario Bros (E).nes");
 
     event_loop.run_app(&mut nes_app).unwrap();
 }

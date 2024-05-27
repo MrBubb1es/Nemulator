@@ -41,7 +41,7 @@ impl NES {
         let cart = Cartridge::from_bytes(data.as_slice()).unwrap();
 
         let ppu_regs = Rc::new(PpuRegisters::default());
-        let mapper: Rc<dyn Mapper> = Rc::new(cart.get_mapper());
+        let mapper: Rc<dyn Mapper> = cart.get_mapper();
 
         let ppu = PPU::new(cart.get_chr_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
         let cpu = CPU::new(cart.get_prg_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
@@ -140,6 +140,12 @@ impl NES {
             ppu.get_pgtbl2()
         } else {
             [0; 0x1000]
+        }
+    }
+
+    pub fn render_frame(&mut self, frame: &mut [u8]) {
+        if let Some(ppu) = self.ppu.as_mut() {
+            ppu.render(frame);
         }
     }
 

@@ -10,6 +10,14 @@ pub const GAME_FRAME_WIDTH: usize = 256;
 // 240 pixels for NES + 24 pixels padding on either size
 pub const GAME_FRAME_HEIGHT: usize = 240;
 
+// Array that the NES is given to render to
+pub static mut RENDER_ARR: [u8; 256*240*4] = [0; 256*240*4];
+
+// pub struct DrawState {
+//     zpage_str: String,
+//     updated_nes_pixels:
+// } 
+
 pub mod chars {
     pub const CHAR_WIDTH: usize = 7;
     pub const CHAR_HEIGHT: usize = 8;
@@ -635,18 +643,20 @@ pub fn dot(frame: &mut [u8], frame_width: usize, frame_height: usize, x: usize,
 /// (x_pos, y_pos). Also takes the frame width & height in pixels to ensure no
 /// pixels are drawn outside of the frame.
 pub fn draw_char(frame: &mut [u8], frame_width: usize, frame_height: usize, 
-                character: char, x_pos: usize, y_pos: usize, chr_col: Color, bg_col: Color) {
+                character: char, x_pos: usize, y_pos: usize, chr_col: Color, 
+                bg_col: Color, large_text: bool) {
     let bitmap = chars::get_letter_from_char(character);
+    let scale_factor = if large_text { 2 } else { 1 };
     
     for (y, row) in bitmap.iter().enumerate() {
-        let global_y = y_pos + y;
+        let global_y = y_pos + y*scale_factor;
 
         if global_y >= frame_height {
             break;
         }
 
         for x in 0..8 {
-            let global_x = x_pos + x;
+            let global_x = x_pos + x*scale_factor;
 
             if global_x >= frame_width {
                 break;
@@ -656,54 +666,22 @@ pub fn draw_char(frame: &mut [u8], frame_width: usize, frame_height: usize,
             let pixel_pos = (global_y * frame_width + global_x) * 4;
             let col = if (row >> (7 - x)) & 1 == 1 { chr_col } else { bg_col };
 
-            frame[pixel_pos + 0] = col.r;
-            frame[pixel_pos + 1] = col.g;
-            frame[pixel_pos + 2] = col.b;
-            frame[pixel_pos + 3] = 0xFF; // Alpha
-        }
-    }
-}
-
-/// Draw a single character with 2x width and 2x height to the frame buffer with 
-/// the top left most pixels at (x_pos, y_pos). Also takes the frame width and
-/// height in pixels to ensure no pixels are drawn outside of the frame.
-pub fn draw_large_char(frame: &mut [u8], frame_width: usize, frame_height: usize, 
-    character: char, x_pos: usize, y_pos: usize, chr_col: Color, bg_col: Color) {
-    let bitmap = chars::get_letter_from_char(character);
-
-    for (y, row) in bitmap.iter().enumerate() {
-        let global_y = y_pos + 2*y;
-
-        if global_y >= frame_height {
-            break;
-        }
-
-        for x in 0..8 {
-            let global_x = x_pos + 2*x;
-
-            if global_x >= frame_width {
-                break;
-            }
-            
-            let col = if (row >> (7 - x)) & 1 == 1 { chr_col } else { bg_col };
-            
-            dot(frame, frame_width, frame_height, global_x, global_y, 2, col);
+            dot(frame, frame_width, frame_height, global_x, global_y, scale_factor, col);
         }
     }
 }
 
 /// Draw a string of characters to the frame buffer with the top left most 
 /// pixels at (x_pos, y_pos). Also takes the frame width & height in pixels to 
-/// ensure no pixels are drawn outside of the frame.
+/// ensure no pixels are drawn outside of the frame. Returns an (x, y)
+/// coordinate for where the nect character would go.
 pub fn draw_string(frame: &mut [u8], frame_width: usize, frame_height: usize, 
                 text: &str, x_pos: usize, y_pos: usize, chr_col: Color, 
-                bg_col: Color, large_text: bool) {
+                bg_col: Color, large_text: bool) -> (usize, usize) {
 
     let mut curr_x = x_pos;
     let mut curr_y = y_pos;
 
-    // Use proper draw function
-    let draw_func = if large_text { draw_large_char } else { draw_char };
     let mut horizontal_step = chars::CHAR_WIDTH;
     let mut vertical_step = chars::CHAR_HEIGHT + chars::NEWLINE_PADDING;
     
@@ -719,10 +697,12 @@ pub fn draw_string(frame: &mut [u8], frame_width: usize, frame_height: usize,
             continue;
         }
 
-        draw_func(frame, frame_width, frame_height, character, curr_x, curr_y, chr_col, bg_col); 
+        draw_char(frame, frame_width, frame_height, character, curr_x, curr_y, chr_col, bg_col, large_text); 
         
         curr_x += horizontal_step;       
     }
+
+    (curr_x, curr_y)
 }
 
 pub fn horizontal_line(frame: &mut [u8], frame_width: usize, frame_height: usize, 
@@ -837,8 +817,6 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     horizontal_line(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 382, 632, 4, 2, palette.border_col);
     horizontal_line(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 387, 627, 10, 2, palette.border_col);
 
-    dbg!(frame.len(), frame.len() / DEBUG_FRAME_WIDTH, frame.len() / DEBUG_FRAME_HEIGHT);
-
     // NES SCREEN DECOR
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 5, 34, 520, 488, 2, palette, None);
 
@@ -860,30 +838,41 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 140, 390, 188, 2, palette, Some("Zero-Page"))
 }
 
-pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
+pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &mut NES) {
     draw_nes_screen(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 9, 38, true);
     draw_cpu_state(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 45, palette);
     draw_zpage(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 151, palette);
 }
 
 pub fn draw_nes_screen(frame: &mut [u8], frame_width: usize, frame_height: usize, 
-                    nes: &NES, x: usize, y: usize, double_size: bool) {
+                    nes: &mut NES, x: usize, y: usize, double_size: bool) {
 
-    let scale_factor = if double_size { 2 } else { 1 };
+    // Saftey: RENDER_ARR lives the duration of the program, trust bro.
+    nes.render_frame(unsafe { &mut RENDER_ARR[..] });
 
-    for i in 0..128 {
-        // Top line
-        dot(frame, frame_width, frame_height, x + i*2*scale_factor, y, scale_factor, RED);
-        // Bottom line
-        dot(frame, frame_width, frame_height, x + i*2*scale_factor, y + 239*scale_factor, scale_factor, RED);
+    // unsafe {
+    //     RENDER_ARR[0] = 0xFF;
+    //     RENDER_ARR[1] = 0x00;
+    //     RENDER_ARR[2] = 0x00;
+    //     RENDER_ARR[3] = 0xFF;
 
-        if i < 120 {
-            // Left line
-            dot(frame, frame_width, frame_height, x, y + i*2*scale_factor, scale_factor, RED);
-            // Right line
-            dot(frame, frame_width, frame_height, x + 255*scale_factor, y + i*2*scale_factor, scale_factor, RED);
-        }
-    }
+    //     RENDER_ARR[255*4 + 0] = 0xFF;
+    //     RENDER_ARR[255*4 + 1] = 0x00;
+    //     RENDER_ARR[255*4 + 2] = 0x00;
+    //     RENDER_ARR[255*4 + 3] = 0xFF;
+
+    //     RENDER_ARR[239*256*4 + 0] = 0xFF;
+    //     RENDER_ARR[239*256*4 + 1] = 0x00;
+    //     RENDER_ARR[239*256*4 + 2] = 0x00;
+    //     RENDER_ARR[239*256*4 + 3] = 0xFF;
+
+    //     RENDER_ARR[239*256*4 + 255*4 + 0] = 0xFF;
+    //     RENDER_ARR[239*256*4 + 255*4 + 1] = 0x00;
+    //     RENDER_ARR[239*256*4 + 255*4 + 2] = 0x00;
+    //     RENDER_ARR[239*256*4 + 255*4 + 3] = 0xFF;
+    // }
+
+    
 }
 
 pub fn draw_nes_pagetable(frame: &mut [u8], frame_width: usize, frame_height: usize, 
@@ -928,39 +917,47 @@ pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
     let cpu_state = nes.get_cpu_state();
 
     let mut text = String::with_capacity(200);
-    text.push_str(&format!("A:0x{:02X}  X:0x{:02X}  Y:0x{:02X}\n", cpu_state.acc, cpu_state.x, cpu_state.y));
-    text.push_str(&format!("SP:0x{:02X}  PC:0x{:04X}\n", cpu_state.sp, cpu_state.pc));
+    text.push_str(&format!("A:{:02X}  X:{:02X}  Y:{:02X}\n", cpu_state.acc, cpu_state.x, cpu_state.y));
+    text.push_str(&format!("SP:{:02X}  PC:{:04X}\n", cpu_state.sp, cpu_state.pc));
     text.push_str(&format!("Total Clks:{}\nStatus:", cpu_state.total_clocks));
 
     let status_x = x + 7*2*chars::CHAR_WIDTH;
     let status_y = y + 3*(chars::CHAR_HEIGHT*2 + chars::NEWLINE_PADDING);
 
-    draw_string(frame, frame_width, frame_height, &text, x, y, palette.txt_col, palette.bg_col, true);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, &text, x, y, palette.txt_col, palette.bg_col, true);
     // Flags
-    draw_large_char(frame, frame_width, frame_height, 'N', 
-        status_x + 0 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.negative() { palette.ok_col } else { palette.err_col }, palette.bg_col);
-    draw_large_char(frame, frame_width, frame_height, 'V', 
-        status_x + 1 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.overflow() { palette.ok_col } else { palette.err_col }, palette.bg_col);
-    draw_large_char(frame, frame_width, frame_height, 'U', 
-        status_x + 2 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.negative() { palette.ok_col } else { palette.err_col }, palette.bg_col);
-    draw_large_char(frame, frame_width, frame_height, 'B', 
-        status_x + 3 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.overflow() { palette.ok_col } else { palette.err_col }, palette.bg_col);
-    draw_large_char(frame, frame_width, frame_height, 'D', 
-        status_x + 4 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.decimal() { palette.ok_col } else { palette.err_col }, palette.bg_col);
-    draw_large_char(frame, frame_width, frame_height, 'I', 
-        status_x + 5 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.interrupt() { palette.ok_col } else { palette.err_col }, palette.bg_col);
-    draw_large_char(frame, frame_width, frame_height, 'Z', 
-        status_x + 6 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.zero() { palette.ok_col } else { palette.err_col }, palette.bg_col);
-    draw_large_char(frame, frame_width, frame_height, 'C', 
-        status_x + 7 * (chars::CHAR_WIDTH*2), status_y, 
-        if cpu_state.status.carry() { palette.ok_col } else { palette.err_col }, palette.bg_col);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "N", next_x, next_y, 
+        if cpu_state.status.negative() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "V", next_x, next_y, 
+        if cpu_state.status.overflow() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "U", next_x, next_y, 
+        if cpu_state.status.unused() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "B", next_x, next_y, 
+        if cpu_state.status.b() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "D", next_x, next_y, 
+        if cpu_state.status.decimal() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "I", next_x, next_y, 
+        if cpu_state.status.interrupt() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "Z", next_x, next_y, 
+        if cpu_state.status.zero() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
+    draw_string(frame, frame_width, frame_height, 
+        "C", next_x, next_y, 
+        if cpu_state.status.carry() { palette.ok_col } else { palette.err_col }, 
+        palette.bg_col, true);
 }
 
 fn draw_zpage(frame: &mut [u8], frame_width: usize, frame_height: usize,
@@ -988,6 +985,6 @@ pub fn draw_game_view_bg(frame: &mut [u8], palette: DebugPalette) {
     // draw_box(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, 30, 30, 259, 243, 2, palette, None);
 }
 
-pub fn draw_game_view(frame: &mut [u8], nes: &NES) {
+pub fn draw_game_view(frame: &mut [u8], nes: &mut NES) {
     draw_nes_screen(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, nes, 0, 0, false);
 }

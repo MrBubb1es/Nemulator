@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::cartridge::mapper;
 use crate::system::mem::Memory;
 
@@ -17,43 +19,61 @@ pub enum CartFormat {
 #[derive(Default)]
 pub struct Header {
     // Bytes 0-3
-    identifier: String,
+    /// Cartridge Identifier String - For iNES and NES 2.0 file formats, this
+    /// should be "NES\x1A"
+    pub identifier: String,
     // Byte 4
-    prg_rom_size: u16,
+    /// Number of 16KiB chunks of the Program ROM the cartridge contains 
+    pub prg_rom_size: u16,
     // Byte 5
-    chr_rom_size: u16,
+    /// Number of 8KiB chunks of the Program ROM the cartridge contains
+    pub chr_rom_size: u16,
     // Byte 6
-    mapper_num: u16,
-    alt_nametables: bool,
-    has_trainer: bool, // shouldn't matter for our purposes
-    battery_present: bool,
-    hardwired_nametable: bool,
+    /// Mapper identifier number. See https://www.nesdev.org/wiki/Mapper for an
+    /// extensive list.
+    pub mapper_num: u16,
+    /// Determines whether horizontal/vertical mirroring is present for the ppu
+    /// nametables.
+    ///  * `false` - horizontal/vertical mirroring present
+    ///  * `true` - alternative mirroring present (horizontal/vertical not present)
+    pub alt_nametables: bool,
+    /// Whether the cartridge includes trainer data. Unused in this emulator
+    pub has_trainer: bool, // shouldn't matter for our purposes
+    /// Whether there is a battery present. Unused for this emulator
+    pub battery_present: bool,
+    /// Determines the kind of mirroring the cartridge has for nametables. See
+    /// https://www.nesdev.org/wiki/PPU_nametables for more information.
+    /// 
+    ///  * `false` - Veritical mirroring
+    ///  * `true` - Horizontal mirroring
+    pub hardwired_nametable: bool,
     // Byte 7
-    console_type: u8,
+    /// Type of console cartridge is meant for. Unused in this emulator
+    pub console_type: u8,
     // Byte 8
-    submapper_num: u8,
+    pub submapper_num: u8,
     // Byte 9
     //   more prg/chr rom size
     // Byte 10
-    has_prg_ram: bool,
-    prg_ram_shift: u8,
-    has_prg_nv_ram: bool,
-    prg_nv_ram_shift: u8,
+    pub has_prg_ram: bool,
+    pub prg_ram_shift: u8,
+    pub has_prg_nv_ram: bool,
+    pub prg_nv_ram_shift: u8,
     // Byte 11
-    has_chr_ram: bool,
-    chr_ram_shift: u8,
-    has_chr_nv_ram: bool,
-    chr_nv_ram_shift: u8,
+    pub has_chr_ram: bool,
+    pub chr_ram_shift: u8,
+    pub has_chr_nv_ram: bool,
+    pub chr_nv_ram_shift: u8,
     // Byte 12
-    timing_mode: u8,
+    pub timing_mode: u8,
     // Byte 13
-    vs_hardware_type: u8,
-    vs_ppu_type: u8,
-    extended_console_type: u8,
+    pub vs_hardware_type: u8,
+    pub vs_ppu_type: u8,
+    pub extended_console_type: u8,
     // Byte 14
-    misc_roms_count: u8,
+    pub misc_roms_count: u8,
     // Byte 15
-    default_expansion_device: u8,
+    pub default_expansion_device: u8,
 }
 
 /// Representation of a standard NES Cartridge.
@@ -200,7 +220,7 @@ impl Cartridge {
         self.chr_rom.clone()
     }
 
-    pub fn get_mapper(&self) -> impl Mapper {
+    pub fn get_mapper(&self) -> Rc<dyn Mapper> {
         mapper::get_mapper(self._header.mapper_num)
     }
 }

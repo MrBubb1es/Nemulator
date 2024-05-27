@@ -149,10 +149,10 @@ impl ApplicationHandler for NesApp {
 
                     match self.view_mode {
                         ViewMode::DEBUG => {
-                            draw::draw_debug(frame, draw::DEFAULT_DEBUG_PAL, &self.nes);
+                            draw::draw_debug(frame, draw::DEFAULT_DEBUG_PAL, &mut self.nes);
                         },
                         ViewMode::NORMAL => {
-                            draw::draw_game_view(frame, &self.nes);
+                            draw::draw_game_view(frame, &mut self.nes);
                         }
                     }
 
@@ -185,6 +185,49 @@ impl NesApp {
     }
 
     pub fn switch_view_mode(&mut self) {
+        match self.view_mode {
+            ViewMode::DEBUG => {
+                let buf = self.pixel_buf.as_mut().unwrap();
+                
+                buf.resize_buffer(draw::GAME_FRAME_WIDTH as u32, 
+                    draw::GAME_FRAME_HEIGHT as u32).unwrap();
 
+                let frame = buf.frame_mut();
+                
+                for i in 0..draw::GAME_FRAME_HEIGHT {
+                    for j in 0..draw::GAME_FRAME_WIDTH {
+                        let pix_idx = (i * draw::GAME_FRAME_WIDTH + j) * 4; 
+                        frame[pix_idx + 0] = 0x00;
+                        frame[pix_idx + 1] = 0x00;
+                        frame[pix_idx + 2] = 0x00;
+                        frame[pix_idx + 3] = 0xFF;
+                    }
+                }
+
+                self.view_mode = ViewMode::NORMAL;
+                draw::draw_game_view_bg(frame, draw::DEFAULT_DEBUG_PAL);
+            },
+            ViewMode::NORMAL => {
+                let buf = self.pixel_buf.as_mut().unwrap();
+                
+                buf.resize_buffer(draw::DEBUG_FRAME_WIDTH as u32, 
+                    draw::DEBUG_FRAME_HEIGHT as u32).unwrap();
+                
+                let frame = buf.frame_mut();
+                
+                for i in 0..draw::DEBUG_FRAME_HEIGHT {
+                    for j in 0..draw::DEBUG_FRAME_WIDTH {
+                        let pix_idx = (i * draw::DEBUG_FRAME_WIDTH + j) * 4; 
+                        frame[pix_idx + 0] = 0x00;
+                        frame[pix_idx + 1] = 0x00;
+                        frame[pix_idx + 2] = 0x00;
+                        frame[pix_idx + 3] = 0xFF;
+                    }
+                }
+
+                self.view_mode = ViewMode::DEBUG;
+                draw::draw_debug_bg(frame, DEFAULT_DEBUG_PAL, &self.nes);
+            }
+        }
     }
 }

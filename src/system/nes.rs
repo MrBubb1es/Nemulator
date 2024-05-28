@@ -2,17 +2,38 @@ use std::{borrow::Borrow, fs, io::Read, rc::Rc};
 
 use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 
-use super::{cpu::{self, CpuState, CPU}, ppu::{PpuRegisters, PPU}};
+use super::{cpu::{self, CpuState, Cpu6502}, ppu_util::{PpuMask, PpuRegisters}, ppu::Ppu2C02};
 
-#[derive(Default)]
 pub struct NES {
-    cpu: Option<CPU>,
-    ppu: Option<PPU>,
+    cpu: Option<Cpu6502>,
+    ppu: Option<Ppu2C02>,
     ppu_regs: Option<Rc<PpuRegisters>>,
     mapper: Option<Rc<dyn Mapper>>,
 
+    pub screen_buf: Box<[u8; 256*240*4]>,
+
+    clocks: usize,
+
     cart: Option<Cartridge>,
     cart_loaded: bool,
+}
+
+impl Default for NES {
+    fn default() -> Self {
+        NES {
+            cpu: None,
+            ppu: None,
+            ppu_regs: None,
+            mapper: None,
+
+            screen_buf: Box::new([0; 256*240*4]),
+
+            clocks: 0,
+
+            cart: None,
+            cart_loaded: false,
+        }
+    }
 }
 
 impl NES {
@@ -43,8 +64,8 @@ impl NES {
         let ppu_regs = Rc::new(PpuRegisters::default());
         let mapper: Rc<dyn Mapper> = cart.get_mapper();
 
-        let ppu = PPU::new(cart.get_chr_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
-        let cpu = CPU::new(cart.get_prg_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
+        let ppu = Ppu2C02::new(cart.get_chr_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
+        let cpu = Cpu6502::new(cart.get_prg_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
 
         self.cpu = Some(cpu);
         self.ppu = Some(ppu);
@@ -96,12 +117,12 @@ impl NES {
     }
 
     /// Get a reference to the CPU if a cart is loaded
-    pub fn get_cpu(&self) -> Option<&CPU> {
+    pub fn get_cpu(&self) -> Option<&Cpu6502> {
         self.cpu.as_ref()
     }
 
     /// Get the number of CPU cLocks
-    pub fn get_clks(&self) -> usize {
+    pub fn get_cpu_clks(&self) -> usize {
         if let Some(cpu) = self.cpu.borrow() {
             cpu.total_clocks()
         } else {
@@ -109,13 +130,27 @@ impl NES {
         }
     }
 
-    /// Cycle the CPU if cart is loaded. Returns a bool reporting whether a new
-    /// instruction was executed by the CPU.
-    pub fn cycle(&mut self) -> bool {
+    // Cycles the system through one system clock. The PPU will cycle, the CPU
+    // might cycle (CPU cycles every 3 PPU cycles). Returns an optional bool 
+    // reporting whether the CPU was cycled.
+    pub fn cycle(&mut self) -> Option<bool> {
         if self.cart_loaded {
-            self.cpu.as_mut().unwrap().cycle()
-        } else {
-            false
+            self.ppu.as_mut().unwrap().cycle(self.screen_buf.as_mut_slice());
+
+            if self.clocks % 3 == 0 {
+                return Some(self.cpu.as_mut().unwrap().cycle());
+            }
+        }
+        None
+    }
+
+    /// Cycle the CPU until a new instruction in executed (if cart is loaded).
+    /// Also cycles the PPU.
+    pub fn cycle_instr(&mut self) {
+        while let Some(cpu_cycled) = self.cycle() {
+            if cpu_cycled {
+                return;
+            }
         }
     }
 
@@ -127,25 +162,29 @@ impl NES {
         }
     }
 
-    pub fn get_pgtbl1(&self) -> [u8; 0x1000] {
+    pub fn get_pgtbl1(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.get_pgtbl1()
+            ppu.pgtbl1.clone()
         } else {
-            [0; 0x1000]
+            Box::new([0; 0x1000])
         }
     }
 
-    pub fn get_pgtbl2(&self) -> [u8; 0x1000] {
+    pub fn get_pgtbl2(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.get_pgtbl2()
+            ppu.pgtbl2.clone() // fix this later i too tired
         } else {
-            [0; 0x1000]
+            Box::new([0; 0x1000])
         }
     }
 
-    pub fn render_frame(&mut self, frame: &mut [u8]) {
-        if let Some(ppu) = self.ppu.as_mut() {
-            ppu.render(frame);
+    pub fn cycle_until_frame(&mut self) {
+        if self.cart_loaded {
+            while !self.ppu.as_ref().unwrap().frame_finished() {
+                self.cycle();
+            }
+
+            self.ppu.as_mut().unwrap().set_frame_finished(false);
         }
     }
 
@@ -233,7 +272,7 @@ mod tests {
             assert_eq!(exp_flags, test_nemulator.get_cpu().unwrap().get_status());
             assert_eq!(exp_clks, test_nemulator.get_cpu().unwrap().total_clocks());
 
-            while !test_nemulator.cycle() {}
+            test_nemulator.cycle_instr()
         }
 
         assert_eq!(test_nemulator.get_cpu().unwrap().read(0x0002), 0);

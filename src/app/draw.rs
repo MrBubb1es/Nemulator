@@ -547,11 +547,33 @@ pub mod chars {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Color {
     pub r: u8,
     pub g: u8,
     pub b: u8,
+}
+
+impl From<&[u8]> for Color {
+    fn from(value: &[u8]) -> Self {
+        match value.len() {
+            0 => Color::default(),
+            1 => Color{
+                r: value[0], 
+                ..Default::default()
+            },
+            2 => Color{
+                r: value[0], 
+                g: value[1],
+                ..Default::default()
+            },
+            _ => Color{
+                r: value[0],
+                g: value[1],
+                b: value[2],
+            }
+        }
+    }
 }
 
 pub const RED: Color = Color{r: 255, g: 0, b: 0};
@@ -818,7 +840,7 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     horizontal_line(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 387, 627, 10, 2, palette.border_col);
 
     // NES SCREEN DECOR
-    draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 5, 34, 520, 488, 2, palette, None);
+    draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 5, 34, 518, 486, 2, palette, None);
 
     // PAGETABLE VIEWS
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 378, 290, 150, 2, palette, Some("Pagetables"));
@@ -828,8 +850,8 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     let pgtbl1 = nes.get_pgtbl1();
     let pgtbl2 = nes.get_pgtbl2();
 
-    draw_nes_pagetable(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, &pgtbl1, 546, 392);
-    draw_nes_pagetable(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, &pgtbl2, 690, 392);
+    draw_nes_pagetable(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, 546, 392);
+    draw_nes_pagetable(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, 690, 392);
     
     // CPU INFO DECOR
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 34, 331, 90, 2, palette, Some("CPU Info"));
@@ -838,45 +860,26 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 140, 390, 188, 2, palette, Some("Zero-Page"))
 }
 
-pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &mut NES) {
-    draw_nes_screen(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 9, 38, true);
+pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
+    draw_nes_screen(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, &nes.screen_buf.as_slice(), 9, 38, true);
     draw_cpu_state(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 45, palette);
     draw_zpage(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 151, palette);
 }
 
 pub fn draw_nes_screen(frame: &mut [u8], frame_width: usize, frame_height: usize, 
-                    nes: &mut NES, x: usize, y: usize, double_size: bool) {
-
-    // Saftey: RENDER_ARR lives the duration of the program, trust bro.
-    nes.render_frame(unsafe { &mut RENDER_ARR[..] });
-
-    // unsafe {
-    //     RENDER_ARR[0] = 0xFF;
-    //     RENDER_ARR[1] = 0x00;
-    //     RENDER_ARR[2] = 0x00;
-    //     RENDER_ARR[3] = 0xFF;
-
-    //     RENDER_ARR[255*4 + 0] = 0xFF;
-    //     RENDER_ARR[255*4 + 1] = 0x00;
-    //     RENDER_ARR[255*4 + 2] = 0x00;
-    //     RENDER_ARR[255*4 + 3] = 0xFF;
-
-    //     RENDER_ARR[239*256*4 + 0] = 0xFF;
-    //     RENDER_ARR[239*256*4 + 1] = 0x00;
-    //     RENDER_ARR[239*256*4 + 2] = 0x00;
-    //     RENDER_ARR[239*256*4 + 3] = 0xFF;
-
-    //     RENDER_ARR[239*256*4 + 255*4 + 0] = 0xFF;
-    //     RENDER_ARR[239*256*4 + 255*4 + 1] = 0x00;
-    //     RENDER_ARR[239*256*4 + 255*4 + 2] = 0x00;
-    //     RENDER_ARR[239*256*4 + 255*4 + 3] = 0xFF;
-    // }
-
+                    screen_buf: &[u8], x: usize, y: usize, double_size: bool) {
     
+    let s = if double_size { 2 } else { 1 };
+
+    for (py, row) in screen_buf.chunks(256*4).enumerate() {
+        for (px, pix) in row.chunks(4).enumerate() {
+            dot(frame, frame_width, frame_height, x+s*px, y+s*py, s, Color::from(pix));
+        }
+    }
 }
 
 pub fn draw_nes_pagetable(frame: &mut [u8], frame_width: usize, frame_height: usize, 
-                        pagetable: &[u8], x: usize, y: usize) {
+                        pagetable: Box<[u8; 0x1000]>, x: usize, y: usize) {
     
     const GREYSCALE: [Color; 4] = [
         Color{r: 0x40, g: 0x40, b: 0x40},
@@ -986,5 +989,22 @@ pub fn draw_game_view_bg(frame: &mut [u8], palette: DebugPalette) {
 }
 
 pub fn draw_game_view(frame: &mut [u8], nes: &mut NES) {
-    draw_nes_screen(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, nes, 0, 0, false);
+    draw_nes_screen(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, nes.screen_buf.as_slice(), 0, 0, false);
+}
+
+struct DrawDiff {
+    x: usize,
+    y: usize,
+    col: Color,
+    from_scroll_x: bool,
+    from_scroll_y: bool,
+}
+
+pub struct NesRenderer {
+    nes_screen: [u8; 256*240*4],
+    scroll_x: isize,
+    scroll_y: isize,
+
+    // Vector to keep track of the differences since last frame
+    diffs: Vec<DrawDiff>,
 }

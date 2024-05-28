@@ -69,7 +69,7 @@ impl Mapper for Mapper0 {
         match addr {
             0x0000..=0x1FFF => Some(addr),
             0x2000..=0x3EFF => {
-                let addr = addr & 0x2FFF; // Map 0x3000..=0x3EFF to 0x2000..0x2EFF
+                let addr = addr & 0x2FFF; // Map 0x3XXX to 0x2XXX
                 match self.nt_mirror_type {
                     NametableMirror::Horizontal => {
                         Some(((addr & 0x800) >> 1) | (addr & 0x23FF))
@@ -93,7 +93,18 @@ impl Mapper for Mapper0 {
 
     fn get_ppu_write_addr(&self, addr: u16, _data: u8) -> Option<u16> {
         match addr {
-            0x0000..=0x2000 => Some(addr),
+            0x0000..=0x1FFF => Some(addr),
+            0x2000..=0x3EFF => {
+                // let addr = addr & 0x2FFF; // Map 0x3000..=0x3EFF to 0x2000..0x27FF
+                match self.nt_mirror_type {
+                    NametableMirror::Horizontal => {
+                        Some(((addr & 0x800) >> 1) | (addr & 0x23FF))
+                    },
+                    NametableMirror::Vertical => {
+                        Some(addr & 0x27FF)
+                    }
+                }
+            },
             _ => None,
         }
     }

@@ -2,7 +2,7 @@
 //  - Not all instructions that use abs_x, abs_y, etc. should add the extra 
 //    clock cycle if page boundary crossed. (e.g. SBC does but STA does not)
 
-use crate::system::cpu::CPU;
+use crate::system::cpu::Cpu6502;
 
 // Generic unimplemented opcode instr with given opcode (for differentiating instr calls)
 macro_rules! illegal_op {
@@ -324,8 +324,8 @@ pub struct Instruction {
     pub name: &'static str,
     pub opcode_num: u8,
     pub addr_mode: AddressingMode,
-    pub addr_func: fn(cpu: &CPU) -> (OpcodeData, usize),
-    pub func: fn(cpu: &mut CPU, opcode_data: OpcodeData) -> usize,
+    pub addr_func: fn(cpu: &Cpu6502) -> (OpcodeData, usize),
+    pub func: fn(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize,
     pub base_clocks: usize,
     pub bytes: usize,
     pub has_extra_fetch_cycles: bool,
@@ -340,21 +340,21 @@ pub struct Instruction {
 //
 // Note: Implied addressing mode has no return type because no data is needed for instructions
 // with implied addressing mode.
-fn accumulator(cpu: &CPU) -> (OpcodeData, usize) {
+fn accumulator(cpu: &Cpu6502) -> (OpcodeData, usize) {
     (OpcodeData{ data: Some(cpu.get_acc()), address: None, offset: None }, 0)
 }
 // Implied - no extra data needed for this instruction, read no extra bytes
-fn implied(_: &CPU) -> (OpcodeData, usize) {
+fn implied(_: &Cpu6502) -> (OpcodeData, usize) {
     (OpcodeData{ data: None, address: None, offset: None }, 0)
 }
 // Immediate - data immediatly follows instruction
-fn immediate(cpu: &CPU) -> (OpcodeData, usize) {
+fn immediate(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let data = cpu.read(cpu.get_pc() + 1);
 
     (OpcodeData{ data: Some(data), address: None, offset: None }, 0)
 }
 // Absolute - The next 2 bytes are the address in memory of the data to retrieve
-fn absolute(cpu: &CPU) -> (OpcodeData, usize) {
+fn absolute(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
     let data = cpu.read(abs_address);
     
@@ -363,7 +363,7 @@ fn absolute(cpu: &CPU) -> (OpcodeData, usize) {
 // Indexed Addressing (X) - Like Absolute, but adds the x register to the abs address to get
 // the "effective address," and uses that to fetch data from memory.
 // Also known as Absolute X addressing.
-fn absolute_x(cpu: &CPU) -> (OpcodeData, usize) {
+fn absolute_x(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
     let effective_address = abs_address.wrapping_add(cpu.get_x_reg() as u16);
     let data = cpu.read(effective_address);
@@ -381,7 +381,7 @@ fn absolute_x(cpu: &CPU) -> (OpcodeData, usize) {
 }
 // Indexed Addressing (Y) - Like same as Indexed x, but used the y register instead.
 // Also known as Absolute Y addressing.
-fn absolute_y(cpu: &CPU) -> (OpcodeData, usize) {
+fn absolute_y(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
     let effective_address = abs_address.wrapping_add(cpu.get_y_reg() as u16);
     let data = cpu.read(effective_address);
@@ -398,7 +398,7 @@ fn absolute_y(cpu: &CPU) -> (OpcodeData, usize) {
     )
 }
 // Zero Page - Like absolute, but uses only 1 byte for address & uses 0x00 for the high byte of the address
-fn zero_page(cpu: &CPU) -> (OpcodeData, usize) {
+fn zero_page(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1) as u16;
     let data = cpu.read(zpage_address);
 
@@ -416,7 +416,7 @@ fn zero_page(cpu: &CPU) -> (OpcodeData, usize) {
 // the effective address. Note that the effective address will never go off the zero-page, if
 // the address exceeds 0x00FF, it will loop back around to 0x0000.
 // Also known as Zero Page X addressing.
-fn zpage_x(cpu: &CPU) -> (OpcodeData, usize) {
+fn zpage_x(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1);
     let effective_zpage_address = zpage_address.wrapping_add(cpu.get_x_reg()) as u16;
     let data = cpu.read(effective_zpage_address);
@@ -432,7 +432,7 @@ fn zpage_x(cpu: &CPU) -> (OpcodeData, usize) {
 }
 // Indexed Addressing Zero-Page (Y) - Like Indexed Z-Page x, but uses the y register instead
 // Also known as Zero Page Y addressing.
-fn zpage_y(cpu: &CPU) -> (OpcodeData, usize) {
+fn zpage_y(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1);
     let effective_zpage_address = zpage_address.wrapping_add(cpu.get_y_reg()) as u16;
     let data = cpu.read(effective_zpage_address);
@@ -452,7 +452,7 @@ fn zpage_y(cpu: &CPU) -> (OpcodeData, usize) {
 // Note: This mode has a hardware bug where a page boundary cannot be crossed by 
 // the reading of 2 bytes from abs_address, and therefore it can take no
 // additional clock cycles.
-fn indirect(cpu: &CPU) -> (OpcodeData, usize) {
+fn indirect(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
 
     let effective_lo = cpu.read(abs_address) as u16;
@@ -478,7 +478,7 @@ fn indirect(cpu: &CPU) -> (OpcodeData, usize) {
 // address is read from memory instead of the data. The address read is the effective
 // address of the actual data. Note that if the z-page address is 0x00FF, then the bytes at
 // 0x00FF and 0x0000 are read and used as low and high bytes of the effective address, respectively
-fn indirect_x(cpu: &CPU) -> (OpcodeData, usize) {
+fn indirect_x(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1).wrapping_add(cpu.get_x_reg());
     let effective_address = cpu.read_zpage_word(zpage_address);
     let data = cpu.read(effective_address);
@@ -495,7 +495,7 @@ fn indirect_x(cpu: &CPU) -> (OpcodeData, usize) {
 // Post-Indexed Indirect Zero-Page (Y) - Like Indirect Indexed Z-Page x, but with two major differences:
 // First, the y register is used instead of x. Second, the register is added to the address
 // retrieved from the z-page, not the address used to access the z-page.
-fn indirect_y(cpu: &CPU) -> (OpcodeData, usize) {
+fn indirect_y(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1);
     let abs_address = cpu.read_zpage_word(zpage_address);
     let effective_address = abs_address.wrapping_add(cpu.get_y_reg() as u16);
@@ -514,7 +514,7 @@ fn indirect_y(cpu: &CPU) -> (OpcodeData, usize) {
 }
 // Relative Addressing - Gets the next bytes as a signed byte to be added to the pc for branch
 // instructions.
-fn relative(cpu: &CPU) -> (OpcodeData, usize) {
+fn relative(cpu: &Cpu6502) -> (OpcodeData, usize) {
     let data = cpu.read(cpu.get_pc() + 1) as i8;
     let address = (cpu.get_pc() as i32 + data as i32) as u16;
 
@@ -539,7 +539,7 @@ fn relative(cpu: &CPU) -> (OpcodeData, usize) {
 //  - Number of clock cycles taken by the instruction
 
 // ADC - Add Memory to Accumulator with Carry
-fn adc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn adc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (data as u16) + (cpu.get_acc() as u16) + (cpu.status.carry() as u16);
@@ -558,7 +558,7 @@ fn adc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // AND - AND Memory with Accumulator
-fn and(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn and(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = cpu.get_acc() & data;
@@ -568,7 +568,7 @@ fn and(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // ASL - Shift Left One Bit
-fn asl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn asl(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
         let result = data << 1;
         cpu.status.set_carry((data & 0x80) != 0);
@@ -587,7 +587,7 @@ fn asl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BCC - Branch on Carry Clear
-fn bcc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bcc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if !cpu.status.carry() {
@@ -605,7 +605,7 @@ fn bcc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BCS - Branch on Carry Set
-fn bcs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bcs(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.status.carry() {
@@ -624,7 +624,7 @@ fn bcs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BEQ - Branch on Equal (Zero flag set)
-fn beq(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn beq(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.status.zero() {
@@ -643,7 +643,7 @@ fn beq(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BIT - Test Bits in Memory with Accumulator
-fn bit(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bit(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     cpu.status.set_negative(data & 0x80 != 0);
@@ -652,7 +652,7 @@ fn bit(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BMI - Branch on Result Minus (Negative flag set)
-fn bmi(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bmi(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.status.negative() {
@@ -670,7 +670,7 @@ fn bmi(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BNE - Branch on Not Equal (Zero flag NOT set)
-fn bne(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bne(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if !cpu.status.zero() {
@@ -688,7 +688,7 @@ fn bne(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BPL - Branch on Result Plus (Negative flag NOT set)
-fn bpl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bpl(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if !cpu.status.negative() {
@@ -706,13 +706,13 @@ fn bpl(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BRK - Force Break (Initiate interrupt)
-fn brk(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn brk(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.irq();
 
     0
 }
 // BVC - Branch on Overflow clear
-fn bvc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bvc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if !cpu.status.overflow() {
@@ -730,7 +730,7 @@ fn bvc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // BVS - Branch on Overflow set
-fn bvs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn bvs(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let offset = opcode_data.offset.unwrap();
 
     if cpu.status.overflow() {
@@ -748,27 +748,27 @@ fn bvs(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // CLC - Clear Carry Flag
-fn clc(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn clc(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.status.set_carry(false);
     0
 }
 // CLD - Clear Decimal Mode
-fn cld(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn cld(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.status.set_decimal(false);
     0
 }
 // CLI - Clear Interrupt Disable Bit
-fn cli(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn cli(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.status.set_interrupt(false);
     0
 }
 // CLV - Clear Overflow Flag
-fn clv(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn clv(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.status.set_overflow(false);
     0
 }
 // CMP - Compare Memory with Accumulator
-fn cmp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn cmp(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (cpu.get_acc() as i16) - (data as i16);
@@ -778,7 +778,7 @@ fn cmp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // CPX - Compare Memory and Index X
-fn cpx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn cpx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (cpu.get_x_reg() as i16) - (data as i16);
@@ -788,7 +788,7 @@ fn cpx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // CPY - Compare Memory and Index Y
-fn cpy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn cpy(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (cpu.get_y_reg() as i16) - (data as i16);
@@ -798,7 +798,7 @@ fn cpy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // DEC - Decrement Memory
-fn dec(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn dec(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
     let address = opcode_data.address.unwrap();
 
@@ -809,7 +809,7 @@ fn dec(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // DEX - Decrement X Register
-fn dex(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn dex(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     let result = cpu.get_x_reg().wrapping_sub(1);
     
     cpu.status.set_zero(result == 0);
@@ -818,7 +818,7 @@ fn dex(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // DEY - Decrement Y Register
-fn dey(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn dey(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     let result = cpu.get_y_reg().wrapping_sub(1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -826,7 +826,7 @@ fn dey(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // EOR - Exclusive OR
-fn eor(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn eor(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = cpu.get_acc() ^ data;
@@ -836,7 +836,7 @@ fn eor(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // INC - Increment Memory
-fn inc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn inc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
     let address = opcode_data.address.unwrap();
 
@@ -847,7 +847,7 @@ fn inc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // INX - Increment X Register
-fn inx(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn inx(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     let result = cpu.get_x_reg().wrapping_add(1);
 
     cpu.status.set_zero(result == 0);
@@ -856,7 +856,7 @@ fn inx(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // INY - Increment Y Register
-fn iny(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn iny(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     let result = cpu.get_y_reg().wrapping_add(1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -864,14 +864,14 @@ fn iny(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // JMP - Jump
-fn jmp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn jmp(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
 
     cpu.set_pc(address);
     0
 }
 // JSR - Jump to Subroutine
-fn jsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn jsr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
 
     let return_point = cpu.get_pc().wrapping_sub(1); // Return point is pc - 1
@@ -885,7 +885,7 @@ fn jsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // LDA - Load Accumulator
-fn lda(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn lda(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     cpu.status.set_zero(data == 0);
@@ -894,7 +894,7 @@ fn lda(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // LDX - Load X Register
-fn ldx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn ldx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     cpu.status.set_zero(data == 0);
@@ -903,7 +903,7 @@ fn ldx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // LDY - Load Y Register
-fn ldy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn ldy(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     cpu.status.set_zero(data == 0);
@@ -912,7 +912,7 @@ fn ldy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // LSR - Logical Shift Right
-fn lsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn lsr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     // Memory version if data & address given
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
         let result = data >> 1;
@@ -933,9 +933,9 @@ fn lsr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // NOP - No Operation
-fn nop(_: &mut CPU, _: OpcodeData) -> usize { 0 }
+fn nop(_: &mut Cpu6502, _: OpcodeData) -> usize { 0 }
 // ORA - Logical Inclusive OR
-fn ora(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn ora(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = cpu.get_acc() | data;
@@ -945,19 +945,19 @@ fn ora(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // PHA - Push Accumulator
-fn pha(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn pha(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.push_to_stack(cpu.get_acc());
     0
 }
 // PHP - Push Processor Status
-fn php(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn php(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     // Bit 5 (unused flag) is always set to 1 when status pushed to stack
     // Bit 4 (break flag) is set when push to stk caused by php or brk
     cpu.push_to_stack(cpu.get_status() | 0x30);
     0
 }
 // PLA - Pull Accumulator
-fn pla(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn pla(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     let result = cpu.pop_from_stack();
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -965,7 +965,7 @@ fn pla(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // PLP - Pull Processor Status
-fn plp(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn plp(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     // Bit 5 is ignored when pulling into processor status
     // Bit 4 is cleared
     let data = cpu.pop_from_stack() & 0xCF;
@@ -973,7 +973,7 @@ fn plp(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // ROL - Rotate Left
-fn rol(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn rol(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     // Memory Version if data & address given
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
         let result = (data << 1) | if cpu.status.carry() { 1 } else { 0 };
@@ -994,7 +994,7 @@ fn rol(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // ROR - Rotate Right
-fn ror(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn ror(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     // Memory version if data & address given
     if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
         let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (data >> 1);
@@ -1015,7 +1015,7 @@ fn ror(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     0
 }
 // RTI - Return from Interrupt
-fn rti(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn rti(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     // Restore processer status (Bit 5 ignored, bit 4 cleared)
     let prev_status = cpu.pop_from_stack() & 0xCF;
     cpu.set_status(prev_status | (cpu.get_status() & 0x20));
@@ -1027,7 +1027,7 @@ fn rti(cpu: &mut CPU, _: OpcodeData) -> usize {
     0
 }
 // RTS - Return from Subroutine
-fn rts(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn rts(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     let lo = cpu.pop_from_stack() as u16;
     let hi = cpu.pop_from_stack() as u16;
     let new_pc = (hi << 8) | lo;
@@ -1037,7 +1037,7 @@ fn rts(cpu: &mut CPU, _: OpcodeData) -> usize {
 // SBC - Subtract with Carry
 //  Note: instr 0xEB (illegal opcode) executes the same as 0xE9, which is legal.
 //        0xEB is differentiated in the table only by the name "USBC" for "Undocumented SBC"
-fn sbc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn sbc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
     // Add with carry: A + M + C
     // Sub with carry: A - M - (1 - C) == A + (-M - 1) + C
@@ -1053,73 +1053,73 @@ fn sbc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
     adc(cpu, new_opcode_data)
 }
 // SEC - Set Carry Flag
-fn sec(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn sec(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.status.set_carry(true);
     0
 }
 // SED - Set Decimal Flag
-fn sed(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn sed(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.status.set_decimal(true);
     0
 }
 // SEI - Set Interrupt Disable
-fn sei(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn sei(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.status.set_interrupt(true);
     0
 }
 // STA - Store Accumulator
-fn sta(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn sta(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
     cpu.write(address, cpu.get_acc());
     0
 }
 // STX - Store X Register
-fn stx(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn stx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
     cpu.write(address, cpu.get_x_reg());
     0
 }
 // STY - Store Y Register
-fn sty(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn sty(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
     cpu.write(address, cpu.get_y_reg());
     0
 }
 // TAX - Transfer Accumulator to X
-fn tax(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn tax(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.set_x_reg(cpu.get_acc());
     cpu.status.set_zero(cpu.get_x_reg() == 0);
     cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TAY - Transfer Accumulator to Y
-fn tay(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn tay(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.set_y_reg(cpu.get_acc());
     cpu.status.set_zero(cpu.get_y_reg() == 0);
     cpu.status.set_negative(cpu.get_y_reg() & 0x80 != 0);
     0
 }
 // TSX - Transfer Stack Pointer to X
-fn tsx(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn tsx(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.set_x_reg(cpu.get_sp());
     cpu.status.set_zero(cpu.get_x_reg() == 0);
     cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TXA - Transfer X to Accumulator
-fn txa(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn txa(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.set_acc(cpu.get_x_reg());
     cpu.status.set_zero(cpu.get_acc() == 0);
     cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
     0
 }
 // TXS - Transfer X to Stack Pointer
-fn txs(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn txs(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.set_sp(cpu.get_x_reg());
     0
 }
 // TYA - Transfer Y to Accumulator
-fn tya(cpu: &mut CPU, _: OpcodeData) -> usize {
+fn tya(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     cpu.set_acc(cpu.get_y_reg());
     cpu.status.set_zero(cpu.get_acc() == 0);
     cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
@@ -1131,11 +1131,11 @@ fn tya(cpu: &mut CPU, _: OpcodeData) -> usize {
 
 // INVALID OPCODE - An unimplemented opcode not recognized by the CPU.
 //                  Placeholder for all unimplemented illegal opcodes.
-fn xxx(_: &mut CPU, _: OpcodeData) -> usize { 0 }
+fn xxx(_: &mut Cpu6502, _: OpcodeData) -> usize { 0 }
 
 
 // LAX - Load Accumulator and X Register
-fn lax(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn lax(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     cpu.status.set_zero(data == 0);
@@ -1146,7 +1146,7 @@ fn lax(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // SAX - Store Accumulator & X Register (bitwise acc & x)
-fn sax(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn sax(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let address = opcode_data.address.unwrap();
     
     let result = cpu.get_acc() & cpu.get_x_reg();
@@ -1156,7 +1156,7 @@ fn sax(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // DCP - Decrement Memory and Compare with Accumulator
-fn dcp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn dcp(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     dec(cpu, opcode_data);
 
     let new_op_data = OpcodeData{
@@ -1171,7 +1171,7 @@ fn dcp(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // ISC - Increment Memory and Subtract with Carry
-fn isc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn isc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     inc(cpu, opcode_data);
 
     let new_op_data = OpcodeData{
@@ -1186,7 +1186,7 @@ fn isc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // SLO - Arithmetic Shift Left then Logical Inclusive OR
-fn slo(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn slo(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     asl(cpu, opcode_data);
 
     let new_op_data = OpcodeData{
@@ -1201,7 +1201,7 @@ fn slo(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // RLA - Rotate Left then Logical AND with Accumulator
-fn rla(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn rla(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
     let address = opcode_data.address.unwrap();
 
@@ -1226,7 +1226,7 @@ fn rla(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // SRE - Logical Shift Right then "Exclusive OR" Memory with Accumulator
-fn sre(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn sre(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     lsr(cpu, opcode_data);
 
     let new_op_data = OpcodeData{
@@ -1241,7 +1241,7 @@ fn sre(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // RRA - Rotate Right and Add Memory to Accumulator
-fn rra(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn rra(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap(); 
     let address = opcode_data.address.unwrap();
 
@@ -1266,7 +1266,7 @@ fn rra(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // ANC - Bitwise AND Memory with Accumulator then Move Negative Flag to Carry Flag
-fn anc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn anc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     and(cpu, opcode_data);
 
     cpu.status.set_carry(cpu.status.negative());
@@ -1275,7 +1275,7 @@ fn anc(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // ALR - Bitwise AND Memory with Accumulator then Logical Shift Right
-fn asr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn asr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
 
     let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);
@@ -1288,7 +1288,7 @@ fn asr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
 }
 
 // ARR - Bitwise AND Memory with Accumulator then Rotate Right
-fn arr(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+fn arr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     let data = opcode_data.data.unwrap();
     
     let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);

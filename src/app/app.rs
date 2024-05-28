@@ -115,7 +115,7 @@ impl ApplicationHandler for NesApp {
                         NamedKey::Space,
                     ),
                     state: ElementState::Pressed,
-                    repeat: false,
+                    // repeat: false,
                     ..
                 },
                 ..
@@ -123,7 +123,7 @@ impl ApplicationHandler for NesApp {
                 // if !self.nes.handle_input()
                 if self.modifiers.unwrap().state().shift_key() {
                     if self.paused {
-                        self.nes.cycle();
+                        self.nes.cycle_instr();
                     } else {
                         self.paused = true;
                     }
@@ -169,7 +169,7 @@ impl ApplicationHandler for NesApp {
         }
 
         if !self.paused {
-            self.nes.cycle();
+            self.nes.cycle_until_frame();
         }
     }
 }
@@ -181,7 +181,7 @@ impl NesApp {
 
     pub fn nestest_init(&mut self) {
         self.nes.load_cart("prg_tests/nestest.nes");
-        self.nes.set_cpu_state(Some(0xC000), None, None, None, None, None, None);
+        // self.nes.set_cpu_state(Some(0xC000), None, None, None, None, None, None);
     }
 
     pub fn switch_view_mode(&mut self) {

@@ -7,7 +7,7 @@ use crate::cartridge::mapper::Mapper;
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
 use super::mem::Memory;
-use super::ppu::PpuRegisters;
+use super::ppu_util::PpuRegisters;
 
 // NVUBDIZC
 #[bitfield(u8)]
@@ -38,7 +38,7 @@ pub struct CpuState {
 /// the lab have already done extensive research and documentation of this
 /// particular device, so if you ever have questions about why things are the
 /// way they are, check this wiki: https://www.nesdev.org/wiki/CPU
-pub struct CPU {
+pub struct Cpu6502 {
     acc: u8,
     x: u8,
     y: u8,
@@ -58,10 +58,10 @@ pub struct CPU {
     instr_data: OpcodeData,
 }
 
-impl CPU {
+impl Cpu6502 {
     /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
     pub fn new(prg_rom: Memory, ppu_regs: Rc<PpuRegisters>, mapper: Rc<dyn Mapper>) -> Self {
-        let mut new_cpu = CPU{
+        let mut new_cpu = Cpu6502{
             acc: 0,
             x: 0,
             y: 0,

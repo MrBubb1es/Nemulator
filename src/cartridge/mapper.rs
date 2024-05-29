@@ -1,8 +1,10 @@
-use std::rc::Rc;
+use std::{default, rc::Rc};
 
-use super::cartridge::Header;
+use super::{cartridge::Header, Cartridge};
 
+#[derive(Default)]
 enum NametableMirror {
+    #[default]
     Vertical,
     Horizontal,
 }
@@ -44,8 +46,10 @@ pub trait Mapper {
 /// The simplest mapper, and the most common.
 /// PRG: 0x8000-BFFF (mirrored 0xC000-FFFF)
 /// CHR: 0x0000-2000
+#[derive(Default)]
 struct Mapper0 {
     nt_mirror_type: NametableMirror,
+    num_prg_banks: usize,
 }
 
 impl Mapper for Mapper0 {
@@ -55,12 +59,13 @@ impl Mapper for Mapper0 {
         } else {
             NametableMirror::Vertical
         };
+
+        self.num_prg_banks = Cartridge::rom_size(header.prg_rom_size);
     }
 
     fn get_cpu_read_addr(&self, addr: u16) -> Option<u16> {
         match addr {
-            0x8000..=0xBFFF => Some(addr - 0x8000),
-            0xC000..=0xFFFF => Some(addr - 0xC000),
+            0x8000..=0xFFFF => Some(addr & (if self.num_prg_banks > 1 { 0x7FFF } else { 0x3FFF })),
             _ => None,
         }
     }
@@ -68,25 +73,13 @@ impl Mapper for Mapper0 {
     fn get_ppu_read_addr(&self, addr: u16) -> Option<u16> {
         match addr {
             0x0000..=0x1FFF => Some(addr),
-            0x2000..=0x3EFF => {
-                let addr = addr & 0x2FFF; // Map 0x3XXX to 0x2XXX
-                match self.nt_mirror_type {
-                    NametableMirror::Horizontal => {
-                        Some(((addr & 0x800) >> 1) | (addr & 0x23FF))
-                    },
-                    NametableMirror::Vertical => {
-                        Some(addr & 0x27FF)
-                    }
-                }
-            },
             _ => None,
         }
     }
 
     fn get_cpu_write_addr(&self, addr: u16, _data: u8) -> Option<u16> {
         match addr {
-            0x8000..=0xBFFF => Some(addr - 0x8000),
-            0xC000..=0xFFFF => Some(addr - 0xC000),
+            0x8000..=0xFFFF => Some(addr & (if self.num_prg_banks > 1 { 0x7FFF } else { 0x3FFF })),
             _ => None,
         }
     }
@@ -94,17 +87,6 @@ impl Mapper for Mapper0 {
     fn get_ppu_write_addr(&self, addr: u16, _data: u8) -> Option<u16> {
         match addr {
             0x0000..=0x1FFF => Some(addr),
-            0x2000..=0x3EFF => {
-                // let addr = addr & 0x2FFF; // Map 0x3000..=0x3EFF to 0x2000..0x27FF
-                match self.nt_mirror_type {
-                    NametableMirror::Horizontal => {
-                        Some(((addr & 0x800) >> 1) | (addr & 0x23FF))
-                    },
-                    NametableMirror::Vertical => {
-                        Some(addr & 0x27FF)
-                    }
-                }
-            },
             _ => None,
         }
     }
@@ -112,7 +94,7 @@ impl Mapper for Mapper0 {
 
 pub fn get_mapper(mapper_id: u16) -> Rc<dyn Mapper> {
     match mapper_id {
-        0 => Rc::new(Mapper0{nt_mirror_type:NametableMirror::Horizontal}),
-        _ => Rc::new(Mapper0{nt_mirror_type:NametableMirror::Horizontal}), 
+        0 => Rc::new(Mapper0::default()),
+        _ => Rc::new(Mapper0::default()), 
     }
 }

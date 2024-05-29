@@ -201,7 +201,7 @@ impl Cartridge {
 
     /// Translates from the prg/chr ROM size specified by the header to the
     /// actual number of bytes to read in from the cart file.
-    fn rom_size(rom_size_bytes: u16) -> usize {
+    pub fn rom_size(rom_size_bytes: u16) -> usize {
         if (rom_size_bytes & 0xF00) == 0xF00 {
             let mm = (rom_size_bytes & 0x3) as usize;
             let exp = (rom_size_bytes & 0xFC) >> 2;

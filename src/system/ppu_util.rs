@@ -28,6 +28,9 @@ pub struct PpuRegisters {
     fine_x: Cell<u8>,
     // First or second write toggle (least significant bit)
     write_latch: Cell<u8>,
+
+    // Set every time the CPU writes data to the PPUDATA register
+    write_ppu_data: Cell<bool>,
 }
 
 impl PpuRegisters {
@@ -142,9 +145,9 @@ impl PpuRegisters {
             7 => {
                 self.ppu_data.set(data);
 
-                self.v_reg.set(PpuScrollPos(
-                    self.v_reg.get().0 + if self.ppu_ctrl.get().vram_addr_inc() == 0 { 1 } else { 32 }
-                ));
+                self.write_ppu_data.set(true);
+
+                self.set_v_reg(self.v_val() + if self.ppu_ctrl.get().vram_addr_inc() == 0 { 1 } else { 32 });
             },
             _ => unreachable!("Well done. Here are the test results: \"You are a horrible person.\" I'm serious, that's what it says: \"A horrible person.\" We weren't even testing for that.")
         };
@@ -221,8 +224,12 @@ impl PpuRegisters {
         self.fine_x.get()
     }
     /// Get a copy of the value of the write latch register
-    pub fn get_write_latch(&self) -> u8 {
+    pub fn write_latch(&self) -> u8 {
         self.write_latch.get()
+    }
+    /// Get a copy of the flag keeping track of when the CPU writes to PPUDATA
+    pub fn write_ppu_data(&self) -> bool {
+        self.write_ppu_data.get()
     }
 
 
@@ -406,6 +413,10 @@ impl PpuRegisters {
     /// Set the value of the write latch register
     pub fn set_write_latch(&self, val: u8) {
         self.write_latch.set(val);
+    }
+
+    pub fn set_write_ppu_data(&self, val: bool) {
+        self.write_ppu_data.set(val);
     }
 }
 

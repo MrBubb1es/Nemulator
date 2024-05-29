@@ -15,6 +15,7 @@ pub struct Ppu2C02 {
     scanline: usize,
 
     vram: Memory,
+    palette_mem: Memory,
     chr_rom: Memory,
     registers: Rc<PpuRegisters>,
     primary_oam: Memory,
@@ -55,6 +56,7 @@ impl Ppu2C02 {
             dot: 0,
             scanline: 0,
             vram: Memory::new(0x800), // 2KiB ppu ram
+            palette_mem: Memory::new(0x20),
             chr_rom: chr_rom,
             registers: Rc::clone(&ppu_regs),
             primary_oam: Memory::new(PRIMARY_OAM_SIZE),
@@ -83,6 +85,17 @@ impl Ppu2C02 {
             ppu.pgtbl2[i as usize] = ppu.read(i | 0x1000);
         }
 
+        // let data = 0x2C;
+        // for addr in 0x2000..=0x3EFF {
+        //     ppu.write(addr, data);
+
+        //     assert_eq!(ppu.read(addr), data);
+        // }
+
+        // for addr in 0x3F00..=0x3FFF {
+        //     ppu.write(addr, addr as u8 & 0x1F);
+        // }
+
         ppu
     }
 
@@ -90,19 +103,24 @@ impl Ppu2C02 {
     pub fn cycle(&mut self, frame: &mut [u8]) {
         self.frame_finished = false;
 
+        if self.registers.write_ppu_data() {
+            self.write(self.registers.v_val(), self.registers.data());
+            self.registers.set_write_ppu_data(false);
+        }
+
         match self.scanline {
             0..=239 => { // Visible cycles
                 self.visible_scanline_cycle();
             }
-            240 => {}, // Idle cycle (technically the start of vblank, but the
-                       // vblank flag isn't set until dot 1 of scanline 241)
+            240 => {}, // Idle scanline (technically the start of vblank, but 
+                       // the vblank flag isn't set until dot 1 of scanline 241)
             241 => { // Start of vblank
                 if self.dot == 1 {
                     self.registers.set_in_vblank(1);
-                }
-
-                if self.registers.ctrl().vblank_nmi() == 1 {
-                    self.trigger_nmi();
+                
+                    if self.registers.ctrl().vblank_nmi() == 1 {
+                        self.trigger_nmi();
+                    }
                 }
             }
             242..=260 => {}, // Idle cycles
@@ -143,9 +161,7 @@ impl Ppu2C02 {
     /// Helper function to handle the memory accesses/internal register changes
     /// that occur during a visible scanline (and the pre-render scanline).
     fn visible_scanline_cycle(&mut self) {
-        if self.scanline == 0 && self.dot == 0 {
-            self.dot = 1; // This is to handle the odd frame cycle skip
-        }
+        // NEED TO HANDLE ODD FRAME SKIP
 
         match self.dot {
             0 => {}, // Idle dot
@@ -154,7 +170,10 @@ impl Ppu2C02 {
 
                 // Update internal buffers & registers
                 match (self.dot - 1) & 7 {
-                    0 => { self.load_nt_buffer(); },
+                    0 => { 
+                        self.load_shift_regs();
+                        self.load_nt_buffer(); 
+                    },
                     2 => { self.load_attrib_buffer(); },
                     4 => { self.load_bg_lsb_buffer(); },
                     6 => { self.load_bg_msb_buffer(); },
@@ -205,7 +224,7 @@ impl Ppu2C02 {
     /// Takes in a 2 bit palette value and 2 bit pixel value and returns the
     /// color of the pixel as a NesColor
     fn color_from_tile_data(&self, palette: u16, pixel: u16) -> NesColor {
-        DEFAULT_PALETTE[self.read(0x3F00 + (palette << 2) + pixel) as usize & 0x3F]
+        DEFAULT_PALETTE[self.read(0x3F00 | (palette << 2) | pixel) as usize & 0x3F]
     }
 
     /// PPU reads a single byte from a given address. The ram/rom accessed 
@@ -221,36 +240,35 @@ impl Ppu2C02 {
     ///
     ///  * `address` - 16 bit address used to access data
     pub fn read(&self, address: u16) -> u8 {
-        // Address is in palette memory, don't map address anywhere
-        if address >= 0x3F00 {
-            let mut data = if address & 3 == 0 {
-                self.vram.read(address & 0x70C) // Does all of the mapping above
-            } else {
-                self.vram.read(address & 0x1F)
-            };
-
-            if self.registers.mask().greyscale() == 1 {
-                data &= 0x30;
-            } else {
-                data &= 0x3F;
-            }
-
-            return data;
-        }
-
-        // Otherwise the cartridge may map the address
-        let mapped_addr = self.mapper.get_ppu_read_addr(address).unwrap();
-
-        match mapped_addr {
+        let mapped_addr = self.mapper
+            .get_ppu_read_addr(address)
+            .unwrap_or(address);
+        
+        match mapped_addr & 0x3FFF {
             0x0000..=0x1FFF => {
                 self.chr_rom.read(mapped_addr)
             },
             0x2000..=0x3EFF => {
                 self.vram.read(mapped_addr & 0x7FF)
             },
-            _ => {
-                0x00 // shouldn't happen
-            }
+            0x3F00..=0x3FFF => {
+                let mut data = if mapped_addr & 3 == 0 {
+                    self.palette_mem.read(address & 0x0C) // Does all of the mapping above
+                } else {
+                    self.palette_mem.read(address & 0x1F)
+                };
+
+                if self.registers.mask().greyscale() == 1 {
+                    data &= 0x30;
+                } else {
+                    data &= 0x3F;
+                }
+
+                // println!("Reading data 0x{data:02X} from pal mem w/ addr 0x{mapped_addr:02X}");
+
+                data
+            },
+            _ => {unreachable!("By Becquerel's Ghost!");}
         }
     }
 
@@ -266,29 +284,27 @@ impl Ppu2C02 {
     ///  * `address` - 16 bit address used to access data
     ///  * `data` - Single byte of data to write
     pub fn write(&self, address: u16, data: u8) {
-        // Address is in palette memory, don't map address anywhere
-        if address >= 0x3F00 {
-            if address & 3 == 0 {
-                self.vram.write(address & 0x70C, data); // Does all of the mapping above
-            } else {
-                self.vram.write(address & 0x1F, data);
-            };
-        
-            return;
-        }
-        
-        let mapped_addr = self.mapper.get_ppu_read_addr(address).unwrap();
+        let mapped_addr = self.mapper
+            .get_ppu_write_addr(address, data)
+            .unwrap_or(address);
 
-        match mapped_addr {
+        match mapped_addr & 0x3FFF {
             0x0000..=0x1FFF => {
                 self.chr_rom.write(mapped_addr, data);
             },
             0x2000..=0x3EFF => {
                 self.vram.write(mapped_addr & 0x7FF, data);
             },
-            _ => {
-                // shouldn't happen
-            }
+            0x3F00..=0x3FFF => {
+                println!("Writing to pal mem w/ addr 0x{mapped_addr:02X} & data: 0x{data:02X}");
+
+                if mapped_addr & 3 == 0 {
+                    self.palette_mem.write(address & 0x0C, data); // Does all of the mapping needed
+                } else {
+                    self.palette_mem.write(address & 0x1F, data);
+                };
+            },
+            _ => {unreachable!("I never thought I'd live to see a Resonance Cascade, let alone create one...");}
         }
     }
 
@@ -353,7 +369,7 @@ impl Ppu2C02 {
         let t_reg = self.registers.t_reg();
 
         self.registers.set_v_coarse_x(t_reg.coarse_x());
-        self.registers.set_v_nt_x(t_reg.nt_select() & 1);
+        self.registers.set_v_nt_x(t_reg.nt_x());
     }
 
     /// Transfer vertical data (coarse y, nametable y, and fine y) from the t 
@@ -366,7 +382,7 @@ impl Ppu2C02 {
         let t_reg = self.registers.t_reg();
 
         self.registers.set_v_coarse_y(t_reg.coarse_y());
-        self.registers.set_v_nt_y(t_reg.nt_select() >> 1);
+        self.registers.set_v_nt_y(t_reg.nt_y());
         self.registers.set_v_fine_y(t_reg.fine_y());
     }
 
@@ -441,6 +457,8 @@ impl Ppu2C02 {
             bg_pix = (bg_pix_hi << 1) | bg_pix_lo;
             bg_pal = (bg_pal_hi << 1) | bg_pal_lo;
         }
+
+        // dbg!(bg_pal, bg_pix);
 
         let col = self.color_from_tile_data(bg_pal, bg_pix);
         let pix_idx = (self.scanline * 256 + self.dot)*4;

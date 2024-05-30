@@ -107,6 +107,10 @@ impl Cpu6502 {
     
             // decode - retrieve the neccesary data for the instruction
             let (opcode_data, fetch_cycles) = (instr.addr_func)(self);
+
+            // store the instruction (for debugging)
+            self.current_instr = instr.clone();
+            self.instr_data = opcode_data;
     
             // Increment pc before instruction execution
             self.pc += instr.bytes as u16;
@@ -114,10 +118,6 @@ impl Cpu6502 {
             // execute - run the instruction, updating memory and processor status
             //           as defined by the instruction
             let execute_cycles = (instr.func)(self, opcode_data);
-    
-            // store the instruction just executed (for debugging)
-            self.current_instr = instr.clone();
-            self.instr_data = opcode_data;
     
             self.cycles_remaining += execute_cycles + instr.base_clocks;
     
@@ -132,81 +132,10 @@ impl Cpu6502 {
 
         excecuted
     }
+}
 
-    // GETTER/SETTER FUNCTIONS
-
-    /// Get the current number of clock cycles since turn-on
-    pub fn total_clocks(&self) -> usize {
-        self.total_clocks
-    }
-
-    /// Manually set the number of clock cycles since turn-on
-    pub fn set_total_clocks(&mut self, clks: usize) {
-        self.total_clocks = clks;
-    }
-
-    /// Get the number of cycles until the next instruction
-    pub fn get_remaining_cycles(&self) -> usize {
-        self.cycles_remaining
-    }
-
-    /// Manually set the number of remaining cycles before next instruction
-    pub fn set_remaining_cycles(&mut self, cycles: usize) {
-        self.cycles_remaining = cycles;
-    }
-    
-    /// Get the CPU Status byte
-    pub fn get_status(&self) -> u8 {
-        self.status.0
-    }
-    
-    /// Set the whole processor status byte
-    pub fn set_status(&mut self, val: u8) {
-        self.status = CpuStatus::from_bits(val);
-    }
-
-    /// Get the current value of the accumulator
-    pub fn get_acc(&self) -> u8 {
-        self.acc
-    }
-    /// Get the current value of the X register
-    pub fn get_x_reg(&self) -> u8 {
-        self.x
-    }
-    /// Get the current value of the Y register
-    pub fn get_y_reg(&self) -> u8 {
-        self.y
-    }
-    /// Get the current value of the stack pointer
-    pub fn get_sp(&self) -> u8 {
-        self.sp
-    }
-    /// Get the current value of the program counter
-    pub fn get_pc(&self) -> u16 {
-        self.pc
-    }
-
-    /// Set the value of the accumulator
-    pub fn set_acc(&mut self, val: u8) {
-        self.acc = val;
-    }
-    /// Set the value of the X register
-    pub fn set_x_reg(&mut self, val: u8) {
-        self.x = val;
-    }
-    /// Set the value of the Y register
-    pub fn set_y_reg(&mut self, val: u8) {
-        self.y = val;
-    }
-    /// Set the value of the stack pointer
-    pub fn set_sp(&mut self, val: u8) {
-        self.sp = val;
-    }
-    /// Set the value of the program counter
-    pub fn set_pc(&mut self, val: u16) {
-        self.pc = val;
-    }
-
+// Internal & Helper functionality
+impl Cpu6502 {
     // HELPER FUNCTIONS
 
     /// Read a single byte from a given address off the bus
@@ -237,6 +166,7 @@ impl Cpu6502 {
     }
     /// Write a single byte to the bus at a given address
     pub fn write(&self, address: u16, data: u8) {
+        // println!("CPU Write to ${address:04X} w/ 0x{data:02X}");
         match address {
             0x0000..=0x1FFF => {
                 // First 2KiB of memory (0x0800) are mirrored until 0x2000
@@ -244,6 +174,7 @@ impl Cpu6502 {
             },
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
+
                 self.ppu_regs.write(address & 0x0007, data);
             }
             // 0x4000..=0x401F => {
@@ -389,6 +320,84 @@ impl Cpu6502 {
         // Interrupts take 7 clock cycles
         self.total_clocks += 7;
     }
+}
+
+// Public functionality
+impl Cpu6502 {
+    // GETTER/SETTER FUNCTIONS
+
+    /// Get the current number of clock cycles since turn-on
+    pub fn total_clocks(&self) -> usize {
+        self.total_clocks
+    }
+
+    /// Manually set the number of clock cycles since turn-on
+    pub fn set_total_clocks(&mut self, clks: usize) {
+        self.total_clocks = clks;
+    }
+
+    /// Get the number of cycles until the next instruction
+    pub fn get_remaining_cycles(&self) -> usize {
+        self.cycles_remaining
+    }
+
+    /// Manually set the number of remaining cycles before next instruction
+    pub fn set_remaining_cycles(&mut self, cycles: usize) {
+        self.cycles_remaining = cycles;
+    }
+    
+    /// Get the CPU Status byte
+    pub fn get_status(&self) -> u8 {
+        self.status.0
+    }
+    
+    /// Set the whole processor status byte
+    pub fn set_status(&mut self, val: u8) {
+        self.status = CpuStatus::from_bits(val);
+    }
+
+    /// Get the current value of the accumulator
+    pub fn get_acc(&self) -> u8 {
+        self.acc
+    }
+    /// Get the current value of the X register
+    pub fn get_x_reg(&self) -> u8 {
+        self.x
+    }
+    /// Get the current value of the Y register
+    pub fn get_y_reg(&self) -> u8 {
+        self.y
+    }
+    /// Get the current value of the stack pointer
+    pub fn get_sp(&self) -> u8 {
+        self.sp
+    }
+    /// Get the current value of the program counter
+    pub fn get_pc(&self) -> u16 {
+        self.pc
+    }
+
+    /// Set the value of the accumulator
+    pub fn set_acc(&mut self, val: u8) {
+        self.acc = val;
+    }
+    /// Set the value of the X register
+    pub fn set_x_reg(&mut self, val: u8) {
+        self.x = val;
+    }
+    /// Set the value of the Y register
+    pub fn set_y_reg(&mut self, val: u8) {
+        self.y = val;
+    }
+    /// Set the value of the stack pointer
+    pub fn set_sp(&mut self, val: u8) {
+        self.sp = val;
+    }
+    /// Set the value of the program counter
+    pub fn set_pc(&mut self, val: u16) {
+        self.pc = val;
+    }
+
 
     /// Get the instruction just executed as a string of 6502 assembly for
     /// debugging purposes.
@@ -398,58 +407,51 @@ impl Cpu6502 {
         out_str.push_str(self.current_instr.name);
 
         out_str.push(' ');
-        let temp = if self.current_instr.name == "???" {
-            if self.current_instr.opcode_num == 0x00 {
-                String::from("none : [---]")
-            } else {
-                format!(" : [illegal op #{:02X}]", self.current_instr.opcode_num)
+        let temp = match self.current_instr.addr_mode {
+            AddressingMode::Accumulator => String::from("A : [acc]"),
+
+            AddressingMode::Implied => String::from(": [imp]"),
+
+            AddressingMode::Immediate => {
+                format!("#${:02X} : [imm]", self.instr_data.data.unwrap())
             }
-        } else {
-            match self.current_instr.addr_mode {
-                AddressingMode::Accumulator => String::from("A : [acc]"),
 
-                AddressingMode::Implied => String::from(": [imp]"),
-
-                AddressingMode::Immediate => {
-                    format!("#${:02X} : [imm]", self.instr_data.data.unwrap())
-                }
-
-                AddressingMode::Absolute => {
-                    format!("${:04X} : [abs]", self.instr_data.address.unwrap())
-                }
-                AddressingMode::AbsoluteX => {
-                    format!("${:04X},X : [abs x]", self.instr_data.address.unwrap())
-                }
-                AddressingMode::AbsoluteY => {
-                    format!("${:04X},Y : [abs y]", self.instr_data.address.unwrap())
-                }
-
-                AddressingMode::ZeroPage => {
-                    format!("${:02X} : [zpage]", self.instr_data.address.unwrap())
-                }
-                AddressingMode::ZeroPageX => {
-                    format!("${:02X},X : [zpage x]", self.instr_data.address.unwrap())
-                }
-                AddressingMode::ZeroPageY => {
-                    format!("${:02X},Y : [zpage y]", self.instr_data.address.unwrap())
-                }
-
-                AddressingMode::Indirect => {
-                    format!("$(??) : [ind, abs_addr = 0x{:04X}]", self.instr_data.address.unwrap())
-                }
-                AddressingMode::IndirectX => {
-                    format!("$(??),X : [ind x, abs_addr = 0x{:04X}]", self.instr_data.address.unwrap())
-                }
-                AddressingMode::IndirectY => {
-                    format!("$(??),Y : [ind y, abs_addr = 0x{:04X}]", self.instr_data.address.unwrap())
-                }
-
-                AddressingMode::Relative => format!(
-                    "${:02X} : [rel, offset = {}]",
-                    self.instr_data.offset.unwrap() as u8,
-                    self.instr_data.offset.unwrap()
-                ),
+            AddressingMode::Absolute => {
+                format!("${:04X} : [abs]", self.instr_data.address.unwrap())
             }
+            AddressingMode::AbsoluteX => {
+                format!("${:04X},X : [abs x]", self.instr_data.address.unwrap())
+            }
+            AddressingMode::AbsoluteY => {
+                format!("${:04X},Y : [abs y]", self.instr_data.address.unwrap())
+            }
+
+            AddressingMode::ZeroPage => {
+                format!("${:02X} : [zpage]", self.instr_data.address.unwrap())
+            }
+            AddressingMode::ZeroPageX => {
+                format!("${:02X},X : [zpage x]", self.instr_data.address.unwrap())
+            }
+            AddressingMode::ZeroPageY => {
+                format!("${:02X},Y : [zpage y]", self.instr_data.address.unwrap())
+            }
+
+            // Don't know the original data from the instruction, it's somewhere in memory
+            AddressingMode::Indirect => {
+                String::from("$(??) : [ind]")
+            }
+            AddressingMode::IndirectX => {
+                String::from("$(??),X : [ind x]")
+            }
+            AddressingMode::IndirectY => {
+                String::from("$(??),Y : [ind y]")
+            }
+
+            AddressingMode::Relative => format!(
+                "${:02X} : [rel, offset = {}]",
+                self.instr_data.offset.unwrap() as u8,
+                self.instr_data.offset.unwrap()
+            ),
         };
         out_str.push_str(&temp);
 
@@ -489,22 +491,13 @@ impl Cpu6502 {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     // use std::fs;
     // use std::io::Read;
 
     // use super::CPU;
-
-    // fn load_raw_mem_to_cpu(cpu: &CPU, path_str: &str) {
-    //     let mut mem_file = fs::File::open(path_str).unwrap();
-    //     let mut data: Vec<u8> = Vec::new();
-    //     mem_file.read_to_end(&mut data).unwrap();
-
-    //     data.into_iter()
-    //         .enumerate()
-    //         .for_each(|(addr, byte)| cpu.write(addr as u16, byte));
-    // }
 
     #[test]
     // Test program that multiplies 3 and 10 and stores the result in Accumulator

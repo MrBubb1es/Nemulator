@@ -32,7 +32,6 @@ pub struct ControllerState {
     pub b: bool,
 }
 
-#[derive(Default)]
 pub struct NesApp {
     window: Option<Window>,
     pixel_buf: Option<Pixels>,
@@ -44,6 +43,27 @@ pub struct NesApp {
     nes: NES,
     paused: bool,
     view_mode: ViewMode,
+
+    last_frame: std::time::Instant,
+}
+
+impl Default for NesApp {
+    fn default() -> Self {
+        NesApp {
+            window: None,
+            pixel_buf: None,
+            modifiers: None,
+
+            player1_controller: None,
+            player2_controller: None,
+
+            nes: NES::default(),
+            paused: false,
+            view_mode: ViewMode::default(),
+
+            last_frame: std::time::Instant::now(),
+        }
+    }
 }
 
 impl ApplicationHandler for NesApp {
@@ -98,6 +118,8 @@ impl ApplicationHandler for NesApp {
 
         self.modifiers = Some(Modifiers::default());
         self.paused = true;
+
+        self.last_frame = std::time::Instant::now();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
@@ -143,6 +165,9 @@ impl ApplicationHandler for NesApp {
                 self.switch_view_mode();
             },
             WindowEvent::RedrawRequested => {
+                if !self.paused {
+                    self.nes.cycle_until_frame();
+                }
                 // Draw.
                 if let Some(buf) = self.pixel_buf.as_mut() {
                     let frame = buf.frame_mut();
@@ -164,12 +189,13 @@ impl ApplicationHandler for NesApp {
                 // applications which do not always need to. Applications that redraw continuously
                 // can render here instead.
                 self.window.as_ref().unwrap().request_redraw();
+
+                // let micros_elapsed = self.last_frame.elapsed().as_micros();
+                // let fps = 1000000 / micros_elapsed;
+                // println!("FPS: {fps}");
+                self.last_frame = std::time::Instant::now();
             }
             _ => (),
-        }
-
-        if !self.paused {
-            self.nes.cycle_until_frame();
         }
     }
 }

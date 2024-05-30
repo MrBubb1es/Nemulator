@@ -131,27 +131,27 @@ impl NES {
     }
 
     // Cycles the system through one system clock. The PPU will cycle, the CPU
-    // might cycle (CPU cycles every 3 PPU cycles). Returns an optional bool 
-    // reporting whether the CPU was cycled.
-    pub fn cycle(&mut self) -> Option<bool> {
-        if self.cart_loaded {
-            self.ppu.as_mut().unwrap().cycle(self.screen_buf.as_mut_slice());
+    // might cycle (CPU cycles every 3 PPU cycles). Returns a bool reporting 
+    // whether the CPU was cycled.
+    pub fn cycle(&mut self) -> bool {
+        self.ppu.as_mut().unwrap().cycle(self.screen_buf.as_mut_slice());
 
-            if self.clocks % 3 == 0 {
-                return Some(self.cpu.as_mut().unwrap().cycle());
-            }
-        }
-        None
+        let cpu_cycled = if self.clocks % 3 == 0 {
+            self.cpu.as_mut().unwrap().cycle()
+        } else {
+            false
+        };
+
+        self.clocks += 1;
+
+        cpu_cycled
     }
 
     /// Cycle the CPU until a new instruction in executed (if cart is loaded).
     /// Also cycles the PPU.
     pub fn cycle_instr(&mut self) {
-        while let Some(cpu_cycled) = self.cycle() {
-            if cpu_cycled {
-                return;
-            }
-        }
+        // loop while cycle returns false => loop until cpu cycled
+        while !self.cycle() {}
     }
 
     pub fn get_cpu_state(&self) -> CpuState {

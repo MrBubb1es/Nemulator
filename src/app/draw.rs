@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::system::nes::NES;
 
 pub const DEBUG_FRAME_WIDTH: usize = 960;
@@ -434,6 +432,26 @@ pub mod chars {
         0b1100_0000,
         0b0000_0000,
     ];
+    pub const LANGLE: [u8; 8] = [
+        0b0000_0100,
+        0b0000_1000,
+        0b0001_0000,
+        0b0010_0000,
+        0b0001_0000,
+        0b0000_1000,
+        0b0000_0100,
+        0b0000_0000,
+    ];
+    pub const RANGLE: [u8; 8] = [
+        0b0100_0000,
+        0b0010_0000,
+        0b0001_0000,
+        0b0010_1000,
+        0b0001_0000,
+        0b0010_0000,
+        0b0100_0000,
+        0b0000_0000,
+    ];
     pub const LSQR: [u8; 8] = [
         0b0011_1000,
         0b0010_0000,
@@ -473,6 +491,26 @@ pub mod chars {
         0b0000_0000,
         0b0000_0000,
         0b0000_0000,
+    ];
+    pub const EQUAL: [u8; 8] = [
+        0b0000_0000,
+        0b0000_0000,
+        0b1111_1000,
+        0b0000_0000,
+        0b1111_1000,
+        0b0000_0000,
+        0b0000_0000,
+        0b0000_0000,
+    ];
+    pub const COMMA: [u8; 8] = [
+        0b0000_0000,
+        0b0000_0000,
+        0b0000_0000,
+        0b0000_0000,
+        0b0110_0000,
+        0b0110_0000,
+        0b0010_0000,
+        0b0100_0000,
     ];
 
     // # # # # # # # #
@@ -536,10 +574,14 @@ pub mod chars {
             ':' => COLON,
             '{' => LBRACE,
             '}' => RBRACE,
+            '<' => LANGLE,
+            '>' => RANGLE,
             '[' => LSQR,
             ']' => RSQR,
             '#' => HASH,
             '-' => DASH,
+            '=' => EQUAL,
+            ',' => COMMA,
             ' ' => SPACE,
 
             _ => UNKNOWN,
@@ -854,16 +896,16 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     draw_nes_pagetable(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, 690, 392);
     
     // CPU INFO DECOR
-    draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 34, 331, 90, 2, palette, Some("CPU Info"));
+    draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 34, 331, 110, 2, palette, Some("CPU Info"));
 
     // ZPAGE DECOR
-    draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 140, 390, 188, 2, palette, Some("Zero-Page"))
+    draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 160, 390, 188, 2, palette, Some("Zero-Page"))
 }
 
 pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     draw_nes_screen(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, &nes.screen_buf.as_slice(), 9, 38, true);
     draw_cpu_state(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 45, palette);
-    draw_zpage(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 151, palette);
+    draw_zpage(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 171, palette);
 }
 
 pub fn draw_nes_screen(frame: &mut [u8], frame_width: usize, frame_height: usize, 
@@ -924,9 +966,6 @@ pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
     text.push_str(&format!("SP:{:02X}  PC:{:04X}\n", cpu_state.sp, cpu_state.pc));
     text.push_str(&format!("Total Clks:{}\nStatus:", cpu_state.total_clocks));
 
-    let status_x = x + 7*2*chars::CHAR_WIDTH;
-    let status_y = y + 3*(chars::CHAR_HEIGHT*2 + chars::NEWLINE_PADDING);
-
     let (next_x, next_y) = draw_string(frame, frame_width, frame_height, &text, x, y, palette.txt_col, palette.bg_col, true);
     // Flags
     let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
@@ -957,10 +996,19 @@ pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
         "Z", next_x, next_y, 
         if cpu_state.status.zero() { palette.ok_col } else { palette.err_col }, 
         palette.bg_col, true);
-    draw_string(frame, frame_width, frame_height, 
-        "C", next_x, next_y, 
+    let (_, next_y) = draw_string(frame, frame_width, frame_height, 
+        "C\n", next_x, next_y, 
         if cpu_state.status.carry() { palette.ok_col } else { palette.err_col }, 
         palette.bg_col, true);
+
+    let instr_str = format!("{: <34}", nes.get_cpu().unwrap().current_instr_str());
+
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "Last Instr:", x, next_y, 
+        palette.txt_col, palette.bg_col, false);
+    draw_string(frame, frame_width, frame_height, 
+        &instr_str, next_x, next_y, 
+        palette.txt_col, palette.bg_col, false);
 }
 
 fn draw_zpage(frame: &mut [u8], frame_width: usize, frame_height: usize,

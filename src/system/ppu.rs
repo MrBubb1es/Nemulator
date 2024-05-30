@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::cartridge::Mapper;
+use crate::{cartridge::Mapper, system::ppu};
 
 use super::{mem::Memory, nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::PpuRegisters};
 
@@ -85,11 +85,10 @@ impl Ppu2C02 {
             ppu.pgtbl2[i as usize] = ppu.read(i | 0x1000);
         }
 
-        // let data = 0x2C;
         // for addr in 0x2000..=0x3EFF {
-        //     ppu.write(addr, data);
+        //     ppu.write(addr, addr as u8);
 
-        //     assert_eq!(ppu.read(addr), data);
+        //     assert_eq!(ppu.read(addr), addr as u8);
         // }
 
         // for addr in 0x3F00..=0x3FFF {
@@ -100,11 +99,13 @@ impl Ppu2C02 {
     }
 
     /// Cycle the PPU through the rendering/execution of a single pixel/dot.
-    pub fn cycle(&mut self, frame: &mut [u8]) {
+    pub fn cycle(&mut self, frame: &mut [u8]) {        
         self.frame_finished = false;
 
+        self.registers.cpu_read_data.set(self.read(self.registers.v_val()));
+
         if self.registers.write_ppu_data() {
-            self.write(self.registers.v_val(), self.registers.data());
+            self.write(self.registers.address(), self.registers.data());
             self.registers.set_write_ppu_data(false);
         }
 
@@ -154,6 +155,10 @@ impl Ppu2C02 {
             if self.scanline > 261 {
                 self.scanline = 0;
                 self.frame_finished = true;
+
+                // for addr in 0x3F00..0x3FFF {
+                //     println!("${addr:04X}: 0x{:02X}", self.read(addr));
+                // }
             }
         }
     }
@@ -246,17 +251,15 @@ impl Ppu2C02 {
         
         match mapped_addr & 0x3FFF {
             0x0000..=0x1FFF => {
-                self.chr_rom.read(mapped_addr)
+                self.chr_rom.read(mapped_addr & 0x1FFF)
             },
             0x2000..=0x3EFF => {
                 self.vram.read(mapped_addr & 0x7FF)
             },
             0x3F00..=0x3FFF => {
-                let mut data = if mapped_addr & 3 == 0 {
-                    self.palette_mem.read(address & 0x0C) // Does all of the mapping above
-                } else {
-                    self.palette_mem.read(address & 0x1F)
-                };
+                let mirrored_addr = mapped_addr & 0x1F;
+                
+                let mut data = self.palette_mem.read(mirrored_addr);
 
                 if self.registers.mask().greyscale() == 1 {
                     data &= 0x30;
@@ -284,25 +287,47 @@ impl Ppu2C02 {
     ///  * `address` - 16 bit address used to access data
     ///  * `data` - Single byte of data to write
     pub fn write(&self, address: u16, data: u8) {
+        // println!("Writing to ppu w/ addr 0x{address:02X} and data: 0x{data:02X}");
+        
         let mapped_addr = self.mapper
             .get_ppu_write_addr(address, data)
             .unwrap_or(address);
 
         match mapped_addr & 0x3FFF {
             0x0000..=0x1FFF => {
-                self.chr_rom.write(mapped_addr, data);
+                self.chr_rom.write(mapped_addr & 0x1FFF, data);
             },
             0x2000..=0x3EFF => {
                 self.vram.write(mapped_addr & 0x7FF, data);
             },
             0x3F00..=0x3FFF => {
-                println!("Writing to pal mem w/ addr 0x{mapped_addr:02X} & data: 0x{data:02X}");
+                let mirrored_addr = mapped_addr & 0x1F;
 
-                if mapped_addr & 3 == 0 {
-                    self.palette_mem.write(address & 0x0C, data); // Does all of the mapping needed
-                } else {
-                    self.palette_mem.write(address & 0x1F, data);
-                };
+                println!("Writing data 0x{data:02X} to pal mem w/ addr 0x{mirrored_addr:02X}");
+
+                // Dad's idea: Since we are writing much less than we are reading
+                // this data, we can actually mirror it to 2 different addresses
+                // and avoid doing any extra bitwise stuff in the read function,
+                // we simply read the actual address we are given. (We still have
+                // to do bitwise stuff in read, so the performance boost is 
+                // almost nothing I think, but there's a lesson to be learned
+                // from this idea anyways. I wouldn't have thought of this myself)
+                match mirrored_addr {
+                    0x00 => { self.palette_mem.write(0x10, data); },
+                    0x04 => { self.palette_mem.write(0x14, data); },
+                    0x08 => { self.palette_mem.write(0x18, data); },
+                    0x0C => { self.palette_mem.write(0x1C, data); },
+
+                    0x10 => { self.palette_mem.write(0x00, data); },
+                    0x14 => { self.palette_mem.write(0x04, data); },
+                    0x18 => { self.palette_mem.write(0x08, data); },
+                    0x1C => { self.palette_mem.write(0x0C, data); },
+
+                    _ => {},
+                }
+
+                self.palette_mem.write(mirrored_addr, data);
+
             },
             _ => {unreachable!("I never thought I'd live to see a Resonance Cascade, let alone create one...");}
         }
@@ -313,77 +338,34 @@ impl Ppu2C02 {
     /// cases when the value of coarse x overflows. For more details, visit
     /// https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
     fn inc_coarse_x(&self) {
-        if !self.rendering_enabled() {
-            return;
+        if self.rendering_enabled() {
+            self.registers.inc_coarse_x();
         }
-
-        let mut v = self.registers.v_val();
-
-        // This occurs when the coarse_x is crossing into the next nametable
-        if (v & 0x001F) == 0x1F { // if coarse x would wrap on add
-            v &= !0x001F;  // coarse X = 0 (wrap)
-            v ^= 0x0400;   // switch horizontal nametable
-        } else {
-            v += 1;  // increment coarse X
-        }
-
-        self.registers.set_v_reg(v);
     }
 
     /// Increment the coarse y value in the v register. Also handles wrap around
     /// cases when the value of coarse y overflows. For more details, visit
     /// https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
     fn inc_coarse_y(&self) {
-        if !self.rendering_enabled() {
-            return;
+        if self.rendering_enabled() {
+            self.registers.inc_coarse_y();
         }
-
-        let mut v = self.registers.v_val();
-
-        if (v & 0x7000) != 0x7000 {
-            v += 0x1000;
-        } else {
-            v &= !0x7000;
-            let mut y = (v & 0x03E0) >> 5;
-            if y == 0x1D {
-                y = 0;
-                v ^= 0x0800;
-            } else if y == 0x1F {
-                y = 0;
-            } else {
-                y += 1;
-            }
-            v = (v & !0x03E0) | (y << 5);
-        }
-
-        self.registers.set_v_reg(v);
     }
 
     /// Transfer horizontal data (coarse x and nametable x) from the t register
     /// to the v register in preperation for the rendering phase. 
     fn transfer_x_data(&self) {
-        if !self.rendering_enabled() {
-            return;
+        if self.rendering_enabled() {
+            self.registers.transfer_x_data();
         }
-
-        let t_reg = self.registers.t_reg();
-
-        self.registers.set_v_coarse_x(t_reg.coarse_x());
-        self.registers.set_v_nt_x(t_reg.nt_x());
     }
 
     /// Transfer vertical data (coarse y, nametable y, and fine y) from the t 
     /// register to the v register in preperation for the rendering phase.
     fn transfer_y_data(&self) {
-        if !self.rendering_enabled() {
-            return;
+        if self.rendering_enabled() {
+            self.registers.transfer_y_data();
         }
-
-        let t_reg = self.registers.t_reg();
-
-        self.registers.set_v_coarse_y(t_reg.coarse_y());
-        self.registers.set_v_nt_y(t_reg.nt_y());
-        self.registers.set_v_fine_y(t_reg.fine_y());
     }
 
     /// Fetches the next byte of background tile nametable ids and stores it in
@@ -437,7 +419,7 @@ impl Ppu2C02 {
 
     /// Trigger a NMI within the CPU
     fn trigger_nmi(&self) {
-        // TODO: write code here
+        // println!("PPU tried to trigger NMI");
     }
 
     /// Draw to the given frame buffer at the current scanline and dot. This function
@@ -457,8 +439,6 @@ impl Ppu2C02 {
             bg_pix = (bg_pix_hi << 1) | bg_pix_lo;
             bg_pal = (bg_pal_hi << 1) | bg_pal_lo;
         }
-
-        // dbg!(bg_pal, bg_pix);
 
         let col = self.color_from_tile_data(bg_pal, bg_pix);
         let pix_idx = (self.scanline * 256 + self.dot)*4;

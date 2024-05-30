@@ -13,17 +13,15 @@ pub struct PpuRegisters {
     ppu_status: Cell<PpuStatus>,
     oam_address: Cell<u8>,
     oam_data: Cell<u8>,
-    ppu_scroll: Cell<u16>,
-    ppu_address: Cell<u16>,
     ppu_data: Cell<u8>,
     read_buffer: Cell<u8>,
 
     oam_dma: Cell<u8>,
 
     // Current VRAM Address (15 least significant bits)
-    v_reg: Cell<PpuScrollPos>,
+    v_reg: Cell<PpuScrollReg>,
     // Temporary VRAM Address (15 least significant bits)
-    t_reg: Cell<PpuScrollPos>,
+    t_reg: Cell<PpuScrollReg>,
     // Fine X scroll (3 least significant bits)
     fine_x: Cell<u8>,
     // First or second write toggle (least significant bit)
@@ -31,6 +29,15 @@ pub struct PpuRegisters {
 
     // Set every time the CPU writes data to the PPUDATA register
     write_ppu_data: Cell<bool>,
+    // Stores the address the CPU is trying to write to until the write is 
+    // performed. This is required because PpuRegisters doesn't have access to
+    // the PPU itself, and thus cannot perform the write here. The solution is
+    // to have the PPU check the write_ppu_data flag for when a CPU write
+    // occurs, and use this value as the address, which is internally set to the
+    // VRAM address the CPU would be using.
+    write_address: Cell<u16>,
+    // Contains data the CPU *might* read this cycle
+    pub cpu_read_data: Cell<u8>,
 }
 
 impl PpuRegisters {
@@ -41,35 +48,56 @@ impl PpuRegisters {
     /// register as a u8. Some registers cannot be read.
     pub fn read(&self, address: u16) -> u8 {
         match address & 0x0007 {
+            // PPUCTRL
             0 => 0x00, // Can't read PPUCTRL
+
+            // PPUMASK
             1 => 0x00, // Can't read PPUMASK
+
+            // PPUSTATUS
             2 => {
-                // Reads from $2002 reset write latch
-                self.write_latch.set(0);
-                self.ppu_status.get().0
+                let data = self.status().0;
+                // Reads from $2002 reset write latch and vblank flag (after the read occurs)
+                self.set_write_latch(0);
+                self.set_in_vblank(0);
+
+                data
             },
+
+            // OAMADDR
             3 => 0x00, // Can't read OAMADDR
-            4 => self.oam_data.get(),
+
+            // OAMDATA
+            4 => self.oam_data(),
+
+            // PPUSCROLL
             5 => 0x00, // Can't read PPUSCROLL
+
+            // PPUADDR
             6 => 0x00, // Can't read PPUADDR
+
+            // PPUDATA
             7 => {
                 // Reads are too slow for the PPU to respond immediatly, so they
-                // go to a read buffer. With the exception (because of coarse
+                // go to a read buffer. With the exception (because of course
                 // there's an exception) of palette memory, which responds
                 // immediatly and still updates the read buffer, discarding the
                 // old read buffer data.
-                let mut val = self.read_buffer.get();
-                self.read_buffer.set(self.ppu_data.get());
+                let mut data = self.read_buffer.get();
+                self.read_buffer.set(self.cpu_read_data.get()); // this is wrong
 
-                if self.v_reg.get().0 >= 0x3F00 {
-                    val = self.read_buffer.get();
+                if self.v_val() >= 0x3F00 {
+                    data = self.read_buffer.get();
                 }
 
-                self.v_reg.set(PpuScrollPos(
-                    self.v_reg.get().0 + if self.ppu_ctrl.get().vram_addr_inc() == 0 { 1 } else { 32 }
-                ));
+                // if self.status().in_vblank() == 1 {
+                //     self.inc_coarse_x();
+                //     self.inc_coarse_y();
+                // } else {
+                // self.set_v_reg(self.v_val() + if self.ctrl().vram_addr_inc() == 0 { 1 } else { 32 });
+                // }
 
-                val
+                data
             },
             _ => {
                 unreachable!("If the laws of physics no longer apply in the future, God help you.")
@@ -81,73 +109,107 @@ impl PpuRegisters {
     /// written to, and some registers depend on the internal write latch to
     /// determine which byte is being written.
     pub fn write(&self, address: u16, data: u8) {
+        // println!("Writing 0x{data:02X} to PPU Register at addr {address}");
+
         match address & 0x0007 {
+            // PPUCTRL
             0 => {
-                self.ppu_ctrl.set(PpuCtrl::from_bits(data));
-                self.t_reg.set(self.t_reg.get()
-                    .with_nt_select((data & 3) as usize));
+                // t: ...GH.. ........ <- d: ......GH
+                //    <used elsewhere> <- d: ABCDEF..
+                self.set_ctrl(data);
+                self.set_t_nt_select((data & 3) as usize);
             },
-            1 => self.ppu_mask.set(PpuMask::from_bits(data)),
+
+            // PPUMASK
+            1 => self.set_mask(data),
+
+            // PPUSTATUS
             2 => {}, // Cannot write PPUSTATUS
-            3 => self.oam_address.set(data),
-            4 => self.oam_data.set(data),
+
+            // OAMADDR
+            3 => self.set_oam_address(data),
+
+            // OAMDATA
+            4 => self.set_oam_data(data),
+
+            // PPUSCROLL
             5 => {
                 if self.write_latch.get() == 0 {
                     // 1st Write => write to low byte
-                    self.ppu_scroll.set((self.ppu_scroll.get() & 0xFF00) | data as u16);
                     // Update internal regs
                     // t: ....... ...ABCDE <- d: ABCDE...
                     // x:              FGH <- d: .....FGH
                     // w:                  <- 1
-                    self.t_reg.set(self.t_reg.get()
-                        .with_coarse_x((data >> 3) as usize));
-                    self.fine_x.set(data & 7);
+
+                    // NOTE: There is no dedicated PPUSCROLL register separate
+                    //       from the v/t registers. The scroll information is
+                    //       contained entirely within the v/t registers and the
+                    //       fine_x register.
+                    self.set_t_coarse_x((data >> 3) as usize);
+                    self.set_fine_x(data & 7);
+
                     self.write_latch.set(1);
                 } else {
                     // 2nd Write => Write to high byte
-                    self.ppu_scroll.set((self.ppu_scroll.get() & 0x00FF) | ((data as u16) << 8));
                     // Update internal regs
                     // t: FGH..AB CDE..... <- d: ABCDEFGH
                     // w:                  <- 0
-                    self.t_reg.set(self.t_reg.get()
-                        .with_coarse_y((data >> 3) as usize)
-                        .with_fine_y((data & 7) as usize));
+                    self.set_t_coarse_y((data >> 3) as usize);
+                    self.set_t_fine_y((data & 7) as usize);
+
                     self.write_latch.set(0);
                 }
             },
+
+            // PPUADDR
             6 => {
                 if self.write_latch.get() == 0 {
                     // 1st Write => write to low byte
-                    self.ppu_address.set((self.ppu_address.get() & 0xFF00) | data as u16);
                     // Update internal regs
                     // t: .CDEFGH ........ <- d: ..CDEFGH
-                    //     <unused>     <- d: AB......
+                    //            <unused> <- d: AB......
                     // t: Z...... ........ <- 0 (bit Z is cleared)
                     // w:                  <- 1
-                    self.t_reg.set(PpuScrollPos(
-                        (self.t_reg.get().0 & 0xC0FF) | (((data & 0x3F) as u16) << 8)
-                    ));
+
+                    // NOTE: Only the t register is updated on the 1st write of 
+                    //       PPUADDR. Then on the 2nd write, after the high byte
+                    //       is also written to, it is copied to the v register.
+                    self.set_t_reg((self.t_val() & 0x00FF) | (((data & 0x3F) as u16) << 8));
                     self.write_latch.set(1);
                 } else {
                     // 2nd Write => Write to high byte
-                    self.ppu_address.set((self.ppu_address.get() & 0x00FF) | ((data as u16) << 8));
                     // Update internal regs
                     // t: ....... ABCDEFGH <- d: ABCDEFGH
                     // v: <...all bits...> <- t: <...all bits...>
                     // w:                  <- 0
-                    self.t_reg.set(PpuScrollPos(
-                        (self.t_reg.get().0 & 0xFF00) | (data as u16)
-                    ));
-                    self.v_reg.set(self.t_reg.get());
+                    self.set_t_reg((self.t_val() & 0xFF00) | (data as u16));
+                    self.set_v_reg(self.t_val());
                     self.write_latch.set(0);
                 }
             },
-            7 => {
-                self.ppu_data.set(data);
 
+            // PPUDATA
+            7 => {
+                // println!("Writing 0x{data:02} to PPUDATA");
+
+                self.set_data(data);
+
+                // THIS IS THE +1 PROBLEM!!!
+                // The PPU won't actually see this write signal until the next
+                // cycle, but we are incrementing v_reg here. Thus the address
+                // used by the PPU to write the data is different than the one
+                // the CPU expects it to be by either 1 or 32. See the comment
+                // above where write_address is declared as a field.
                 self.write_ppu_data.set(true);
 
-                self.set_v_reg(self.v_val() + if self.ppu_ctrl.get().vram_addr_inc() == 0 { 1 } else { 32 });
+                self.write_address.set(self.v_val());
+
+                // if self.status().in_vblank() == 1 {
+                //     self.inc_coarse_x();
+                //     self.inc_coarse_y();
+                // } else {
+                self.set_v_reg(self.v_val() + if self.ctrl().vram_addr_inc() == 0 { 1 } else { 32 });
+                // }
             },
             _ => unreachable!("Well done. Here are the test results: \"You are a horrible person.\" I'm serious, that's what it says: \"A horrible person.\" We weren't even testing for that.")
         };
@@ -187,13 +249,10 @@ impl PpuRegisters {
     pub fn oam_data(&self) -> u8 {
         self.oam_data.get()
     }
-    /// Get a copy of the value of PPUSCROLL
-    pub fn scroll(&self) -> u16 {
-        self.ppu_scroll.get()
-    }
-    /// Get a copy of the value of PPUADDR
+    /// Get a copy of the value of the v register when the CPU last wrote data
+    /// to PPUDATA (i.e. the address that CPU was trying to write to)
     pub fn address(&self) -> u16 {
-        self.ppu_address.get()
+        self.write_address.get()
     }
     /// Get a copy of the value of PPUDATA
     pub fn data(&self) -> u8 {
@@ -204,7 +263,7 @@ impl PpuRegisters {
         self.oam_dma.get()
     }
     /// Get a copy of the value of the v register as a PpuScrollPos struct
-    pub fn v_reg(&self) -> PpuScrollPos {
+    pub fn v_reg(&self) -> PpuScrollReg {
         self.v_reg.get()
     }
     /// Get a copy of the value of the v register as a u16
@@ -212,7 +271,7 @@ impl PpuRegisters {
         self.v_reg.get().0
     }
     /// Get a copy of the value of the t register as a PpuScrollPos struct
-    pub fn t_reg(&self) -> PpuScrollPos {
+    pub fn t_reg(&self) -> PpuScrollReg {
         self.t_reg.get()
     }
     /// Get a copy of the value of the t register as a u16
@@ -331,14 +390,6 @@ impl PpuRegisters {
     pub fn set_oam_data(&self, val: u8) {
         self.oam_data.set(val);
     }
-    /// Set the value of PPUSCROLL
-    pub fn set_scroll(&self, val: u16) {
-        self.ppu_scroll.set(val);
-    }
-    /// Set the value of PPUADDR
-    pub fn set_address(&self, val: u16) {
-        self.ppu_address.set(val);
-    }
     /// Set the value of PPUDATA
     pub fn set_data(&self, val: u8) {
         self.ppu_data.set(val);
@@ -350,7 +401,7 @@ impl PpuRegisters {
 
     /// Set the value of the v register
     pub fn set_v_reg(&self, val: u16) {
-        self.v_reg.set(PpuScrollPos(val));
+        self.v_reg.set(PpuScrollReg(val));
     }
     /// Set the coarse x bits (0..=4) of the v register
     pub fn set_v_coarse_x(&self, val: usize) {
@@ -366,11 +417,11 @@ impl PpuRegisters {
     }
     /// Set only the nametable x bit (10) of the v register
     pub fn set_v_nt_x(&self, val: usize) {
-        self.v_reg.set(PpuScrollPos((self.v_reg.get().0 & 0xFBFF) | ((val as u16) << 10)));
+        self.v_reg.set(PpuScrollReg((self.v_reg.get().0 & 0xFBFF) | ((val as u16) << 10)));
     }
     /// Set only the nametable y bit (11) of the v register
     pub fn set_v_nt_y(&self, val: usize) {
-        self.v_reg.set(PpuScrollPos((self.v_reg.get().0 & 0xF7FF) | ((val as u16) << 11)));
+        self.v_reg.set(PpuScrollReg((self.v_reg.get().0 & 0xF7FF) | ((val as u16) << 11)));
     }
     /// Set the fine y bits (12..=14) of the v register
     pub fn set_v_fine_y(&self, val: usize) {
@@ -379,7 +430,7 @@ impl PpuRegisters {
 
     /// Set the value of the t register
     pub fn set_t_reg(&self, val: u16) {
-        self.t_reg.set(PpuScrollPos(val));
+        self.t_reg.set(PpuScrollReg(val));
     }
     /// Set the coarse x bits (0..=4) of the t register
     pub fn set_t_coarse_x(&self, val: usize) {
@@ -395,11 +446,11 @@ impl PpuRegisters {
     }
     /// Set only the nametable x bit (10) of the t register
     pub fn set_t_nt_x(&self, val: usize) {
-        self.t_reg.set(PpuScrollPos((self.t_reg.get().0 & 0xFBFF) | ((val as u16) << 10)));
+        self.t_reg.set(PpuScrollReg((self.t_reg.get().0 & 0xFBFF) | ((val as u16) << 10)));
     }
     /// Set only the nametable y bit (11) of the t register
     pub fn set_t_nt_y(&self, val: usize) {
-        self.t_reg.set(PpuScrollPos((self.t_reg.get().0 & 0xF7FF) | ((val as u16) << 11)));
+        self.t_reg.set(PpuScrollReg((self.t_reg.get().0 & 0xF7FF) | ((val as u16) << 11)));
     }
     /// Set the fine y bits (12..=14) of the t register
     pub fn set_t_fine_y(&self, val: usize) {
@@ -414,9 +465,72 @@ impl PpuRegisters {
     pub fn set_write_latch(&self, val: u8) {
         self.write_latch.set(val);
     }
-
+    /// Set the value of the write ppu data flag
     pub fn set_write_ppu_data(&self, val: bool) {
         self.write_ppu_data.set(val);
+    }
+
+    // PPU RENDERING RENDERING HELPERS
+
+    /// Increment the coarse x value in the v register. Also handles wrap around
+    /// cases when the value of coarse x overflows. For more details, visit
+    /// https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
+    pub fn inc_coarse_x(&self) {
+        let mut v = self.v_val();
+
+        // This occurs when the coarse_x is crossing into the next nametable
+        if (v & 0x001F) == 0x1F { // if coarse x would wrap on add
+            v &= !0x001F;  // coarse X = 0 (wrap)
+            v ^= 0x0400;   // switch horizontal nametable
+        } else {
+            v += 1;  // increment coarse X
+        }
+
+        self.set_v_reg(v);
+    }
+
+    /// Increment the coarse y value in the v register. Also handles wrap around
+    /// cases when the value of coarse y overflows. For more details, visit
+    /// https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
+    pub fn inc_coarse_y(&self) {
+        let mut v = self.v_val();
+
+        if (v & 0x7000) != 0x7000 {
+            v += 0x1000;
+        } else {
+            v &= !0x7000;
+            let mut y = (v & 0x03E0) >> 5;
+            if y == 0x1D {
+                y = 0;
+                v ^= 0x0800;
+            } else if y == 0x1F {
+                y = 0;
+            } else {
+                y += 1;
+            }
+            v = (v & !0x03E0) | (y << 5);
+        }
+
+        self.set_v_reg(v);
+    }
+
+    /// Transfer horizontal data (coarse x and nametable x) from the t register
+    /// to the v register in preperation for the rendering phase. 
+    pub fn transfer_x_data(&self) {
+        let t_reg = self.t_reg();
+
+        self.set_v_coarse_x(t_reg.coarse_x());
+        self.set_v_nt_x(t_reg.nt_x());
+    }
+
+    /// Transfer vertical data (coarse y, nametable y, and fine y) from the t 
+    /// register to the v register in preperation for the rendering phase.
+    pub fn transfer_y_data(&self) {
+        let t_reg = self.t_reg();
+
+        self.set_v_coarse_y(t_reg.coarse_y());
+        self.set_v_nt_y(t_reg.nt_y());
+        self.set_v_fine_y(t_reg.fine_y());
     }
 }
 
@@ -527,7 +641,7 @@ pub struct PpuStatus {
 //     ||| ++-------------- nametable select (bit 0 x, bit 1 y)
 //     +++----------------- fine Y scroll
 #[bitfield(u16)]
-pub struct PpuScrollPos {
+pub struct PpuScrollReg {
     #[bits(5)]
     pub coarse_x: usize,
     #[bits(5)]
@@ -540,7 +654,7 @@ pub struct PpuScrollPos {
     _unused: bool,
 }
 
-impl PpuScrollPos {
+impl PpuScrollReg {
     /// Bits 10..11
     pub fn nt_x(&self) -> usize { self.nt_select() & 1 }
     /// Bits 10..11
@@ -548,8 +662,8 @@ impl PpuScrollPos {
         self.set_nt_select((self.nt_select() & 2) | (value & 1));
     }
     /// Bits 10..11
-    pub fn with_nt_x(self, value: usize) -> PpuScrollPos {
-        PpuScrollPos(((self.0 as usize & 0xFBFF) | ((value & 1) << 10)) as u16)
+    pub fn with_nt_x(self, value: usize) -> PpuScrollReg {
+        PpuScrollReg(((self.0 as usize & 0xFBFF) | ((value & 1) << 10)) as u16)
     }
 
     /// Bits 11..12
@@ -559,7 +673,7 @@ impl PpuScrollPos {
         self.set_nt_select((self.nt_select() & 1) | ((value & 1) << 1) );
     }
     /// Bits 11..12
-    pub fn with_nt_y(self, value: usize) -> PpuScrollPos {
-        PpuScrollPos(((self.0 as usize & 0xF7FF) | ((value & 1) << 11)) as u16)
+    pub fn with_nt_y(self, value: usize) -> PpuScrollReg {
+        PpuScrollReg(((self.0 as usize & 0xF7FF) | ((value & 1) << 11)) as u16)
     }
 }

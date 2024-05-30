@@ -2,7 +2,7 @@ use std::cell::Cell;
 
 /// General purpose memory struct. Stores a vec of cell<u8>'s to allow for reading
 /// and writing from different sources without having multiple mutable references.  
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub struct Memory {
     data: Vec<Cell<u8>>,
 }

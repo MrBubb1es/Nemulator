@@ -11,7 +11,7 @@ macro_rules! illegal_op {
             name: "???",
             opcode_num: $opcode,
             addr_mode: AddressingMode::Implied,
-            addr_func: |_| { (OpcodeData{data: None, address: None, offset: None}, 0) },
+            addr_func: |_| { (0, 0) },
             func: xxx,
             base_clocks: 2,
             bytes: 1,
@@ -36,15 +36,15 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "SLO", opcode_num: 0x03, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: slo, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x04, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: nop, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "ORA", opcode_num: 0x05, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ora, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ASL", opcode_num: 0x06, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: asl, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x06, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: asl_mem, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SLO", opcode_num: 0x07, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: slo, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "PHP", opcode_num: 0x08, addr_mode: AddressingMode::Implied, addr_func: implied, func: php, base_clocks: 3, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ORA", opcode_num: 0x09, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ora, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ASL", opcode_num: 0x0A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: asl, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x0A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: asl_acc, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ANC", opcode_num: 0x0B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: anc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x0C, addr_mode: AddressingMode::Absolute, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "ORA", opcode_num: 0x0D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ora, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ASL", opcode_num: 0x0E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: asl, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x0E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: asl_mem, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SLO", opcode_num: 0x0F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: slo, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "BPL", opcode_num: 0x10, addr_mode: AddressingMode::Relative, addr_func: relative, func: bpl, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
     Instruction{name: "ORA", opcode_num: 0x11, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: ora, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
@@ -52,7 +52,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "SLO", opcode_num: 0x13, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: slo, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x14, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "ORA", opcode_num: 0x15, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ora, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ASL", opcode_num: 0x16, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: asl, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x16, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: asl_mem, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SLO", opcode_num: 0x17, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: slo, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "CLC", opcode_num: 0x18, addr_mode: AddressingMode::Implied, addr_func: implied, func: clc, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ORA", opcode_num: 0x19, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: ora, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
@@ -60,7 +60,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "SLO", opcode_num: 0x1B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: slo, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x1C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
     Instruction{name: "ORA", opcode_num: 0x1D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ora, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
-    Instruction{name: "ASL", opcode_num: 0x1E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: asl, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ASL", opcode_num: 0x1E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: asl_mem, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SLO", opcode_num: 0x1F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: slo, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "JSR", opcode_num: 0x20, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: jsr, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "AND", opcode_num: 0x21, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: and, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
@@ -68,15 +68,15 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "RLA", opcode_num: 0x23, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: rla, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "BIT", opcode_num: 0x24, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: bit, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "AND", opcode_num: 0x25, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: and, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROL", opcode_num: 0x26, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rol, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x26, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rol_mem, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RLA", opcode_num: 0x27, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rla, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "PLP", opcode_num: 0x28, addr_mode: AddressingMode::Implied, addr_func: implied, func: plp, base_clocks: 4, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "AND", opcode_num: 0x29, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: and, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROL", opcode_num: 0x2A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: rol, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x2A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: rol_acc, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ANC", opcode_num: 0x2B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: anc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "BIT", opcode_num: 0x2C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: bit, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "AND", opcode_num: 0x2D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: and, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROL", opcode_num: 0x2E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rol, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x2E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rol_mem, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RLA", opcode_num: 0x2F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rla, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "BMI", opcode_num: 0x30, addr_mode: AddressingMode::Relative, addr_func: relative, func: bmi, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
     Instruction{name: "AND", opcode_num: 0x31, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: and, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
@@ -84,7 +84,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "RLA", opcode_num: 0x2F, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: rla, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x34, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "AND", opcode_num: 0x35, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: and, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROL", opcode_num: 0x36, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rol, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x36, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rol_mem, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RLA", opcode_num: 0x2F, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rla, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "SEC", opcode_num: 0x38, addr_mode: AddressingMode::Implied, addr_func: implied, func: sec, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "AND", opcode_num: 0x39, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: and, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
@@ -92,7 +92,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "RLA", opcode_num: 0x3B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: rla, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x3C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
     Instruction{name: "AND", opcode_num: 0x3D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: and, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
-    Instruction{name: "ROL", opcode_num: 0x3E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rol, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROL", opcode_num: 0x3E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rol_mem, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RLA", opcode_num: 0x3F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rla, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "RTI", opcode_num: 0x40, addr_mode: AddressingMode::Implied, addr_func: implied, func: rti, base_clocks: 6, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "EOR", opcode_num: 0x41, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: eor, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
@@ -100,15 +100,15 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "SRE", opcode_num: 0x43, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sre, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x44, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: nop, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "EOR", opcode_num: 0x45, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: eor, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "LSR", opcode_num: 0x46, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: lsr, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x46, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: lsr_mem, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SRE", opcode_num: 0x47, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: sre, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "PHA", opcode_num: 0x48, addr_mode: AddressingMode::Implied, addr_func: implied, func: pha, base_clocks: 3, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "EOR", opcode_num: 0x49, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: eor, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "LSR", opcode_num: 0x4A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: lsr, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x4A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: lsr_acc, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ASR", opcode_num: 0x4B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: asr, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "JMP", opcode_num: 0x4C, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: jmp, base_clocks: 3, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "EOR", opcode_num: 0x4D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: eor, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "LSR", opcode_num: 0x4E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lsr, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x4E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lsr_mem, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SRE", opcode_num: 0x4F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: sre, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "BVC", opcode_num: 0x50, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
     Instruction{name: "EOR", opcode_num: 0x51, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: eor, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
@@ -116,7 +116,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "SRE", opcode_num: 0x4F, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: sre, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x54, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "EOR", opcode_num: 0x55, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: eor, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "LSR", opcode_num: 0x56, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: lsr, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x56, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: lsr_mem, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SRE", opcode_num: 0x57, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: sre, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "CLI", opcode_num: 0x58, addr_mode: AddressingMode::Implied, addr_func: implied, func: cli, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "EOR", opcode_num: 0x59, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: eor, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
@@ -124,7 +124,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "SRE", opcode_num: 0x5B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: sre, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x5C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
     Instruction{name: "EOR", opcode_num: 0x5D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: eor, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
-    Instruction{name: "LSR", opcode_num: 0x5E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: lsr, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "LSR", opcode_num: 0x5E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: lsr_mem, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "SRE", opcode_num: 0x5F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: sre, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "RTS", opcode_num: 0x60, addr_mode: AddressingMode::Implied, addr_func: implied, func: rts, base_clocks: 6, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ADC", opcode_num: 0x61, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: adc, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
@@ -132,15 +132,15 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "RRA", opcode_num: 0x63, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: rra, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x64, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: nop, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "ADC", opcode_num: 0x65, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: adc, base_clocks: 3, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROR", opcode_num: 0x66, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ror, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x66, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: ror_mem, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RRA", opcode_num: 0x67, addr_mode: AddressingMode::ZeroPage, addr_func: zero_page, func: rra, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "PLA", opcode_num: 0x68, addr_mode: AddressingMode::Implied, addr_func: implied, func: pla, base_clocks: 4, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ADC", opcode_num: 0x69, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: adc, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROR", opcode_num: 0x6A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: ror, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x6A, addr_mode: AddressingMode::Accumulator, addr_func: accumulator, func: ror_acc, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ARR", opcode_num: 0x6B, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: arr, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "JMP", opcode_num: 0x6C, addr_mode: AddressingMode::Indirect, addr_func: indirect, func: jmp, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ADC", opcode_num: 0x6D, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: adc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROR", opcode_num: 0x6E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ror, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x6E, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ror_mem, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RRA", opcode_num: 0x6F, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: rra, base_clocks: 6, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "BVS", opcode_num: 0x70, addr_mode: AddressingMode::Relative, addr_func: relative, func: bvs, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
     Instruction{name: "ADC", opcode_num: 0x71, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: adc, base_clocks: 5, bytes: 2, has_extra_fetch_cycles: true, is_illegal: false},
@@ -148,7 +148,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "RRA", opcode_num: 0x73, addr_mode: AddressingMode::IndirectY, addr_func: indirect_y, func: rra, base_clocks: 8, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x74, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: nop, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "ADC", opcode_num: 0x75, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: adc, base_clocks: 4, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
-    Instruction{name: "ROR", opcode_num: 0x76, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ror, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x76, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: ror_mem, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RRA", opcode_num: 0x77, addr_mode: AddressingMode::ZeroPageX, addr_func: zpage_x, func: rra, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "SEI", opcode_num: 0x78, addr_mode: AddressingMode::Implied, addr_func: implied, func: sei, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "ADC", opcode_num: 0x79, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: adc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
@@ -156,7 +156,7 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "RRA", opcode_num: 0x7B, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: rra, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x7C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: nop, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: true},
     Instruction{name: "ADC", opcode_num: 0x7D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: adc, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: true, is_illegal: false},
-    Instruction{name: "ROR", opcode_num: 0x7E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ror, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
+    Instruction{name: "ROR", opcode_num: 0x7E, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: ror_mem, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "RRA", opcode_num: 0x7F, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: rra, base_clocks: 7, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "NOP", opcode_num: 0x80, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: nop, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
     Instruction{name: "STA", opcode_num: 0x81, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: sta, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
@@ -324,8 +324,8 @@ pub struct Instruction {
     pub name: &'static str,
     pub opcode_num: u8,
     pub addr_mode: AddressingMode,
-    pub addr_func: fn(cpu: &Cpu6502) -> (OpcodeData, usize),
-    pub func: fn(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize,
+    pub addr_func: fn(cpu: &Cpu6502) -> (u16, usize),
+    pub func: fn(cpu: &mut Cpu6502, address: u16) -> usize,
     pub base_clocks: usize,
     pub bytes: usize,
     pub has_extra_fetch_cycles: bool,
@@ -335,116 +335,73 @@ pub struct Instruction {
 
 // ADDRESSING MODES - Fetches data from the bus
 // Returns:
-//  - Data needed for opcode with this addressing mode wrapped in the OpcodeData struct
+//  - Address of the data needed for the instruction
 //  - Number of extra CPU cycles taken to get data
 //
 // Note: Implied addressing mode has no return type because no data is needed for instructions
 // with implied addressing mode.
-fn accumulator(cpu: &Cpu6502) -> (OpcodeData, usize) {
-    (OpcodeData{ data: Some(cpu.get_acc()), address: None, offset: None }, 0)
+
+// Accumulator - like implied, no extra data needed. Accumulator is used as data
+fn accumulator(cpu: &Cpu6502) -> (u16, usize) {
+    (0,0)
 }
 // Implied - no extra data needed for this instruction, read no extra bytes
-fn implied(_: &Cpu6502) -> (OpcodeData, usize) {
-    (OpcodeData{ data: None, address: None, offset: None }, 0)
+fn implied(cpu: &Cpu6502) -> (u16, usize) {
+    (0,0)
 }
 // Immediate - data immediatly follows instruction
-fn immediate(cpu: &Cpu6502) -> (OpcodeData, usize) {
-    let data = cpu.read(cpu.get_pc() + 1);
-
-    (OpcodeData{ data: Some(data), address: None, offset: None }, 0)
+fn immediate(cpu: &Cpu6502) -> (u16, usize) {
+    (cpu.get_pc() + 1, 0)
 }
 // Absolute - The next 2 bytes are the address in memory of the data to retrieve
-fn absolute(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn absolute(cpu: &Cpu6502) -> (u16, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
-    let data = cpu.read(abs_address);
-    
-    (OpcodeData{ data: Some(data), address: Some(abs_address), offset: None }, 0)
+    (abs_address, 0)
 }
 // Indexed Addressing (X) - Like Absolute, but adds the x register to the abs address to get
 // the "effective address," and uses that to fetch data from memory.
 // Also known as Absolute X addressing.
-fn absolute_x(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn absolute_x(cpu: &Cpu6502) -> (u16, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
     let effective_address = abs_address.wrapping_add(cpu.get_x_reg() as u16);
-    let data = cpu.read(effective_address);
 
     let page_boundary_crossed: bool = (abs_address & 0xFF00) != (effective_address & 0xFF00);
 
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(effective_address), 
-            offset: None 
-        },
-        if page_boundary_crossed { 1 } else { 0 }
-    )
+    (effective_address, if page_boundary_crossed { 1 } else { 0 })
 }
 // Indexed Addressing (Y) - Like same as Indexed x, but used the y register instead.
 // Also known as Absolute Y addressing.
-fn absolute_y(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn absolute_y(cpu: &Cpu6502) -> (u16, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
     let effective_address = abs_address.wrapping_add(cpu.get_y_reg() as u16);
-    let data = cpu.read(effective_address);
 
     let page_boundary_crossed: bool = (abs_address & 0xFF00) != (effective_address & 0xFF00);
 
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(effective_address), 
-            offset: None 
-        },
-        if page_boundary_crossed { 1 } else { 0 }
-    )
+    (effective_address, if page_boundary_crossed { 1 } else { 0 })
 }
 // Zero Page - Like absolute, but uses only 1 byte for address & uses 0x00 for the high byte of the address
-fn zero_page(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn zero_page(cpu: &Cpu6502) -> (u16, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1) as u16;
-    let data = cpu.read(zpage_address);
-
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(zpage_address), 
-            offset: None 
-        },
-        0
-    )
+    (zpage_address, 0)
 }
 // Indexed Addressing Zero-Page (X) - Like Indexed x, but uses only the single next byte as the
 // low order byte of the absolute address and fills the top byte w/ 0x00. Then adds x to get
 // the effective address. Note that the effective address will never go off the zero-page, if
 // the address exceeds 0x00FF, it will loop back around to 0x0000.
 // Also known as Zero Page X addressing.
-fn zpage_x(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn zpage_x(cpu: &Cpu6502) -> (u16, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1);
     let effective_zpage_address = zpage_address.wrapping_add(cpu.get_x_reg()) as u16;
-    let data = cpu.read(effective_zpage_address);
-
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(effective_zpage_address), 
-            offset: None 
-        },
-        0
-    )
+    
+    (effective_zpage_address, 0)
 }
 // Indexed Addressing Zero-Page (Y) - Like Indexed Z-Page x, but uses the y register instead
 // Also known as Zero Page Y addressing.
-fn zpage_y(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn zpage_y(cpu: &Cpu6502) -> (u16, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1);
     let effective_zpage_address = zpage_address.wrapping_add(cpu.get_y_reg()) as u16;
-    let data = cpu.read(effective_zpage_address);
-
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(effective_zpage_address), 
-            offset: None 
-        },
-        0
-    )
+    
+    (effective_zpage_address, 0)
 }
 // Indirect Addressing - Uses the next 2 bytes as the abs address, then reads the byte that
 // points to in memory and the one after (in LLHH order) and uses those as the effective
@@ -452,7 +409,7 @@ fn zpage_y(cpu: &Cpu6502) -> (OpcodeData, usize) {
 // Note: This mode has a hardware bug where a page boundary cannot be crossed by 
 // the reading of 2 bytes from abs_address, and therefore it can take no
 // additional clock cycles.
-fn indirect(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn indirect(cpu: &Cpu6502) -> (u16, usize) {
     let abs_address = cpu.read_word(cpu.get_pc() + 1);
 
     let effective_lo = cpu.read(abs_address) as u16;
@@ -463,69 +420,34 @@ fn indirect(cpu: &Cpu6502) -> (OpcodeData, usize) {
     } as u16;
 
     let effective_address = (effective_hi << 8) | effective_lo;
-    let data = cpu.read(effective_address);
 
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(effective_address), 
-            offset: None 
-        },
-        0
-    )
+    (effective_address, 0)
 }
 // Pre-Indexed Indirect Zero-Page (X) - Like Indexed Z-Page x, but as in Indirect addressing, another
 // address is read from memory instead of the data. The address read is the effective
 // address of the actual data. Note that if the z-page address is 0x00FF, then the bytes at
 // 0x00FF and 0x0000 are read and used as low and high bytes of the effective address, respectively
-fn indirect_x(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn indirect_x(cpu: &Cpu6502) -> (u16, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1).wrapping_add(cpu.get_x_reg());
     let effective_address = cpu.read_zpage_word(zpage_address);
-    let data = cpu.read(effective_address);
-
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(effective_address), 
-            offset: None 
-        },
-        0
-    )
+    
+    (effective_address, 0)
 }
 // Post-Indexed Indirect Zero-Page (Y) - Like Indirect Indexed Z-Page x, but with two major differences:
 // First, the y register is used instead of x. Second, the register is added to the address
 // retrieved from the z-page, not the address used to access the z-page.
-fn indirect_y(cpu: &Cpu6502) -> (OpcodeData, usize) {
+fn indirect_y(cpu: &Cpu6502) -> (u16, usize) {
     let zpage_address = cpu.read(cpu.get_pc() + 1);
     let abs_address = cpu.read_zpage_word(zpage_address);
     let effective_address = abs_address.wrapping_add(cpu.get_y_reg() as u16);
-    let data = cpu.read(effective_address);
-
+    
     let page_boundary_crossed = (abs_address & 0xFF00) != (effective_address & 0xFF00);
 
-    (
-        OpcodeData{ 
-            data: Some(data), 
-            address: Some(effective_address), 
-            offset: None 
-        },
-        if page_boundary_crossed { 1 } else { 0 }
-    )
+    (effective_address, if page_boundary_crossed { 1 } else { 0 })
 }
-// Relative Addressing - Gets the next bytes as a signed byte to be added to the pc for branch
-// instructions.
-fn relative(cpu: &Cpu6502) -> (OpcodeData, usize) {
-    let data = cpu.read(cpu.get_pc() + 1) as i8;
-    let address = (cpu.get_pc() as i32 + data as i32) as u16;
-
-    (
-        OpcodeData{ 
-            data: None, 
-            address: Some(address), 
-            offset: Some(data) 
-        },
-        0
-    )
+// Relative Addressing - Data used is next byte
+fn relative(cpu: &Cpu6502) -> (u16, usize) {
+   (cpu.get_pc() + 1, 0)
 }
 
 // OPCODES - all the cpu instructions
@@ -539,8 +461,8 @@ fn relative(cpu: &Cpu6502) -> (OpcodeData, usize) {
 //  - Number of clock cycles taken by the instruction
 
 // ADC - Add Memory to Accumulator with Carry
-fn adc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn adc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = (data as u16) + (cpu.get_acc() as u16) + (cpu.status.carry() as u16);
     cpu.status.set_carry(result & 0xFF00 > 0);
@@ -558,8 +480,8 @@ fn adc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // AND - AND Memory with Accumulator
-fn and(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn and(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = cpu.get_acc() & data;
     cpu.status.set_zero(result == 0);
@@ -567,28 +489,29 @@ fn and(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     cpu.set_acc(result);
     0
 }
-// ASL - Shift Left One Bit
-fn asl(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
-        let result = data << 1;
-        cpu.status.set_carry((data & 0x80) != 0);
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(result & 0x80 != 0);
-        cpu.write(address, result);
-    }
-    // Otherwise, Accumulator version
-    else {
-        let result = cpu.get_acc() << 1;
-        cpu.status.set_carry((cpu.get_acc() & 0x80) != 0);
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(result & 0x80 != 0);
-        cpu.set_acc(result);
-    }
+// ASL - Shift Left One Bit (Accumulator version)
+fn asl_acc(cpu: &mut Cpu6502, _address: u16) -> usize {
+    let result = cpu.get_acc() << 1;
+    cpu.status.set_carry((cpu.get_acc() & 0x80) != 0);
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.set_acc(result);
+
+    0
+}
+// ASL - Shift Left One Bit (Memory version)
+fn asl_mem(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
+    let result = data << 1;
+    cpu.status.set_carry((data & 0x80) != 0);
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.write(address, result);
     0
 }
 // BCC - Branch on Carry Clear
-fn bcc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn bcc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if !cpu.status.carry() {
         let prev_pc = cpu.get_pc();
@@ -605,8 +528,8 @@ fn bcc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BCS - Branch on Carry Set
-fn bcs(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn bcs(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if cpu.status.carry() {
         let prev_pc = cpu.get_pc();
@@ -624,8 +547,8 @@ fn bcs(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BEQ - Branch on Equal (Zero flag set)
-fn beq(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn beq(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if cpu.status.zero() {
         let prev_pc = cpu.get_pc();
@@ -643,8 +566,8 @@ fn beq(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BIT - Test Bits in Memory with Accumulator
-fn bit(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn bit(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     cpu.status.set_negative(data & 0x80 != 0);
     cpu.status.set_overflow(data & 0x40 != 0);
@@ -652,8 +575,8 @@ fn bit(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BMI - Branch on Result Minus (Negative flag set)
-fn bmi(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn bmi(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if cpu.status.negative() {
         let prev_pc = cpu.get_pc();
@@ -670,8 +593,8 @@ fn bmi(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BNE - Branch on Not Equal (Zero flag NOT set)
-fn bne(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn bne(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if !cpu.status.zero() {
         let prev_pc = cpu.get_pc();
@@ -688,8 +611,8 @@ fn bne(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BPL - Branch on Result Plus (Negative flag NOT set)
-fn bpl(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn bpl(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if !cpu.status.negative() {
         let prev_pc = cpu.get_pc();
@@ -706,14 +629,13 @@ fn bpl(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BRK - Force Break (Initiate interrupt)
-fn brk(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn brk(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.irq();
-
     0
 }
 // BVC - Branch on Overflow clear
-fn bvc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn bvc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if !cpu.status.overflow() {
         let prev_pc = cpu.get_pc();
@@ -730,8 +652,8 @@ fn bvc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // BVS - Branch on Overflow set
-fn bvs(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let offset = opcode_data.offset.unwrap();
+fn bvs(cpu: &mut Cpu6502, address: u16) -> usize {
+    let offset = cpu.read(address) as i8;
 
     if cpu.status.overflow() {
         let prev_pc = cpu.get_pc();
@@ -748,28 +670,28 @@ fn bvs(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // CLC - Clear Carry Flag
-fn clc(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn clc(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.status.set_carry(false);
     0
 }
 // CLD - Clear Decimal Mode
-fn cld(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn cld(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.status.set_decimal(false);
     0
 }
 // CLI - Clear Interrupt Disable Bit
-fn cli(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn cli(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.status.set_interrupt(false);
     0
 }
 // CLV - Clear Overflow Flag
-fn clv(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn clv(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.status.set_overflow(false);
     0
 }
 // CMP - Compare Memory with Accumulator
-fn cmp(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn cmp(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = (cpu.get_acc() as i16) - (data as i16);
     cpu.status.set_zero(result == 0);
@@ -778,8 +700,8 @@ fn cmp(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // CPX - Compare Memory and Index X
-fn cpx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn cpx(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = (cpu.get_x_reg() as i16) - (data as i16);
     cpu.status.set_zero(result == 0);
@@ -788,8 +710,8 @@ fn cpx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // CPY - Compare Memory and Index Y
-fn cpy(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn cpy(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = (cpu.get_y_reg() as i16) - (data as i16);
     cpu.status.set_zero(result == 0);
@@ -798,9 +720,8 @@ fn cpy(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // DEC - Decrement Memory
-fn dec(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
-    let address = opcode_data.address.unwrap();
+fn dec(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = data.wrapping_sub(1);
     cpu.status.set_zero(result == 0);
@@ -809,7 +730,7 @@ fn dec(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // DEX - Decrement X Register
-fn dex(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn dex(cpu: &mut Cpu6502, _: u16) -> usize {
     let result = cpu.get_x_reg().wrapping_sub(1);
     
     cpu.status.set_zero(result == 0);
@@ -818,7 +739,7 @@ fn dex(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     0
 }
 // DEY - Decrement Y Register
-fn dey(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn dey(cpu: &mut Cpu6502, _: u16) -> usize {
     let result = cpu.get_y_reg().wrapping_sub(1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -826,8 +747,8 @@ fn dey(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     0
 }
 // EOR - Exclusive OR
-fn eor(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn eor(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = cpu.get_acc() ^ data;
     cpu.status.set_zero(result == 0);
@@ -836,9 +757,8 @@ fn eor(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // INC - Increment Memory
-fn inc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
-    let address = opcode_data.address.unwrap();
+fn inc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = data.wrapping_add(1);
     cpu.status.set_zero(result == 0);
@@ -847,7 +767,7 @@ fn inc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // INX - Increment X Register
-fn inx(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn inx(cpu: &mut Cpu6502, _: u16) -> usize {
     let result = cpu.get_x_reg().wrapping_add(1);
 
     cpu.status.set_zero(result == 0);
@@ -856,7 +776,7 @@ fn inx(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     0
 }
 // INY - Increment Y Register
-fn iny(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn iny(cpu: &mut Cpu6502, _: u16) -> usize {
     let result = cpu.get_y_reg().wrapping_add(1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -864,16 +784,12 @@ fn iny(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     0
 }
 // JMP - Jump
-fn jmp(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let address = opcode_data.address.unwrap();
-
+fn jmp(cpu: &mut Cpu6502, address: u16) -> usize {
     cpu.set_pc(address);
     0
 }
 // JSR - Jump to Subroutine
-fn jsr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let address = opcode_data.address.unwrap();
-
+fn jsr(cpu: &mut Cpu6502, address: u16) -> usize {
     let return_point = cpu.get_pc().wrapping_sub(1); // Return point is pc - 1
     let hi = (return_point >> 8) as u8;
     let lo = return_point as u8;
@@ -885,8 +801,8 @@ fn jsr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // LDA - Load Accumulator
-fn lda(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn lda(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     cpu.status.set_zero(data == 0);
     cpu.status.set_negative(data & 0x80 != 0);
@@ -894,8 +810,8 @@ fn lda(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // LDX - Load X Register
-fn ldx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn ldx(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     cpu.status.set_zero(data == 0);
     cpu.status.set_negative(data & 0x80 != 0);
@@ -903,40 +819,38 @@ fn ldx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // LDY - Load Y Register
-fn ldy(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn ldy(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     cpu.status.set_zero(data == 0);
     cpu.status.set_negative(data & 0x80 != 0);
     cpu.set_y_reg(data);
     0
 }
-// LSR - Logical Shift Right
-fn lsr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    // Memory version if data & address given
-    if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
-        let result = data >> 1;
-        cpu.status.set_carry(data & 0x01 == 1);
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(false); // result will always have bit 7 == 0
-        cpu.write(address, result);
-    }
-    // Otherwise, Accumulator version
-    else {
-        let result = cpu.get_acc() >> 1;
-        cpu.status.set_carry(cpu.get_acc() & 0x01 == 1);
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(false); // result will always have bit 7 == 0
-        cpu.set_acc(result);
-    }
-
+// LSR - Logical Shift Right (Accumulator version)
+fn lsr_acc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
+    let result = data >> 1;
+    cpu.status.set_carry(data & 0x01 == 1);
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(false); // result will always have bit 7 == 0
+    cpu.write(address, result);
+    0
+}
+// LSR - Logical Shift Right (Memory version)
+fn lsr_mem(cpu: &mut Cpu6502, address: u16) -> usize {
+    let result = cpu.get_acc() >> 1;
+    cpu.status.set_carry(cpu.get_acc() & 0x01 == 1);
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(false); // result will always have bit 7 == 0
+    cpu.set_acc(result);
     0
 }
 // NOP - No Operation
-fn nop(_: &mut Cpu6502, _: OpcodeData) -> usize { 0 }
+fn nop(_: &mut Cpu6502, _: u16) -> usize { 0 }
 // ORA - Logical Inclusive OR
-fn ora(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn ora(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = cpu.get_acc() | data;
     cpu.status.set_zero(result == 0);
@@ -945,19 +859,19 @@ fn ora(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
     0
 }
 // PHA - Push Accumulator
-fn pha(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn pha(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.push_to_stack(cpu.get_acc());
     0
 }
 // PHP - Push Processor Status
-fn php(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn php(cpu: &mut Cpu6502, _: u16) -> usize {
     // Bit 5 (unused flag) is always set to 1 when status pushed to stack
     // Bit 4 (break flag) is set when push to stk caused by php or brk
     cpu.push_to_stack(cpu.get_status() | 0x30);
     0
 }
 // PLA - Pull Accumulator
-fn pla(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn pla(cpu: &mut Cpu6502, _: u16) -> usize {
     let result = cpu.pop_from_stack();
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -965,57 +879,53 @@ fn pla(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     0
 }
 // PLP - Pull Processor Status
-fn plp(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn plp(cpu: &mut Cpu6502, _: u16) -> usize {
     // Bit 5 is ignored when pulling into processor status
     // Bit 4 is cleared
     let data = cpu.pop_from_stack() & 0xCF;
     cpu.set_status(data | (cpu.get_status() & 0x20));
     0
 }
-// ROL - Rotate Left
-fn rol(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    // Memory Version if data & address given
-    if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
-        let result = (data << 1) | if cpu.status.carry() { 1 } else { 0 };
-        cpu.status.set_carry(data >> 7 == 1); // old bit 7 becomes new carry
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(result & 0x80 != 0);
-        cpu.write(address, result);
-    }
-    // Otherwise, Accumulator version
-    else {
-        let result = (cpu.get_acc() << 1) | if cpu.status.carry() { 1 } else { 0 };
-        cpu.status.set_carry(cpu.get_acc() >> 7 == 1); // old bit 7 becomes new carry
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(result & 0x80 != 0);
-        cpu.set_acc(result);
-    }
-
+// ROL - Rotate Left (Accumulator version)
+fn rol_acc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let result = (cpu.get_acc() << 1) | if cpu.status.carry() { 1 } else { 0 };
+    cpu.status.set_carry(cpu.get_acc() >> 7 == 1); // old bit 7 becomes new carry
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.set_acc(result);
     0
 }
-// ROR - Rotate Right
-fn ror(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    // Memory version if data & address given
-    if let (Some(data), Some(address)) = (opcode_data.data, opcode_data.address) {
-        let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (data >> 1);
-        cpu.status.set_carry(data & 0x01 == 1); // old bit 0 becomes new carry
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(result & 0x80 != 0);
-        cpu.write(address, result);
-    } 
-    // Otherwise, Accumulator Version
-    else {
-        let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (cpu.get_acc() >> 1);
-        cpu.status.set_carry(cpu.get_acc() & 0x01 == 1); // old bit 0 becomes new carry
-        cpu.status.set_zero(result == 0);
-        cpu.status.set_negative(result & 0x80 != 0);
-        cpu.set_acc(result);
-    }
-
+// ROL - Rotate Left (Memory version)
+fn rol_mem(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
+    let result = (data << 1) | if cpu.status.carry() { 1 } else { 0 };
+    cpu.status.set_carry(data >> 7 == 1); // old bit 7 becomes new carry
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.write(address, result);
+    0
+}
+// ROR - Rotate Right (Accumulator version)
+fn ror_acc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (cpu.get_acc() >> 1);
+    cpu.status.set_carry(cpu.get_acc() & 0x01 == 1); // old bit 0 becomes new carry
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.set_acc(result);
+    0
+}
+// ROR - Rotate Right (Memory version)
+fn ror_mem(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
+    let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (data >> 1);
+    cpu.status.set_carry(data & 0x01 == 1); // old bit 0 becomes new carry
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    cpu.write(address, result);
     0
 }
 // RTI - Return from Interrupt
-fn rti(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn rti(cpu: &mut Cpu6502, _: u16) -> usize {
     // Restore processer status (Bit 5 ignored, bit 4 cleared)
     let prev_status = cpu.pop_from_stack() & 0xCF;
     cpu.set_status(prev_status | (cpu.get_status() & 0x20));
@@ -1027,7 +937,7 @@ fn rti(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
     0
 }
 // RTS - Return from Subroutine
-fn rts(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn rts(cpu: &mut Cpu6502, _: u16) -> usize {
     let lo = cpu.pop_from_stack() as u16;
     let hi = cpu.pop_from_stack() as u16;
     let new_pc = (hi << 8) | lo;
@@ -1037,89 +947,93 @@ fn rts(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
 // SBC - Subtract with Carry
 //  Note: instr 0xEB (illegal opcode) executes the same as 0xE9, which is legal.
 //        0xEB is differentiated in the table only by the name "USBC" for "Undocumented SBC"
-fn sbc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn sbc(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
     // Add with carry: A + M + C
     // Sub with carry: A - M - (1 - C) == A + (-M - 1) + C
     let twos_comp = (data as i8 * -1).wrapping_sub(1) as u8;
 
+    // ADC w/ two's compliment instead of original data
+    let result = (twos_comp as u16) + (cpu.get_acc() as u16) + (cpu.status.carry() as u16);
+    cpu.status.set_carry(result & 0xFF00 > 0);
+    cpu.status.set_zero(result & 0xFF == 0);
+    cpu.status.set_negative(result & 0x80 != 0);
+    
+    // Set V flag if acc and data are same sign, but result is different sign
+    let a = cpu.get_acc() & 0x80 != 0;
+    let r = (result & 0x80) != 0;
+    let d = twos_comp & 0x80 != 0;
+    cpu.status.set_overflow( !(a^d)&(a^r) ); // Trust, bro
 
-    let new_opcode_data = OpcodeData{
-        data: Some(twos_comp),  // -M - 1
-        address: opcode_data.address, 
-        offset: opcode_data.offset
-    }; 
+    cpu.set_acc(result as u8);
 
-    adc(cpu, new_opcode_data)
+    0
 }
 // SEC - Set Carry Flag
-fn sec(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn sec(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.status.set_carry(true);
     0
 }
 // SED - Set Decimal Flag
-fn sed(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn sed(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.status.set_decimal(true);
     0
 }
 // SEI - Set Interrupt Disable
-fn sei(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn sei(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.status.set_interrupt(true);
     0
 }
 // STA - Store Accumulator
-fn sta(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let address = opcode_data.address.unwrap();
+fn sta(cpu: &mut Cpu6502, address: u16) -> usize {
     cpu.write(address, cpu.get_acc());
     0
 }
 // STX - Store X Register
-fn stx(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let address = opcode_data.address.unwrap();
+fn stx(cpu: &mut Cpu6502, address: u16) -> usize {
     cpu.write(address, cpu.get_x_reg());
     0
 }
 // STY - Store Y Register
-fn sty(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let address = opcode_data.address.unwrap();
+fn sty(cpu: &mut Cpu6502, address: u16) -> usize {
     cpu.write(address, cpu.get_y_reg());
     0
 }
 // TAX - Transfer Accumulator to X
-fn tax(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn tax(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.set_x_reg(cpu.get_acc());
     cpu.status.set_zero(cpu.get_x_reg() == 0);
     cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TAY - Transfer Accumulator to Y
-fn tay(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn tay(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.set_y_reg(cpu.get_acc());
     cpu.status.set_zero(cpu.get_y_reg() == 0);
     cpu.status.set_negative(cpu.get_y_reg() & 0x80 != 0);
     0
 }
 // TSX - Transfer Stack Pointer to X
-fn tsx(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn tsx(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.set_x_reg(cpu.get_sp());
     cpu.status.set_zero(cpu.get_x_reg() == 0);
     cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TXA - Transfer X to Accumulator
-fn txa(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn txa(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.set_acc(cpu.get_x_reg());
     cpu.status.set_zero(cpu.get_acc() == 0);
     cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
     0
 }
 // TXS - Transfer X to Stack Pointer
-fn txs(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn txs(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.set_sp(cpu.get_x_reg());
     0
 }
 // TYA - Transfer Y to Accumulator
-fn tya(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
+fn tya(cpu: &mut Cpu6502, _: u16) -> usize {
     cpu.set_acc(cpu.get_y_reg());
     cpu.status.set_zero(cpu.get_acc() == 0);
     cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
@@ -1131,12 +1045,12 @@ fn tya(cpu: &mut Cpu6502, _: OpcodeData) -> usize {
 
 // INVALID OPCODE - An unimplemented opcode not recognized by the CPU.
 //                  Placeholder for all unimplemented illegal opcodes.
-fn xxx(_: &mut Cpu6502, _: OpcodeData) -> usize { 0 }
+fn xxx(_: &mut Cpu6502, _: u16) -> usize { 0 }
 
 
 // LAX - Load Accumulator and X Register
-fn lax(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn lax(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     cpu.status.set_zero(data == 0);
     cpu.status.set_negative(data & 0x80 != 0);
@@ -1146,128 +1060,61 @@ fn lax(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
 }
 
 // SAX - Store Accumulator & X Register (bitwise acc & x)
-fn sax(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let address = opcode_data.address.unwrap();
-    
+fn sax(cpu: &mut Cpu6502, address: u16) -> usize {
     let result = cpu.get_acc() & cpu.get_x_reg();
     cpu.write(address, result);
 
     0
 }
 
+// Doing these illegal opcodes using other opcode functions may result in ppu
+// registers being incorrectly incremented. definitely something to be aware of.
+
 // DCP - Decrement Memory and Compare with Accumulator
-fn dcp(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    dec(cpu, opcode_data);
-
-    let new_op_data = OpcodeData{
-        address: opcode_data.address,
-        data: Some(opcode_data.data.unwrap().wrapping_sub(1)),
-        offset: opcode_data.offset,
-    };
-    
-    cmp(cpu, new_op_data);
-
+fn dcp(cpu: &mut Cpu6502, address: u16) -> usize {
+    dec(cpu, address);
+    cmp(cpu, address);
     0
 }
 
 // ISC - Increment Memory and Subtract with Carry
-fn isc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    inc(cpu, opcode_data);
-
-    let new_op_data = OpcodeData{
-        address: opcode_data.address,
-        data: Some(opcode_data.data.unwrap().wrapping_add(1)),
-        offset: opcode_data.offset,
-    };
-    
-    sbc(cpu, new_op_data);
-
+fn isc(cpu: &mut Cpu6502, address: u16) -> usize {
+    inc(cpu, address);    
+    sbc(cpu, address);
     0
 }
 
 // SLO - Arithmetic Shift Left then Logical Inclusive OR
-fn slo(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    asl(cpu, opcode_data);
-
-    let new_op_data = OpcodeData{
-        address: opcode_data.address,
-        data: Some(opcode_data.data.unwrap() << 1),
-        offset: opcode_data.offset,
-    };
-    
-    ora(cpu, new_op_data);
-
+fn slo(cpu: &mut Cpu6502, address: u16) -> usize {
+    asl_mem(cpu, address);
+    ora(cpu, address);
     0
 }
 
 // RLA - Rotate Left then Logical AND with Accumulator
-fn rla(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
-    let address = opcode_data.address.unwrap();
-
-    // Doing the ROL here because result will be used here anyways
-    // avoids computing result twice, plus there is no accumulator version
-    // so there's no need to worry abt that
-    let result = (data << 1) | if cpu.status.carry() { 1 } else { 0 };
-    cpu.status.set_carry(data >> 7 == 1); // old bit 7 becomes new carry
-    cpu.status.set_zero(result == 0);
-    cpu.status.set_negative(result & 0x80 != 0);
-    cpu.write(address, result);
-
-    let new_op_data = OpcodeData{
-        address: opcode_data.address,
-        data: Some(result),
-        offset: opcode_data.offset,
-    };
-    
-    and(cpu, new_op_data);
-
+fn rla(cpu: &mut Cpu6502, address: u16) -> usize {
+    rol_mem(cpu, address);
+    and(cpu, address);
     0
 }
 
 // SRE - Logical Shift Right then "Exclusive OR" Memory with Accumulator
-fn sre(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    lsr(cpu, opcode_data);
-
-    let new_op_data = OpcodeData{
-        address: opcode_data.address,
-        data: Some(opcode_data.data.unwrap() >> 1),
-        offset: opcode_data.offset,
-    };
-    
-    eor(cpu, new_op_data);
-
+fn sre(cpu: &mut Cpu6502, address: u16) -> usize {
+    lsr_mem(cpu, address);
+    eor(cpu, address);
     0
 }
 
 // RRA - Rotate Right and Add Memory to Accumulator
-fn rra(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap(); 
-    let address = opcode_data.address.unwrap();
-
-    // Doing the ROR here because result will be used here anyways
-    // avoids computing result twice, plus there is no accumulator version
-    // so there's no need to worry abt that
-    let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (data >> 1);
-    cpu.status.set_carry(data & 0x01 == 1); // old bit 0 becomes new carry
-    cpu.status.set_zero(result == 0);
-    cpu.status.set_negative(result & 0x80 != 0);
-    cpu.write(address, result);
-
-    let new_op_data = OpcodeData{
-        address: opcode_data.address,
-        data: Some(result),
-        offset: opcode_data.offset,
-    };
-    
-    adc(cpu, new_op_data);
-
+fn rra(cpu: &mut Cpu6502, address: u16) -> usize {
+    ror_mem(cpu, address);
+    adc(cpu, address);
     0
 }
 
 // ANC - Bitwise AND Memory with Accumulator then Move Negative Flag to Carry Flag
-fn anc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    and(cpu, opcode_data);
+fn anc(cpu: &mut Cpu6502, address: u16) -> usize {
+    and(cpu, address);
 
     cpu.status.set_carry(cpu.status.negative());
 
@@ -1275,8 +1122,8 @@ fn anc(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
 }
 
 // ALR - Bitwise AND Memory with Accumulator then Logical Shift Right
-fn asr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn asr(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
 
     let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);
     cpu.status.set_carry(data & cpu.get_acc() & 0x01 == 1);
@@ -1288,8 +1135,8 @@ fn asr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
 }
 
 // ARR - Bitwise AND Memory with Accumulator then Rotate Right
-fn arr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
-    let data = opcode_data.data.unwrap();
+fn arr(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = cpu.read(address);
     
     let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);
     cpu.status.set_zero(result == 0);
@@ -1309,7 +1156,7 @@ fn arr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
 
 // Not sure exactly how to go about ignoring offsets of addressing modes yet...
 // // SHA Indirect Y - Store Accumulator Bitwise AND Index Register X Bitwise AND Memory
-// fn sha_ind_y(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+// fn sha_ind_y(cpu: &mut CPU, address: u16) -> usize {
 //     let address = opcode_data.address.unwrap().wrapping_sub(cpu.get_y_reg() as u16); // "ignore" / undo the y offset of the address
 //     let hi = (address >> 8) as u8;
 
@@ -1321,7 +1168,7 @@ fn arr(cpu: &mut Cpu6502, opcode_data: OpcodeData) -> usize {
 // }
 
 // // SHY - Store Index Register Y Bitwise AND Value
-// fn shy(cpu: &mut CPU, opcode_data: OpcodeData) -> usize {
+// fn shy(cpu: &mut CPU, address: u16) -> usize {
 //     let address = opcode_data.address.unwrap().wrapping_sub(cpu.get_x_reg() as u16); // "ignore" / undo the x offset of the address
 //     let hi = (address >> 8) as u8;
 

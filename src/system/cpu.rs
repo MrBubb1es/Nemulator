@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::cell::RefCell;
 
 use bitfield_struct::bitfield;
 
@@ -7,7 +8,7 @@ use crate::cartridge::mapper::Mapper;
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
 use super::mem::Memory;
-use super::ppu_util::PpuRegisters;
+use super::ppu::Ppu2C02;
 
 // NVUBDIZC
 #[bitfield(u8)]
@@ -46,10 +47,17 @@ pub struct Cpu6502 {
     pc: u16,
     pub status: CpuStatus,
 
+    // Flag used to keep track of when the PPU triggers an NMI
+    nmi_flag: bool,
+
+    // Memory accessable only by the CPU
     sys_ram: Memory,
     prg_rom: Memory,
-    ppu_regs: Rc<PpuRegisters>,
+
+    // References to the cartridge mapper and PPU are required so the CPU can
+    // map addresses & read/write data to and from the PPU
     mapper: Rc<dyn Mapper>,
+    ppu: Rc<RefCell<Ppu2C02>>,
 
     cycles_remaining: usize, // Number of CPU clocks before next instruction
     total_clocks: usize, // Total number of clocks since CPU started running
@@ -60,7 +68,7 @@ pub struct Cpu6502 {
 
 impl Cpu6502 {
     /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
-    pub fn new(prg_rom: Memory, ppu_regs: Rc<PpuRegisters>, mapper: Rc<dyn Mapper>) -> Self {
+    pub fn new(prg_rom: Memory, ppu: Rc<RefCell<Ppu2C02>>, mapper: Rc<dyn Mapper>) -> Self {
         let mut new_cpu = Cpu6502{
             acc: 0,
             x: 0,
@@ -69,9 +77,11 @@ impl Cpu6502 {
             pc: 0,
             status: CpuStatus::from_bits(0x20), // start w/ unused flag on cuz why not ig (fixes nesdev tests)
 
+            nmi_flag: false,
+
             sys_ram: Memory::new(0x800), // NES has 2KiB of internal memory that only the CPU can access
             prg_rom: prg_rom,
-            ppu_regs: Rc::clone(&ppu_regs),
+            ppu: Rc::clone(&ppu),
             mapper: Rc::clone(&mapper),
 
             cycles_remaining: 0,
@@ -98,6 +108,13 @@ impl Cpu6502 {
         let mut excecuted = false;
 
         if self.cycles_remaining == 0 {
+            if self.nmi_flag {
+                self.nmi();
+                self.nmi_flag = false;
+                
+                return false;
+            }
+
             excecuted = true;
 
             let opcode = self.read(self.pc);
@@ -110,7 +127,6 @@ impl Cpu6502 {
 
             // store the instruction (for debugging)
             self.current_instr = instr.clone();
-            self.instr_data = opcode_data;
     
             // Increment pc before instruction execution
             self.pc += instr.bytes as u16;
@@ -147,7 +163,7 @@ impl Cpu6502 {
             },
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
-                self.ppu_regs.read(address & 0x0007)
+                self.ppu.as_ref().borrow_mut().cpu_read(address & 0x0007)
             }
             // 0x4000..=0x401F => {
             //     // APU or I/O Reads
@@ -175,8 +191,8 @@ impl Cpu6502 {
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
 
-                self.ppu_regs.write(address & 0x0007, data);
-            }
+                self.ppu.as_ref().borrow_mut().cpu_write(address & 0x0007, data);
+            },
             // 0x4000..=0x401F => {
             //     // APU or I/O Writes
             //     println!("APU WRITE OCCURED");
@@ -398,69 +414,73 @@ impl Cpu6502 {
         self.pc = val;
     }
 
+    pub fn trigger_ppu_nmi(&mut self) {
+        self.nmi_flag = true;
+    }
+
 
     /// Get the instruction just executed as a string of 6502 assembly for
     /// debugging purposes.
-    pub fn current_instr_str(&self) -> String {
-        let mut out_str = format!("0x{:02X}", self.current_instr.opcode_num);
-        out_str.push(' ');
-        out_str.push_str(self.current_instr.name);
+    // pub fn current_instr_str(&self) -> String {
+    //     let mut out_str = format!("0x{:02X}", self.current_instr.opcode_num);
+    //     out_str.push(' ');
+    //     out_str.push_str(self.current_instr.name);
 
-        out_str.push(' ');
-        let temp = match self.current_instr.addr_mode {
-            AddressingMode::Accumulator => String::from("A : [acc]"),
+    //     out_str.push(' ');
+    //     let temp = match self.current_instr.addr_mode {
+    //         AddressingMode::Accumulator => String::from("A : [acc]"),
 
-            AddressingMode::Implied => String::from(": [imp]"),
+    //         AddressingMode::Implied => String::from(": [imp]"),
 
-            AddressingMode::Immediate => {
-                format!("#${:02X} : [imm]", self.instr_data.data.unwrap())
-            }
+    //         AddressingMode::Immediate => {
+    //             format!("#${:02X} : [imm]", self.instr_data.data.unwrap())
+    //         }
 
-            AddressingMode::Absolute => {
-                format!("${:04X} : [abs]", self.instr_data.address.unwrap())
-            }
-            AddressingMode::AbsoluteX => {
-                format!("${:04X},X : [abs x]", self.instr_data.address.unwrap())
-            }
-            AddressingMode::AbsoluteY => {
-                format!("${:04X},Y : [abs y]", self.instr_data.address.unwrap())
-            }
+    //         AddressingMode::Absolute => {
+    //             format!("${:04X} : [abs]", self.instr_data.address.unwrap())
+    //         }
+    //         AddressingMode::AbsoluteX => {
+    //             format!("${:04X},X : [abs x]", self.instr_data.address.unwrap())
+    //         }
+    //         AddressingMode::AbsoluteY => {
+    //             format!("${:04X},Y : [abs y]", self.instr_data.address.unwrap())
+    //         }
 
-            AddressingMode::ZeroPage => {
-                format!("${:02X} : [zpage]", self.instr_data.address.unwrap())
-            }
-            AddressingMode::ZeroPageX => {
-                format!("${:02X},X : [zpage x]", self.instr_data.address.unwrap())
-            }
-            AddressingMode::ZeroPageY => {
-                format!("${:02X},Y : [zpage y]", self.instr_data.address.unwrap())
-            }
+    //         AddressingMode::ZeroPage => {
+    //             format!("${:02X} : [zpage]", self.instr_data.address.unwrap())
+    //         }
+    //         AddressingMode::ZeroPageX => {
+    //             format!("${:02X},X : [zpage x]", self.instr_data.address.unwrap())
+    //         }
+    //         AddressingMode::ZeroPageY => {
+    //             format!("${:02X},Y : [zpage y]", self.instr_data.address.unwrap())
+    //         }
 
-            // Don't know the original data from the instruction, it's somewhere in memory
-            AddressingMode::Indirect => {
-                String::from("$(??) : [ind]")
-            }
-            AddressingMode::IndirectX => {
-                String::from("$(??),X : [ind x]")
-            }
-            AddressingMode::IndirectY => {
-                String::from("$(??),Y : [ind y]")
-            }
+    //         // Don't know the original data from the instruction, it's somewhere in memory
+    //         AddressingMode::Indirect => {
+    //             String::from("$(??) : [ind]")
+    //         }
+    //         AddressingMode::IndirectX => {
+    //             String::from("$(??),X : [ind x]")
+    //         }
+    //         AddressingMode::IndirectY => {
+    //             String::from("$(??),Y : [ind y]")
+    //         }
 
-            AddressingMode::Relative => format!(
-                "${:02X} : [rel, offset = {}]",
-                self.instr_data.offset.unwrap() as u8,
-                self.instr_data.offset.unwrap()
-            ),
-        };
-        out_str.push_str(&temp);
+    //         AddressingMode::Relative => format!(
+    //             "${:02X} : [rel, offset = {}]",
+    //             self.instr_data.offset.unwrap() as u8,
+    //             self.instr_data.offset.unwrap()
+    //         ),
+    //     };
+    //     out_str.push_str(&temp);
 
-        if self.current_instr.is_illegal {
-            out_str.push_str(" <ILLEGAL>");
-        }
+    //     if self.current_instr.is_illegal {
+    //         out_str.push_str(" <ILLEGAL>");
+    //     }
 
-        out_str
-    }
+    //     out_str
+    // }
 
     pub fn get_state(&self) -> CpuState {
         CpuState {
@@ -480,7 +500,7 @@ impl Cpu6502 {
         text.push_str(&format!("  A: 0x{:02X}, X: 0x{:02X}, Y: 0x{:02X}", self.acc, self.x, self.y));
         text.push_str(&format!("  SP: 0x{:02X}, PC: 0x{:04X}", self.sp, self.pc));
         text.push_str(&format!("  Status (NVUBDIZC): {:08b}", self.get_status()));
-        text.push_str(&format!("  Last Instr: {}", self.current_instr_str()));
+        // text.push_str(&format!("  Last Instr: {}", self.current_instr_str()));
         text.push_str(&format!("  Total Clks: {}", self.total_clocks));
         text
     }

@@ -1,16 +1,14 @@
-use std::{borrow::Borrow, fs, io::Read, rc::Rc};
+use std::{borrow::Borrow, cell::{Ref, RefCell, RefMut}, fs, io::Read, rc::Rc};
 
 use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 
-use super::{cpu::{self, CpuState, Cpu6502}, ppu_util::{PpuMask, PpuRegisters}, ppu::Ppu2C02};
+use super::{cpu::{self, CpuState, Cpu6502}, ppu_util::PpuMask, ppu::Ppu2C02};
 
 pub struct NES {
     cpu: Option<Cpu6502>,
-    ppu: Option<Ppu2C02>,
-    ppu_regs: Option<Rc<PpuRegisters>>,
+    ppu: Option<Rc<RefCell<Ppu2C02>>>,
+    // ppu_regs: Option<Rc<Ppu2C02>>,
     mapper: Option<Rc<dyn Mapper>>,
-
-    pub screen_buf: Box<[u8; 256*240*4]>,
 
     clocks: usize,
 
@@ -23,10 +21,7 @@ impl Default for NES {
         NES {
             cpu: None,
             ppu: None,
-            ppu_regs: None,
             mapper: None,
-
-            screen_buf: Box::new([0; 256*240*4]),
 
             clocks: 0,
 
@@ -61,16 +56,20 @@ impl NES {
         // Parse cartridge from file bytes
         let cart = Cartridge::from_bytes(data.as_slice()).unwrap();
 
-        let ppu_regs = Rc::new(PpuRegisters::default());
+        // let ppu_regs = Rc::new(PpuRegisters::default());
         let mapper: Rc<dyn Mapper> = cart.get_mapper();
 
-        let ppu = Ppu2C02::new(cart.get_chr_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
-        let cpu = Cpu6502::new(cart.get_prg_rom(), Rc::clone(&ppu_regs), Rc::clone(&mapper));
+        let ppu = Rc::new(RefCell::new(
+            Ppu2C02::new(
+                cart.get_chr_rom(), 
+                Rc::clone(&mapper),
+            ))
+        );
+        let cpu = Cpu6502::new(cart.get_prg_rom(), Rc::clone(&ppu), Rc::clone(&mapper));
 
         self.cpu = Some(cpu);
         self.ppu = Some(ppu);
         self.mapper = Some(mapper);
-        self.ppu_regs = Some(ppu_regs);
 
         self.cart = Some(cart);
         self.cart_loaded = true;
@@ -81,7 +80,6 @@ impl NES {
         self.cpu = None;
         self.ppu = None;
         self.mapper = None;
-        self.ppu_regs = None;
 
         self.cart = None;
         self.cart_loaded = false;
@@ -116,9 +114,19 @@ impl NES {
         }
     }
 
-    /// Get a reference to the CPU if a cart is loaded
-    pub fn get_cpu(&self) -> Option<&Cpu6502> {
-        self.cpu.as_ref()
+    /// Get a reference to the CPU. Does not check if a cart is loaded.
+    pub fn get_cpu(&self) -> &Cpu6502 {
+        self.cpu.as_ref().unwrap()
+    }
+
+    // Get a reference to the PPU. Does not check if a cart is loaded.
+    pub fn get_ppu(&self) -> Ref<Ppu2C02> {
+        self.ppu.as_ref().unwrap().as_ref().borrow()
+    }
+
+    // Get a mutable reference to the PPU. Does not check if a cart is loaded.
+    pub fn get_ppu_mut(&self) -> RefMut<Ppu2C02> {
+        self.ppu.as_ref().unwrap().as_ref().borrow_mut()
     }
 
     /// Get the number of CPU cLocks
@@ -134,7 +142,12 @@ impl NES {
     // might cycle (CPU cycles every 3 PPU cycles). Returns a bool reporting 
     // whether the CPU was cycled.
     pub fn cycle(&mut self) -> bool {
-        self.ppu.as_mut().unwrap().cycle(self.screen_buf.as_mut_slice());
+        self.get_ppu_mut().cycle();
+
+        if self.get_ppu().cpu_nmi_flag() {
+            self.cpu.as_mut().unwrap().trigger_ppu_nmi();
+            self.get_ppu_mut().set_cpu_nmi_flag(false);
+        }
 
         let cpu_cycled = if self.clocks % 3 == 0 {
             self.cpu.as_mut().unwrap().cycle()
@@ -164,7 +177,7 @@ impl NES {
 
     pub fn get_pgtbl1(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.pgtbl1.clone()
+            ppu.as_ref().borrow().pgtbl1.clone()
         } else {
             Box::new([0; 0x1000])
         }
@@ -172,7 +185,7 @@ impl NES {
 
     pub fn get_pgtbl2(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.pgtbl2.clone() // fix this later i too tired
+            ppu.as_ref().borrow().pgtbl2.clone() // fix this later i too tired
         } else {
             Box::new([0; 0x1000])
         }
@@ -180,11 +193,11 @@ impl NES {
 
     pub fn cycle_until_frame(&mut self) {
         if self.cart_loaded {
-            while !self.ppu.as_ref().unwrap().frame_finished() {
+            while !self.get_ppu().frame_finished() {
                 self.cycle();
             }
 
-            self.ppu.as_mut().unwrap().set_frame_finished(false);
+            self.get_ppu_mut().set_frame_finished(false);
         }
     }
 
@@ -210,6 +223,11 @@ impl NES {
     
         mem_str
     }
+
+    // /// Get the frame buffer as a slice
+    // pub fn frame_buf_slice(&self) -> &[u8] {
+    //     self.get_ppu().frame_buf_slice()
+    // }
 }
 
 #[cfg(test)]
@@ -264,18 +282,18 @@ mod tests {
 
             let (exp_pc, exp_sp, exp_acc, exp_x, exp_y, exp_flags, exp_clks) = expected_vals[i];
 
-            assert_eq!(exp_pc, test_nemulator.get_cpu().unwrap().get_pc());
-            assert_eq!(exp_sp, test_nemulator.get_cpu().unwrap().get_sp());
-            assert_eq!(exp_acc, test_nemulator.get_cpu().unwrap().get_acc());
-            assert_eq!(exp_x, test_nemulator.get_cpu().unwrap().get_x_reg());
-            assert_eq!(exp_y, test_nemulator.get_cpu().unwrap().get_y_reg());
-            assert_eq!(exp_flags, test_nemulator.get_cpu().unwrap().get_status());
-            assert_eq!(exp_clks, test_nemulator.get_cpu().unwrap().total_clocks());
+            assert_eq!(exp_pc, test_nemulator.get_cpu().get_pc());
+            assert_eq!(exp_sp, test_nemulator.get_cpu().get_sp());
+            assert_eq!(exp_acc, test_nemulator.get_cpu().get_acc());
+            assert_eq!(exp_x, test_nemulator.get_cpu().get_x_reg());
+            assert_eq!(exp_y, test_nemulator.get_cpu().get_y_reg());
+            assert_eq!(exp_flags, test_nemulator.get_cpu().get_status());
+            assert_eq!(exp_clks, test_nemulator.get_cpu().total_clocks());
 
             test_nemulator.cycle_instr()
         }
 
-        assert_eq!(test_nemulator.get_cpu().unwrap().read(0x0002), 0);
-        assert_eq!(test_nemulator.get_cpu().unwrap().read(0x0003), 0);
+        assert_eq!(test_nemulator.get_cpu().read(0x0002), 0);
+        assert_eq!(test_nemulator.get_cpu().read(0x0003), 0);
     }
 }

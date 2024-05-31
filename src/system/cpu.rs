@@ -111,7 +111,7 @@ impl Cpu6502 {
             if self.nmi_flag {
                 self.nmi();
                 self.nmi_flag = false;
-                
+
                 return false;
             }
 
@@ -421,66 +421,42 @@ impl Cpu6502 {
 
     /// Get the instruction just executed as a string of 6502 assembly for
     /// debugging purposes.
-    // pub fn current_instr_str(&self) -> String {
-    //     let mut out_str = format!("0x{:02X}", self.current_instr.opcode_num);
-    //     out_str.push(' ');
-    //     out_str.push_str(self.current_instr.name);
+    pub fn current_instr_str(&self) -> String {
+        let mut out_str = format!("0x{:02X}", self.current_instr.opcode_num);
+        out_str.push(' ');
+        out_str.push_str(self.current_instr.name);
 
-    //     out_str.push(' ');
-    //     let temp = match self.current_instr.addr_mode {
-    //         AddressingMode::Accumulator => String::from("A : [acc]"),
+        out_str.push(' ');
+        let temp = match self.current_instr.addr_mode {
+            AddressingMode::Accumulator => String::from(": [acc]"),
 
-    //         AddressingMode::Implied => String::from(": [imp]"),
+            AddressingMode::Implied => String::from(": [imp]"),
 
-    //         AddressingMode::Immediate => {
-    //             format!("#${:02X} : [imm]", self.instr_data.data.unwrap())
-    //         }
+            AddressingMode::Immediate => String::from(": [imm]"),
 
-    //         AddressingMode::Absolute => {
-    //             format!("${:04X} : [abs]", self.instr_data.address.unwrap())
-    //         }
-    //         AddressingMode::AbsoluteX => {
-    //             format!("${:04X},X : [abs x]", self.instr_data.address.unwrap())
-    //         }
-    //         AddressingMode::AbsoluteY => {
-    //             format!("${:04X},Y : [abs y]", self.instr_data.address.unwrap())
-    //         }
+            AddressingMode::Absolute => String::from(": [abs]"),
+            AddressingMode::AbsoluteX => String::from(": [abs x]"),
+            AddressingMode::AbsoluteY => String::from(": [abs y]"),
 
-    //         AddressingMode::ZeroPage => {
-    //             format!("${:02X} : [zpage]", self.instr_data.address.unwrap())
-    //         }
-    //         AddressingMode::ZeroPageX => {
-    //             format!("${:02X},X : [zpage x]", self.instr_data.address.unwrap())
-    //         }
-    //         AddressingMode::ZeroPageY => {
-    //             format!("${:02X},Y : [zpage y]", self.instr_data.address.unwrap())
-    //         }
+            AddressingMode::ZeroPage => String::from(": [zpage]"),
+            AddressingMode::ZeroPageX => String::from(": [zpage x]"),
+            AddressingMode::ZeroPageY => String::from(": [zpage y]"),
 
-    //         // Don't know the original data from the instruction, it's somewhere in memory
-    //         AddressingMode::Indirect => {
-    //             String::from("$(??) : [ind]")
-    //         }
-    //         AddressingMode::IndirectX => {
-    //             String::from("$(??),X : [ind x]")
-    //         }
-    //         AddressingMode::IndirectY => {
-    //             String::from("$(??),Y : [ind y]")
-    //         }
+            // Don't know the original data from the instruction, it's somewhere in memory
+            AddressingMode::Indirect => String::from(": [ind]"),
+            AddressingMode::IndirectX => String::from(": [ind x]"),
+            AddressingMode::IndirectY => String::from(": [ind y]"),
 
-    //         AddressingMode::Relative => format!(
-    //             "${:02X} : [rel, offset = {}]",
-    //             self.instr_data.offset.unwrap() as u8,
-    //             self.instr_data.offset.unwrap()
-    //         ),
-    //     };
-    //     out_str.push_str(&temp);
+            AddressingMode::Relative => String::from(": [rel]"),
+        };
+        out_str.push_str(&temp);
 
-    //     if self.current_instr.is_illegal {
-    //         out_str.push_str(" <ILLEGAL>");
-    //     }
+        if self.current_instr.is_illegal {
+            out_str.push_str(" <ILLEGAL>");
+        }
 
-    //     out_str
-    // }
+        out_str
+    }
 
     pub fn get_state(&self) -> CpuState {
         CpuState {
@@ -500,7 +476,7 @@ impl Cpu6502 {
         text.push_str(&format!("  A: 0x{:02X}, X: 0x{:02X}, Y: 0x{:02X}", self.acc, self.x, self.y));
         text.push_str(&format!("  SP: 0x{:02X}, PC: 0x{:04X}", self.sp, self.pc));
         text.push_str(&format!("  Status (NVUBDIZC): {:08b}", self.get_status()));
-        // text.push_str(&format!("  Last Instr: {}", self.current_instr_str()));
+        text.push_str(&format!("  Last Instr: {}", self.current_instr_str()));
         text.push_str(&format!("  Total Clks: {}", self.total_clocks));
         text
     }

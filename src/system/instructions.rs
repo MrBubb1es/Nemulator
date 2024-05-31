@@ -828,22 +828,22 @@ fn ldy(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // LSR - Logical Shift Right (Accumulator version)
-fn lsr_acc(cpu: &mut Cpu6502, address: u16) -> usize {
+fn lsr_acc(cpu: &mut Cpu6502, _address: u16) -> usize {
+    let result = cpu.get_acc() >> 1;
+    cpu.status.set_carry(cpu.get_acc() & 0x01 == 1);
+    cpu.status.set_zero(result == 0);
+    cpu.status.set_negative(false); // result will always have bit 7 == 0
+    cpu.set_acc(result);
+    0
+}
+// LSR - Logical Shift Right (Memory version)
+fn lsr_mem(cpu: &mut Cpu6502, address: u16) -> usize {
     let data = cpu.read(address);
     let result = data >> 1;
     cpu.status.set_carry(data & 0x01 == 1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(false); // result will always have bit 7 == 0
     cpu.write(address, result);
-    0
-}
-// LSR - Logical Shift Right (Memory version)
-fn lsr_mem(cpu: &mut Cpu6502, address: u16) -> usize {
-    let result = cpu.get_acc() >> 1;
-    cpu.status.set_carry(cpu.get_acc() & 0x01 == 1);
-    cpu.status.set_zero(result == 0);
-    cpu.status.set_negative(false); // result will always have bit 7 == 0
-    cpu.set_acc(result);
     0
 }
 // NOP - No Operation
@@ -887,7 +887,7 @@ fn plp(cpu: &mut Cpu6502, _: u16) -> usize {
     0
 }
 // ROL - Rotate Left (Accumulator version)
-fn rol_acc(cpu: &mut Cpu6502, address: u16) -> usize {
+fn rol_acc(cpu: &mut Cpu6502, _address: u16) -> usize {
     let result = (cpu.get_acc() << 1) | if cpu.status.carry() { 1 } else { 0 };
     cpu.status.set_carry(cpu.get_acc() >> 7 == 1); // old bit 7 becomes new carry
     cpu.status.set_zero(result == 0);
@@ -906,7 +906,7 @@ fn rol_mem(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // ROR - Rotate Right (Accumulator version)
-fn ror_acc(cpu: &mut Cpu6502, address: u16) -> usize {
+fn ror_acc(cpu: &mut Cpu6502, _address: u16) -> usize {
     let result = (if cpu.status.carry() { 1 } else { 0 } << 7) | (cpu.get_acc() >> 1);
     cpu.status.set_carry(cpu.get_acc() & 0x01 == 1); // old bit 0 becomes new carry
     cpu.status.set_zero(result == 0);

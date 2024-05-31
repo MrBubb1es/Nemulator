@@ -32,7 +32,7 @@ pub struct CpuState {
     pub pc: u16,
     pub status: CpuStatus,
     pub cycles_remaining: usize,
-    pub total_clocks: usize,
+    pub total_clocks: u64,
 }
 
 /// Representation of the NES 6502 CPU. Thankfully, the good gentelmen down at
@@ -60,7 +60,7 @@ pub struct Cpu6502 {
     ppu: Rc<RefCell<Ppu2C02>>,
 
     cycles_remaining: usize, // Number of CPU clocks before next instruction
-    total_clocks: usize, // Total number of clocks since CPU started running
+    total_clocks: u64, // Total number of clocks since CPU started running
 
     current_instr: Instruction,
     instr_data: OpcodeData,
@@ -141,7 +141,7 @@ impl Cpu6502 {
                 self.cycles_remaining += fetch_cycles;
             }
 
-            self.total_clocks += self.cycles_remaining;
+            self.total_clocks += self.cycles_remaining as u64;
         }
 
         self.cycles_remaining -= 1;
@@ -343,12 +343,12 @@ impl Cpu6502 {
     // GETTER/SETTER FUNCTIONS
 
     /// Get the current number of clock cycles since turn-on
-    pub fn total_clocks(&self) -> usize {
+    pub fn total_clocks(&self) -> u64 {
         self.total_clocks
     }
 
     /// Manually set the number of clock cycles since turn-on
-    pub fn set_total_clocks(&mut self, clks: usize) {
+    pub fn set_total_clocks(&mut self, clks: u64) {
         self.total_clocks = clks;
     }
 

@@ -10,7 +10,7 @@ pub struct NES {
     // ppu_regs: Option<Rc<Ppu2C02>>,
     mapper: Option<Rc<dyn Mapper>>,
 
-    clocks: usize,
+    clocks: u64,
 
     cart: Option<Cartridge>,
     cart_loaded: bool,
@@ -94,13 +94,13 @@ impl NES {
 
     /// Manually set the state of the CPU
     pub fn set_cpu_state(&mut self, 
-        pc: Option<u16>, 
-        sp: Option<u8>, 
-        acc: Option<u8>, 
-        x: Option<u8>, 
-        y: Option<u8>, 
-        status: Option<u8>, 
-        clocks: Option<usize>) {
+                        pc: Option<u16>, 
+                        sp: Option<u8>, 
+                        acc: Option<u8>, 
+                        x: Option<u8>, 
+                        y: Option<u8>, 
+                        status: Option<u8>, 
+                        clocks: Option<u64>) {
         if self.cart_loaded {
             let cpu = self.cpu.as_mut().unwrap();
 
@@ -130,7 +130,7 @@ impl NES {
     }
 
     /// Get the number of CPU cLocks
-    pub fn get_cpu_clks(&self) -> usize {
+    pub fn get_cpu_clks(&self) -> u64 {
         if let Some(cpu) = self.cpu.borrow() {
             cpu.total_clocks()
         } else {
@@ -268,7 +268,7 @@ mod tests {
                     temp[3] as u8,   // x
                     temp[4] as u8,   // y
                     temp[5] as u8,   // status
-                    temp[6])         // clocks
+                    temp[6] as u64)         // clocks
                 }
             )
         }

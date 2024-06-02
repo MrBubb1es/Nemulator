@@ -14,8 +14,9 @@ pub fn run() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    nes_app.nestest_init();
+    // nes_app.nestest_init();
     // nes_app.init("games/Super Mario Bros (E).nes");
+    nes_app.init("games/Donkey Kong Classics (U).nes");
     // nes_app.init("prg_tests/1.Branch_Basics.nes");
     // 1.Branch_Basics
 

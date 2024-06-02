@@ -92,9 +92,13 @@ impl Mapper for Mapper0 {
     }
 }
 
-pub fn get_mapper(mapper_id: u16) -> Rc<dyn Mapper> {
-    match mapper_id {
-        0 => Rc::new(Mapper0::default()),
-        _ => Rc::new(Mapper0::default()), 
-    }
+pub fn get_mapper(header: &Header) -> Rc<dyn Mapper> {
+    let mut mapper = match header.mapper_num {
+        0 => Mapper0::default(),
+        _ => Mapper0::default(), 
+    };
+
+    mapper.init(header);
+
+    Rc::new(mapper)
 }

@@ -951,7 +951,9 @@ fn sbc(cpu: &mut Cpu6502, address: u16) -> usize {
     let data = cpu.read(address);
     // Add with carry: A + M + C
     // Sub with carry: A - M - (1 - C) == A + (-M - 1) + C
-    let twos_comp = (data as i8 * -1).wrapping_sub(1) as u8;
+    let twos_comp = (data as i8).overflowing_mul(-1).0.wrapping_sub(1) as u8;
+    // let twos_comp = (data as i8 * -1).wrapping_sub(1) as u8; // errors
+    // let (twos_comp, _) = data.overflowing_neg();       // wrong behavior
 
     // ADC w/ two's compliment instead of original data
     let result = (twos_comp as u16) + (cpu.get_acc() as u16) + (cpu.status.carry() as u16);

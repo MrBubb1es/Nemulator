@@ -221,6 +221,6 @@ impl Cartridge {
     }
 
     pub fn get_mapper(&self) -> Rc<dyn Mapper> {
-        mapper::get_mapper(self._header.mapper_num)
+        mapper::get_mapper(&self._header)
     }
 }

@@ -1,10 +1,11 @@
 use std::rc::Rc;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use bitfield_struct::bitfield;
 
 use crate::cartridge::mapper::Mapper;
 
+use super::controller::{ControllerReadState, NesController};
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
 use super::mem::Memory;
@@ -54,6 +55,16 @@ pub struct Cpu6502 {
     sys_ram: Memory,
     prg_rom: Memory,
 
+    // Last polled states of each controller
+    polled_p1_controller: NesController,
+    polled_p2_controller: NesController,
+    // Current reading status of each controller
+    p1_read_state: Cell<ControllerReadState>,
+    p2_read_state: Cell<ControllerReadState>,
+    // Flags dictating whether to update the polled controller values
+    poll_p1: Cell<bool>,
+    poll_p2: Cell<bool>,
+
     // References to the cartridge mapper and PPU are required so the CPU can
     // map addresses & read/write data to and from the PPU
     mapper: Rc<dyn Mapper>,
@@ -81,6 +92,14 @@ impl Cpu6502 {
 
             sys_ram: Memory::new(0x800), // NES has 2KiB of internal memory that only the CPU can access
             prg_rom: prg_rom,
+
+            polled_p1_controller: NesController::default(),
+            polled_p2_controller: NesController::default(),
+            p1_read_state: Cell::new(ControllerReadState::new()),
+            p2_read_state: Cell::new(ControllerReadState::new()),
+            poll_p1: Cell::new(false),
+            poll_p2: Cell::new(false),
+
             ppu: Rc::clone(&ppu),
             mapper: Rc::clone(&mapper),
 
@@ -104,8 +123,12 @@ impl Cpu6502 {
     /// cycles as that instruction requires. This function encapsulates all of
     /// the fetch, decode, and execute stages of the CPU. Returns a bool 
     /// reporting whether an instruction was excecuted.
-    pub fn cycle(&mut self) -> bool {
+    pub fn cycle(&mut self, p1_controller_state: NesController, p2_controller_state: NesController) -> bool {
         let mut excecuted = false;
+
+        // Update controllers
+        if self.poll_p1.get() { self.polled_p1_controller = p1_controller_state; }
+        if self.poll_p2.get() { self.polled_p2_controller = p2_controller_state; }
 
         if self.cycles_remaining == 0 {
             if self.nmi_flag {
@@ -165,12 +188,33 @@ impl Cpu6502 {
                 // PPU Registers mirrored over 8KiB
                 self.ppu.as_ref().borrow_mut().cpu_read(address & 0x0007)
             }
+            0x4016 => {
+                // Player 1 controller port
+                let data = self.polled_p1_controller.read_button(self.p1_read_state.get());
+
+                if !self.poll_p1.get() {
+                    self.p1_read_state.set( self.p1_read_state.get().next() );
+                }
+
+                data
+            }
+            0x4017 => {
+                // Player 2 controller port
+                let data = self.polled_p2_controller.read_button(self.p2_read_state.get());
+
+                if !self.poll_p2.get() {
+                    self.p2_read_state.set( self.p2_read_state.get().next() );
+                }
+
+                data
+            }
+            0x4000..=0x401F => { 0xEE },
             // 0x4000..=0x401F => {
             //     // APU or I/O Reads
             //     println!("APU READ OCCURED");
             //     0xEE
             // },
-            0x4000..=0xFFFF => {
+            0x4020..=0xFFFF => {
                 // Read to program ROM through mapper
                 if let Some(mapped_addr) = self.mapper.get_cpu_read_addr(address) {
                     self.prg_rom.read(mapped_addr)
@@ -193,11 +237,20 @@ impl Cpu6502 {
 
                 self.ppu.as_ref().borrow_mut().cpu_write(address & 0x0007, data);
             },
+            0x4016 => {
+                self.poll_p1.set(data & 1 == 1);
+                self.p1_read_state.set(ControllerReadState::new());
+            }
+            0x4017 => {
+                self.poll_p2.set(data & 1 == 1);
+                self.p2_read_state.set(ControllerReadState::new());
+            }
+            0x4000..=0x401F => {},
             // 0x4000..=0x401F => {
             //     // APU or I/O Writes
             //     println!("APU WRITE OCCURED");
             // },
-            0x4000..=0xFFFF => {
+            0x4020..=0xFFFF => {
                 // Read to program ROM through mapper
                 if let Some(mapped_addr) = self.mapper.get_cpu_write_addr(address, data) {
                     self.prg_rom.write(mapped_addr, data);

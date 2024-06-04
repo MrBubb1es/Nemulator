@@ -2,8 +2,8 @@ use std::{default, rc::Rc};
 
 use super::{cartridge::Header, Cartridge};
 
-#[derive(Default)]
-enum NametableMirror {
+#[derive(Clone, Copy, Debug, Default)]
+pub enum NametableMirror {
     #[default]
     Vertical,
     Horizontal,
@@ -41,12 +41,14 @@ pub trait Mapper {
     ///  * `addr` - The PPU address to translate to a cartridge PRG ROM address
     ///  * `data` - The data being written to PRG ROM (may be used to set internal mapper register)
     fn get_ppu_write_addr(&self, addr: u16, data: u8) -> Option<u16>;
+    /// Returns the direction addresses should be mirrored.
+    fn get_nt_mirror_type(&self) -> NametableMirror;
 }
 
 /// The simplest mapper, and the most common.
 /// PRG: 0x8000-BFFF (mirrored 0xC000-FFFF)
 /// CHR: 0x0000-2000
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct Mapper0 {
     nt_mirror_type: NametableMirror,
     num_prg_banks: usize,
@@ -60,6 +62,8 @@ impl Mapper for Mapper0 {
             NametableMirror::Vertical
         };
 
+        dbg!(&self);
+
         self.num_prg_banks = Cartridge::rom_size(header.prg_rom_size);
     }
 
@@ -71,10 +75,11 @@ impl Mapper for Mapper0 {
     }
 
     fn get_ppu_read_addr(&self, addr: u16) -> Option<u16> {
-        match addr {
-            0x0000..=0x1FFF => Some(addr),
-            _ => None,
-        }
+        None // Mapper zero doesn't touch ppu addresses
+        // match addr {
+        //     0x0000..=0x1FFF => Some(addr),
+        //     _ => None,
+        // }
     }
 
     fn get_cpu_write_addr(&self, addr: u16, _data: u8) -> Option<u16> {
@@ -89,6 +94,10 @@ impl Mapper for Mapper0 {
             0x0000..=0x1FFF => Some(addr),
             _ => None,
         }
+    }
+
+    fn get_nt_mirror_type(&self) -> NametableMirror {
+        self.nt_mirror_type
     }
 }
 

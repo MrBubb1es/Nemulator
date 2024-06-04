@@ -2,13 +2,15 @@ use std::{borrow::Borrow, cell::{Ref, RefCell, RefMut}, fs, io::Read, rc::Rc};
 
 use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 
-use super::{cpu::{self, CpuState, Cpu6502}, ppu_util::PpuMask, ppu::Ppu2C02};
+use super::{controller::{ControllerButton, ControllerUpdate, NesController}, cpu::{self, Cpu6502, CpuState}, ppu::Ppu2C02, ppu_util::PpuMask};
 
 pub struct NES {
     cpu: Option<Cpu6502>,
     ppu: Option<Rc<RefCell<Ppu2C02>>>,
-    // ppu_regs: Option<Rc<Ppu2C02>>,
     mapper: Option<Rc<dyn Mapper>>,
+
+    p1_controller: NesController,
+    p2_controller: NesController,
 
     clocks: u64,
 
@@ -22,6 +24,9 @@ impl Default for NES {
             cpu: None,
             ppu: None,
             mapper: None,
+
+            p1_controller: NesController::default(),
+            p2_controller: NesController::default(),
 
             clocks: 0,
 
@@ -114,9 +119,35 @@ impl NES {
         }
     }
 
+    pub fn update_controllers(&mut self, update: ControllerUpdate) {
+        match update.player_id {
+            0 => NES::update_controller_state(&mut self.p1_controller, update),
+            1 => NES::update_controller_state(&mut self.p2_controller, update),
+            _ => {},
+        }
+    }
+
+    fn update_controller_state(controller: &mut NesController, update: ControllerUpdate) {
+        match update.button {
+            ControllerButton::A => controller.set_a(update.pressed),
+            ControllerButton::B => controller.set_b(update.pressed),
+            ControllerButton::Select => controller.set_select(update.pressed),
+            ControllerButton::Start => controller.set_start(update.pressed),
+            ControllerButton::Up => controller.set_up(update.pressed),
+            ControllerButton::Down => controller.set_down(update.pressed),
+            ControllerButton::Left => controller.set_left(update.pressed),
+            ControllerButton::Right => controller.set_right(update.pressed),
+        }
+    }
+
     /// Get a reference to the CPU. Does not check if a cart is loaded.
     pub fn get_cpu(&self) -> &Cpu6502 {
         self.cpu.as_ref().unwrap()
+    }
+
+    /// Get a mutable reference to the CPU. Does not check if a cart is loaded.
+    pub fn get_cpu_mut(&mut self) -> &mut Cpu6502 {
+        self.cpu.as_mut().unwrap()
     }
 
     // Get a reference to the PPU. Does not check if a cart is loaded.
@@ -150,7 +181,7 @@ impl NES {
         }
 
         let cpu_cycled = if self.clocks % 3 == 0 {
-            self.cpu.as_mut().unwrap().cycle()
+            self.cpu.as_mut().unwrap().cycle(self.p1_controller, self.p2_controller)
         } else {
             false
         };
@@ -202,14 +233,14 @@ impl NES {
     }
 
     /// Get a string showing the contents of the Zero Page of system ram
-    pub fn zpage_str(&self) -> String {
+    pub fn zpage_str(&mut self) -> String {
         let mut mem_str: String = String::from("");
 
         for i in 0..16 {
             let prefix = format!("${:04X}:", i*16);
             mem_str.push_str(&prefix);
             for j in 0..16 {
-                let mem_val = if let Some(cpu) = &self.cpu {
+                let mem_val = if let Some(cpu) = &mut self.cpu {
                     cpu.read(i * 16 + j)
                 } else {
                     0xEE
@@ -223,11 +254,6 @@ impl NES {
     
         mem_str
     }
-
-    // /// Get the frame buffer as a slice
-    // pub fn frame_buf_slice(&self) -> &[u8] {
-    //     self.get_ppu().frame_buf_slice()
-    // }
 }
 
 #[cfg(test)]

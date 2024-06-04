@@ -176,12 +176,24 @@ impl Cartridge {
         let prg_rom_start = 0x10 + if header.has_trainer { 0x200 } else { 0 };
         let prg_rom_banks = Cartridge::rom_size(header.prg_rom_size);
         let prg_rom_end = prg_rom_start + prg_rom_banks * PRG_ROM_BANK_SIZE;
-        let prg_rom_vec = data[prg_rom_start..prg_rom_end].to_vec();
+        
+        let prg_rom_vec = if header.prg_rom_size > 0 {
+            data[prg_rom_start..prg_rom_end].to_vec()
+        } else {
+            vec![0; PRG_ROM_BANK_SIZE] // If no prg rom allocated by program, give cpu 1 bank so it doesn't freak out
+        };
+
+
 
         let chr_rom_start = prg_rom_end;
         let chr_rom_banks = Cartridge::rom_size(header.chr_rom_size);
         let chr_rom_end = chr_rom_start + chr_rom_banks * CHR_ROM_BANK_SIZE;
-        let chr_rom_vec = data[chr_rom_start..chr_rom_end].to_vec();
+
+        let chr_rom_vec = if header.chr_rom_size > 0 {
+            data[chr_rom_start..chr_rom_end].to_vec()
+        } else {
+            vec![0; CHR_ROM_BANK_SIZE] // If no chr rom allocated by program, give ppu 1 bank so it doesn't freak out
+        };
 
         let misc_rom_vec = data[chr_rom_end..].to_vec();
 

@@ -17,7 +17,7 @@ The double increment problem is caused by the following:
 
 use std::rc::Rc;
 
-use crate::cartridge::Mapper;
+use crate::cartridge::{mapper::NametableMirror, Mapper};
 
 use super::{mem::Memory, nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
 
@@ -149,6 +149,7 @@ impl Ppu2C02 {
             ppu.pgtbl1[i as usize] = ppu.ppu_read(i);
             ppu.pgtbl2[i as usize] = ppu.ppu_read(i | 0x1000);
         }
+
 
         // for addr in 0x2000..=0x3EFF {
         //     ppu.write(addr, addr as u8);
@@ -314,7 +315,14 @@ impl Ppu2C02 {
                 self.chr_rom.read(mapped_addr & 0x1FFF)
             },
             0x2000..=0x3EFF => {
-                self.vram.read(mapped_addr & 0x7FF)
+                let mirrored_addr1 = mapped_addr & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
+                let mirrored_addr2 = match self.mapper.get_nt_mirror_type() {
+                    NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
+                    NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
+                    // NametableMirror::Horizontal => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) },
+                    // NametableMirror::Vertical => { mirrored_addr1 & 0x07FF },
+                };
+                self.vram.read(mirrored_addr2)
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = mapped_addr & 0x1F;
@@ -355,15 +363,20 @@ impl Ppu2C02 {
 
         match mapped_addr & 0x3FFF {
             0x0000..=0x1FFF => {
-                self.chr_rom.write(mapped_addr & 0x1FFF, data);
+                self.chr_rom.write(mapped_addr, data);
             },
             0x2000..=0x3EFF => {
-                self.vram.write(mapped_addr & 0x7FF, data);
+                let mirrored_addr1 = mapped_addr & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
+                let mirrored_addr2 = match self.mapper.get_nt_mirror_type() {
+                    NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
+                    NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
+                };
+                self.vram.write(mirrored_addr2, data);
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = mapped_addr & 0x1F;
 
-                println!("Writing data 0x{data:02X} to pal mem w/ addr 0x{mirrored_addr:02X}");
+                // println!("Writing data 0x{data:02X} to pal mem w/ addr 0x{mirrored_addr:02X}");
 
                 // Dad's idea: Since we are writing much less than we are reading
                 // this data, we can actually mirror it to 2 different addresses

@@ -902,7 +902,7 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 160, 390, 188, 2, palette, Some("Zero-Page"))
 }
 
-pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
+pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &mut NES) {
     draw_nes_screen(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes.get_ppu().frame_buf_slice(), 9, 38, true);
     draw_cpu_state(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 45, palette);
     draw_zpage(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 171, palette);
@@ -1012,7 +1012,7 @@ pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
 }
 
 fn draw_zpage(frame: &mut [u8], frame_width: usize, frame_height: usize,
-            nes: &NES, x: usize, y: usize, palette: DebugPalette) {
+            nes: &mut NES, x: usize, y: usize, palette: DebugPalette) {
     
     let zpage_str = nes.zpage_str();
 

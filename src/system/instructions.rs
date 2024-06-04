@@ -629,7 +629,7 @@ fn bpl(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // BRK - Force Break (Initiate interrupt)
-fn brk(cpu: &mut Cpu6502, _: u16) -> usize {
+fn brk(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.irq();
     0
 }
@@ -670,22 +670,22 @@ fn bvs(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // CLC - Clear Carry Flag
-fn clc(cpu: &mut Cpu6502, _: u16) -> usize {
+fn clc(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.status.set_carry(false);
     0
 }
 // CLD - Clear Decimal Mode
-fn cld(cpu: &mut Cpu6502, _: u16) -> usize {
+fn cld(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.status.set_decimal(false);
     0
 }
 // CLI - Clear Interrupt Disable Bit
-fn cli(cpu: &mut Cpu6502, _: u16) -> usize {
+fn cli(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.status.set_interrupt(false);
     0
 }
 // CLV - Clear Overflow Flag
-fn clv(cpu: &mut Cpu6502, _: u16) -> usize {
+fn clv(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.status.set_overflow(false);
     0
 }
@@ -730,7 +730,7 @@ fn dec(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // DEX - Decrement X Register
-fn dex(cpu: &mut Cpu6502, _: u16) -> usize {
+fn dex(cpu: &mut Cpu6502, _address: u16) -> usize {
     let result = cpu.get_x_reg().wrapping_sub(1);
     
     cpu.status.set_zero(result == 0);
@@ -739,7 +739,7 @@ fn dex(cpu: &mut Cpu6502, _: u16) -> usize {
     0
 }
 // DEY - Decrement Y Register
-fn dey(cpu: &mut Cpu6502, _: u16) -> usize {
+fn dey(cpu: &mut Cpu6502, _address: u16) -> usize {
     let result = cpu.get_y_reg().wrapping_sub(1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -760,6 +760,10 @@ fn eor(cpu: &mut Cpu6502, address: u16) -> usize {
 fn inc(cpu: &mut Cpu6502, address: u16) -> usize {
     let data = cpu.read(address);
 
+    // NOTE: The nesdev page on MMC1 (mapper 1) notes that the inc instr writes to
+    // memory twice. Once before the increment (with the unchanged data), and once after.
+    // This may be a source of error with mapper 1, as we aren't doing that rn.
+
     let result = data.wrapping_add(1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -767,7 +771,7 @@ fn inc(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // INX - Increment X Register
-fn inx(cpu: &mut Cpu6502, _: u16) -> usize {
+fn inx(cpu: &mut Cpu6502, _address: u16) -> usize {
     let result = cpu.get_x_reg().wrapping_add(1);
 
     cpu.status.set_zero(result == 0);
@@ -776,7 +780,7 @@ fn inx(cpu: &mut Cpu6502, _: u16) -> usize {
     0
 }
 // INY - Increment Y Register
-fn iny(cpu: &mut Cpu6502, _: u16) -> usize {
+fn iny(cpu: &mut Cpu6502, _address: u16) -> usize {
     let result = cpu.get_y_reg().wrapping_add(1);
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -847,7 +851,7 @@ fn lsr_mem(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // NOP - No Operation
-fn nop(_: &mut Cpu6502, _: u16) -> usize { 0 }
+fn nop(_: &mut Cpu6502, _address: u16) -> usize { 0 }
 // ORA - Logical Inclusive OR
 fn ora(cpu: &mut Cpu6502, address: u16) -> usize {
     let data = cpu.read(address);
@@ -859,19 +863,19 @@ fn ora(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // PHA - Push Accumulator
-fn pha(cpu: &mut Cpu6502, _: u16) -> usize {
+fn pha(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.push_to_stack(cpu.get_acc());
     0
 }
 // PHP - Push Processor Status
-fn php(cpu: &mut Cpu6502, _: u16) -> usize {
+fn php(cpu: &mut Cpu6502, _address: u16) -> usize {
     // Bit 5 (unused flag) is always set to 1 when status pushed to stack
     // Bit 4 (break flag) is set when push to stk caused by php or brk
     cpu.push_to_stack(cpu.get_status() | 0x30);
     0
 }
 // PLA - Pull Accumulator
-fn pla(cpu: &mut Cpu6502, _: u16) -> usize {
+fn pla(cpu: &mut Cpu6502, _address: u16) -> usize {
     let result = cpu.pop_from_stack();
     cpu.status.set_zero(result == 0);
     cpu.status.set_negative(result & 0x80 != 0);
@@ -879,7 +883,7 @@ fn pla(cpu: &mut Cpu6502, _: u16) -> usize {
     0
 }
 // PLP - Pull Processor Status
-fn plp(cpu: &mut Cpu6502, _: u16) -> usize {
+fn plp(cpu: &mut Cpu6502, _address: u16) -> usize {
     // Bit 5 is ignored when pulling into processor status
     // Bit 4 is cleared
     let data = cpu.pop_from_stack() & 0xCF;
@@ -925,7 +929,7 @@ fn ror_mem(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // RTI - Return from Interrupt
-fn rti(cpu: &mut Cpu6502, _: u16) -> usize {
+fn rti(cpu: &mut Cpu6502, _address: u16) -> usize {
     // Restore processer status (Bit 5 ignored, bit 4 cleared)
     let prev_status = cpu.pop_from_stack() & 0xCF;
     cpu.set_status(prev_status | (cpu.get_status() & 0x20));
@@ -937,7 +941,7 @@ fn rti(cpu: &mut Cpu6502, _: u16) -> usize {
     0
 }
 // RTS - Return from Subroutine
-fn rts(cpu: &mut Cpu6502, _: u16) -> usize {
+fn rts(cpu: &mut Cpu6502, _address: u16) -> usize {
     let lo = cpu.pop_from_stack() as u16;
     let hi = cpu.pop_from_stack() as u16;
     let new_pc = (hi << 8) | lo;
@@ -972,17 +976,17 @@ fn sbc(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // SEC - Set Carry Flag
-fn sec(cpu: &mut Cpu6502, _: u16) -> usize {
+fn sec(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.status.set_carry(true);
     0
 }
 // SED - Set Decimal Flag
-fn sed(cpu: &mut Cpu6502, _: u16) -> usize {
+fn sed(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.status.set_decimal(true);
     0
 }
 // SEI - Set Interrupt Disable
-fn sei(cpu: &mut Cpu6502, _: u16) -> usize {
+fn sei(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.status.set_interrupt(true);
     0
 }
@@ -1002,40 +1006,40 @@ fn sty(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 // TAX - Transfer Accumulator to X
-fn tax(cpu: &mut Cpu6502, _: u16) -> usize {
+fn tax(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.set_x_reg(cpu.get_acc());
     cpu.status.set_zero(cpu.get_x_reg() == 0);
     cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TAY - Transfer Accumulator to Y
-fn tay(cpu: &mut Cpu6502, _: u16) -> usize {
+fn tay(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.set_y_reg(cpu.get_acc());
     cpu.status.set_zero(cpu.get_y_reg() == 0);
     cpu.status.set_negative(cpu.get_y_reg() & 0x80 != 0);
     0
 }
 // TSX - Transfer Stack Pointer to X
-fn tsx(cpu: &mut Cpu6502, _: u16) -> usize {
+fn tsx(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.set_x_reg(cpu.get_sp());
     cpu.status.set_zero(cpu.get_x_reg() == 0);
     cpu.status.set_negative(cpu.get_x_reg() & 0x80 != 0);
     0
 }
 // TXA - Transfer X to Accumulator
-fn txa(cpu: &mut Cpu6502, _: u16) -> usize {
+fn txa(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.set_acc(cpu.get_x_reg());
     cpu.status.set_zero(cpu.get_acc() == 0);
     cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
     0
 }
 // TXS - Transfer X to Stack Pointer
-fn txs(cpu: &mut Cpu6502, _: u16) -> usize {
+fn txs(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.set_sp(cpu.get_x_reg());
     0
 }
 // TYA - Transfer Y to Accumulator
-fn tya(cpu: &mut Cpu6502, _: u16) -> usize {
+fn tya(cpu: &mut Cpu6502, _address: u16) -> usize {
     cpu.set_acc(cpu.get_y_reg());
     cpu.status.set_zero(cpu.get_acc() == 0);
     cpu.status.set_negative(cpu.get_acc() & 0x80 != 0);
@@ -1047,7 +1051,7 @@ fn tya(cpu: &mut Cpu6502, _: u16) -> usize {
 
 // INVALID OPCODE - An unimplemented opcode not recognized by the CPU.
 //                  Placeholder for all unimplemented illegal opcodes.
-fn xxx(_: &mut Cpu6502, _: u16) -> usize { 0 }
+fn xxx(_: &mut Cpu6502, _address: u16) -> usize { 0 }
 
 
 // LAX - Load Accumulator and X Register

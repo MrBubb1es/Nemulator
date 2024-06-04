@@ -14,11 +14,21 @@ pub fn run() {
 
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    // nes_app.nestest_init();
     // nes_app.init("games/Super Mario Bros (E).nes");
-    nes_app.init("games/Donkey Kong Classics (U).nes");
-    // nes_app.init("prg_tests/1.Branch_Basics.nes");
-    // 1.Branch_Basics
+    // nes_app.init("games/Donkey Kong Classics (U).nes");
+    // nes_app.init("games/donkey kong.nes");
+
+    // ===== TESTS =====
+
+    // CPU TESTS
+    // nes_app.init("prg_tests/nestest.nes"); // Passing
+    // nes_app.init("prg_tests/1.Branch_Basics.nes"); // Passing
+    // nes_app.init("prg_tests/2.Backward_Branch.nes"); // Passing
+    // nes_app.init("prg_tests/3.Forward_Branch.nes"); // Passing
+
+    // PPU TESTS
+    // nes_app.init("prg_tests/ppu_tests/color_test.nes");
+    nes_app.init("prg_tests/ppu_tests/full_nes_palette.nes");
 
     event_loop.run_app(&mut nes_app).unwrap();
 }

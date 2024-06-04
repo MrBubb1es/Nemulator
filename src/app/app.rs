@@ -9,6 +9,7 @@ use pixels::{Pixels, SurfaceTexture};
 use std::sync::Arc;
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
+use crate::system::controller::{ControllerButton, ControllerUpdate};
 use crate::system::nes::NES;
 
 use super::draw;
@@ -20,25 +21,10 @@ pub enum ViewMode {
     DEBUG,
 }
 
-#[bitfield(u8)]
-pub struct ControllerState {
-    pub up: bool,
-    pub down: bool,
-    pub left: bool,
-    pub right: bool,
-    pub start: bool,
-    pub select: bool,
-    pub a: bool,
-    pub b: bool,
-}
-
 pub struct NesApp {
     window: Option<Window>,
     pixel_buf: Option<Pixels>,
     modifiers: Option<Modifiers>,
-
-    player1_controller: Option<ControllerState>,
-    player2_controller: Option<ControllerState>,
 
     nes: NES,
     paused: bool,
@@ -53,9 +39,6 @@ impl Default for NesApp {
             window: None,
             pixel_buf: None,
             modifiers: None,
-
-            player1_controller: None,
-            player2_controller: None,
 
             nes: NES::default(),
             paused: false,
@@ -113,17 +96,14 @@ impl ApplicationHandler for NesApp {
 
         self.window.as_ref().unwrap().request_redraw();
 
-        self.player1_controller = Some(ControllerState::default());
-        self.player2_controller = Some(ControllerState::default());
-
         self.modifiers = Some(Modifiers::default());
         self.paused = true;
 
         self.last_frame = std::time::Instant::now();
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, event: WindowEvent) {
-        match event {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _window_id: WindowId, win_event: WindowEvent) {
+        match win_event {
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");
                 event_loop.exit();
@@ -161,9 +141,16 @@ impl ApplicationHandler for NesApp {
                     ..
                 },
                 ..
+            } => self.switch_view_mode(),
+
+            WindowEvent::KeyboardInput {
+                event, ..
             } => {
-                self.switch_view_mode();
+                if !event.repeat {
+                    self.handle_nes_input(event);
+                }
             },
+
             WindowEvent::RedrawRequested => {
                 if !self.paused {
                     self.nes.cycle_until_frame();
@@ -203,11 +190,6 @@ impl ApplicationHandler for NesApp {
 impl NesApp {
     pub fn init(&mut self, cart_path_str: &str) {
         self.nes.load_cart(cart_path_str);
-    }
-
-    pub fn nestest_init(&mut self) {
-        self.nes.load_cart("prg_tests/nestest.nes");
-        // self.nes.set_cpu_state(Some(0xC000), None, None, None, None, None, None);
     }
 
     pub fn switch_view_mode(&mut self) {
@@ -255,5 +237,34 @@ impl NesApp {
                 draw::draw_debug_bg(frame, DEFAULT_DEBUG_PAL, &self.nes);
             }
         }
+    }
+
+    /// If the input should go to the NES (i.e. it is controller input), then
+    /// this function creates the controller state
+    fn handle_nes_input(&mut self, event: KeyEvent) -> bool {
+        let new_state = event.state == ElementState::Pressed;
+
+        const PLAYER1_ID: usize = 0;
+        const PLAYER2_ID: usize = 1;
+
+        let controller_update: Option<ControllerUpdate> = match event.physical_key {
+            // Player 1 keys
+            PhysicalKey::Code(KeyCode::KeyZ)       => Some(ControllerUpdate{button: ControllerButton::A,      player_id: PLAYER1_ID, pressed: new_state}),
+            PhysicalKey::Code(KeyCode::KeyX)       => Some(ControllerUpdate{button: ControllerButton::B,      player_id: PLAYER1_ID, pressed: new_state}),
+            PhysicalKey::Code(KeyCode::ShiftRight) => Some(ControllerUpdate{button: ControllerButton::Select, player_id: PLAYER1_ID, pressed: new_state}),
+            PhysicalKey::Code(KeyCode::Enter)      => Some(ControllerUpdate{button: ControllerButton::Start,  player_id: PLAYER1_ID, pressed: new_state}),
+            PhysicalKey::Code(KeyCode::ArrowUp)    => Some(ControllerUpdate{button: ControllerButton::Up,     player_id: PLAYER1_ID, pressed: new_state}),
+            PhysicalKey::Code(KeyCode::ArrowDown)  => Some(ControllerUpdate{button: ControllerButton::Down,   player_id: PLAYER1_ID, pressed: new_state}),
+            PhysicalKey::Code(KeyCode::ArrowLeft)  => Some(ControllerUpdate{button: ControllerButton::Left,   player_id: PLAYER1_ID, pressed: new_state}),
+            PhysicalKey::Code(KeyCode::ArrowRight) => Some(ControllerUpdate{button: ControllerButton::Right,  player_id: PLAYER1_ID, pressed: new_state}),
+            _ => None,
+        };
+
+        if let Some(update) = controller_update {
+            self.nes.update_controllers(update);
+            return true;
+        }
+
+        false
     }
 }

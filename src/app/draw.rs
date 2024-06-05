@@ -1001,14 +1001,14 @@ pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
         if cpu_state.status.carry() { palette.ok_col } else { palette.err_col }, 
         palette.bg_col, true);
 
-    // let instr_str = format!("{: <34}", nes.get_cpu().current_instr_str());
+    let instr_str = format!("{: <34}", nes.get_cpu().current_instr_str());
 
-    // let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
-    //     "Last Instr:", x, next_y, 
-    //     palette.txt_col, palette.bg_col, false);
-    // draw_string(frame, frame_width, frame_height, 
-    //     &instr_str, next_x, next_y, 
-    //     palette.txt_col, palette.bg_col, false);
+    let (next_x, next_y) = draw_string(frame, frame_width, frame_height, 
+        "Last Instr:", x, next_y, 
+        palette.txt_col, palette.bg_col, false);
+    draw_string(frame, frame_width, frame_height, 
+        &instr_str, next_x, next_y, 
+        palette.txt_col, palette.bg_col, false);
 }
 
 fn draw_zpage(frame: &mut [u8], frame_width: usize, frame_height: usize,

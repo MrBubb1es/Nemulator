@@ -97,8 +97,8 @@ impl Cpu6502 {
             polled_p2_controller: NesController::default(),
             p1_read_state: Cell::new(ControllerReadState::new()),
             p2_read_state: Cell::new(ControllerReadState::new()),
-            poll_p1: Cell::new(false),
-            poll_p2: Cell::new(false),
+            poll_p1: Cell::new(true),
+            poll_p2: Cell::new(true),
 
             ppu: Rc::clone(&ppu),
             mapper: Rc::clone(&mapper),

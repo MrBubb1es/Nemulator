@@ -651,11 +651,12 @@ impl Ppu2C02 {
                                             | ((self.v_reg.coarse_x() as u16) >> 2));
 
         // Shift to obtain the correct tile attribute value
-        if self.v_reg.coarse_y() & 0x02 == 1 {
+        if self.v_reg.coarse_y() & 0x02 != 0 {
             self.bg_next_tile_attrib >>= 4;
         }
 
-        if self.v_reg.coarse_x() & 0x02 == 1 {
+        // im going to xor myslef
+        if self.v_reg.coarse_x() & 0x02 != 0 {
             self.bg_next_tile_attrib >>= 2;
         }
 

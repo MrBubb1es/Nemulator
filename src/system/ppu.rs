@@ -89,6 +89,8 @@ pub struct Ppu2C02 {
 
     // flag set when the ppu finishes rendering a frame
     frame_finished: bool,
+    // flag to keep track of when the ppu is rendering an odd or even number frame
+    odd_frame: bool,
 }
 
 // Main functionality
@@ -142,6 +144,7 @@ impl Ppu2C02 {
             screen_buf: Box::new([0; 256*240*4]),
 
             frame_finished: false,
+            odd_frame: false,
         };
 
         // Read pagetable memories into arrays for debug view
@@ -215,9 +218,11 @@ impl Ppu2C02 {
                 self.scanline = 0;
                 self.frame_finished = true;
 
-                // for addr in 0x3F00..0x3FFF {
-                //     println!("${addr:04X}: 0x{:02X}", self.read(addr));
-                // }
+                if self.odd_frame && self.rendering_enabled() {
+                    self.dot = 1; // Skip one cycle on odd frames if rendering
+                }
+
+                self.odd_frame = !self.odd_frame;
             }
         }
     }

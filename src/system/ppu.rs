@@ -17,6 +17,8 @@ The double increment problem is caused by the following:
 
 use std::rc::Rc;
 
+use pixels::wgpu::SamplerBindingType;
+
 use crate::cartridge::{mapper::NametableMirror, Mapper};
 
 use super::{mem::Memory, nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
@@ -58,8 +60,8 @@ pub struct Ppu2C02 {
     vram: Memory,
     palette_mem: Memory,
     chr_rom: Memory,
-    primary_oam: Memory,
-    secondary_oam: Memory,
+    primary_oam: [u8; PRIMARY_OAM_SIZE],
+    secondary_oam: [u8; SECONDARY_OAM_SIZE],
 
     // Mapper used by the cartridge, Rc because both the CPU and PPU access to it
     mapper: Rc<dyn Mapper>,
@@ -91,6 +93,9 @@ pub struct Ppu2C02 {
     frame_finished: bool,
     // flag to keep track of when the ppu is rendering an odd or even number frame
     odd_frame: bool,
+
+    // Keeps track of how many sprites were loaded into secondary OAM last sprite evaluation
+    sprites_found: usize,
 }
 
 // Main functionality
@@ -124,8 +129,8 @@ impl Ppu2C02 {
             vram: Memory::new(0x800), // 2KiB ppu ram
             palette_mem: Memory::new(0x20),
             chr_rom: chr_rom,
-            primary_oam: Memory::new(PRIMARY_OAM_SIZE),
-            secondary_oam: Memory::new(SECONDARY_OAM_SIZE),
+            primary_oam: [0; PRIMARY_OAM_SIZE],
+            secondary_oam: [0; SECONDARY_OAM_SIZE],
             mapper: Rc::clone(&mapper),
 
             bg_next_tile_nt_addr: 0,
@@ -145,6 +150,8 @@ impl Ppu2C02 {
 
             frame_finished: false,
             odd_frame: false,
+
+            sprites_found: 0,
         };
 
         // Read pagetable memories into arrays for debug view
@@ -174,6 +181,11 @@ impl Ppu2C02 {
         match self.scanline {
             0..=239 => { // Visible cycles
                 self.visible_scanline_cycle();
+                
+                if self.dot == 340 {
+                    self.draw_sprites();
+                    self.sprite_evaluation();
+                }
             }
             240 => {}, // Idle scanline (technically the start of vblank, but 
                        // the vblank flag isn't set until dot 1 of scanline 241)
@@ -241,7 +253,11 @@ impl Ppu2C02 {
                 match (self.dot - 1) & 7 {
                     0 => { 
                         self.load_shift_regs();
-                        self.load_nt_buffer(); 
+                        self.load_nt_buffer();
+
+                        // if self.sprites_found != 0 {
+                        //     dbg!(self.scanline, self.sprites_found);
+                        // }
                     },
                     2 => { self.load_attrib_buffer(); },
                     4 => { self.load_bg_lsb_buffer(); },
@@ -268,6 +284,116 @@ impl Ppu2C02 {
         }
     }
 
+    fn draw_sprites(&mut self) {
+        // True for 8x16 sprites, false for 8x8
+        let large_sprites = self.ctrl.spr_size() == 1;
+        let sprite_height: u16 = if large_sprites { 16 } else { 8 };
+
+        'pixel: for pix_idx in 0..=255 {
+            'sprite: for (sprite_idx, sprite_data) in self.secondary_oam.chunks(4).enumerate() {
+                // No more sprites to check, go to next pixel
+                if sprite_idx >= self.sprites_found {
+                    continue 'pixel;
+                }
+
+                let sprite_x = sprite_data[3];
+                let sprite_y = sprite_data[0];
+
+                // If sprite x does not intersect with this pixel, skip this sprite
+                if pix_idx < sprite_x || sprite_x as u16 + 8 <= pix_idx as u16 {
+                    continue 'sprite;
+                }
+
+                let spr_pal = 0x4 | (sprite_data[2] & 3);
+                let front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
+                let flip_horizontal = sprite_data[2] & 0x40 != 0;
+                let flip_vertical = sprite_data[2] & 0x80 != 0;
+
+                // row of the tile we are looking at
+                let sprite_row = if flip_vertical {
+                    sprite_height - (self.scanline as u16 - sprite_y as u16)
+                } else {
+                    self.scanline as u16 - sprite_y as u16
+                };
+
+                let screen_pix_idx = (self.scanline * 256 + pix_idx as usize)*4;
+    
+                let pt_select = if large_sprites {
+                    (sprite_data[1] & 1) as u16
+                } else {
+                    self.ctrl.spr_pattern_tbl() as u16
+                };
+                let sprite_pt_addr_lo = if large_sprites {
+                    (sprite_data[1] >> 1) as u16 * 32 // Large sprites have 1/2 the range of addresses
+                } else {
+                    sprite_data[1] as u16 * 32
+                };
+                let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
+
+                let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
+                let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
+
+                let horiz_shift = if flip_horizontal {
+                     pix_idx as u8 - sprite_x
+                } else {
+                    7 - (pix_idx as u8 - sprite_x)
+                };
+
+                let sprite_lsb = (sprite_hi_byte >> horiz_shift) & 1;
+                let sprite_msb = (sprite_lo_byte >> horiz_shift) & 1;
+                let spr_pix = (sprite_msb << 1) | sprite_lsb;
+                
+                // If sprite is transparent or has bg priority, don't draw over background
+                if spr_pix == 0 || !front_priority {
+                    continue;
+                }
+    
+                let col = self.color_from_tile_data(spr_pal as u16, spr_pix as u16);
+    
+                self.screen_buf[screen_pix_idx + 0] = col.r;
+                self.screen_buf[screen_pix_idx + 1] = col.g;
+                self.screen_buf[screen_pix_idx + 2] = col.b;
+                self.screen_buf[screen_pix_idx + 3] = 0xFF;
+
+                continue 'pixel; // Go to the next pixel instead of next sprite
+            }
+        }
+    }
+
+    fn sprite_evaluation(&mut self) {
+        // Clear secondary OAM to 0xFF
+        for i in 0..SECONDARY_OAM_SIZE {
+            self.secondary_oam[i] = 0xFF;
+        }
+
+        let next_scanline = self.scanline + 1;
+
+        let sprite_height: u8 = if self.ctrl.spr_size() == 0 { 8 } else { 16 };
+        let mut sprites_found = 0;
+        // let mut addr = self.oam_address as usize & 0xFF;
+
+        // Find 8 "front-most" (with lowest primary OAM indices) sprites that show up on this scanline
+        for (sprite_addr, sprite_data) in self.primary_oam.chunks(4).enumerate() {
+            if sprites_found >= 8 {
+                break;
+            }
+
+            let sprite_y = sprite_data[0];
+
+            // Always copy first byte
+            self.secondary_oam[sprites_found*4] = sprite_y;
+
+            if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
+                self.secondary_oam[sprites_found*4 + 1] = sprite_data[1];
+                self.secondary_oam[sprites_found*4 + 2] = sprite_data[2];
+                self.secondary_oam[sprites_found*4 + 3] = sprite_data[3];
+
+                sprites_found += 1;
+            }
+        }
+
+        self.sprites_found = sprites_found;
+    }
 }
 
 // Internal & Helper functionality
@@ -574,6 +700,13 @@ impl Ppu2C02 {
             },
             _ => unreachable!("Well done. Here are the test results: \"You are a horrible person.\" I'm serious, that's what it says: \"A horrible person.\" We weren't even testing for that."),
         };
+    }
+
+    pub fn oam_dma_write(&mut self, source: &[u8]) {
+        // Copy a page of CPU memory into the PPUs Primary OAM
+        for i in 0..PRIMARY_OAM_SIZE {
+            self.primary_oam[i] = source[i];
+        }
     }
 
     /// Increment the coarse x value in the v register. Also handles wrap around

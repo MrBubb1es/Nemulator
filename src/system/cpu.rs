@@ -11,6 +11,9 @@ use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_T
 use super::mem::Memory;
 use super::ppu::Ppu2C02;
 
+// NES has 2KiB of internal memory that only the CPU can access
+const SYS_RAM_SIZE: usize = 0x800;
+
 // NVUBDIZC
 #[bitfield(u8)]
 pub struct CpuStatus {
@@ -52,7 +55,7 @@ pub struct Cpu6502 {
     nmi_flag: bool,
 
     // Memory accessable only by the CPU
-    sys_ram: Memory,
+    sys_ram: [u8; SYS_RAM_SIZE],
     prg_rom: Memory,
 
     // Last polled states of each controller
@@ -90,7 +93,7 @@ impl Cpu6502 {
 
             nmi_flag: false,
 
-            sys_ram: Memory::new(0x800), // NES has 2KiB of internal memory that only the CPU can access
+            sys_ram: [0; SYS_RAM_SIZE],
             prg_rom: prg_rom,
 
             polled_p1_controller: NesController::default(),
@@ -163,12 +166,11 @@ impl Cpu6502 {
             if instr.has_extra_fetch_cycles {
                 self.cycles_remaining += fetch_cycles;
             }
-
-            self.total_clocks += self.cycles_remaining as u64;
         }
 
         self.cycles_remaining -= 1;
-
+        self.total_clocks += 1;
+        
         excecuted
     }
 }
@@ -182,7 +184,7 @@ impl Cpu6502 {
         match address {
             0x0000..=0x1FFF => {
                 // First 2KiB of memory (0x0800) are mirrored until 0x2000
-                self.sys_ram.read(address & 0x07FF)
+                self.sys_ram[(address & 0x07FF) as usize]
             },
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
@@ -225,31 +227,47 @@ impl Cpu6502 {
         }
     }
     /// Write a single byte to the bus at a given address
-    pub fn write(&self, address: u16, data: u8) {
+    pub fn write(&mut self, address: u16, data: u8) {
         // println!("CPU Write to ${address:04X} w/ 0x{data:02X}");
         match address {
+            // CPU RAM
             0x0000..=0x1FFF => {
                 // First 2KiB of memory (0x0800) are mirrored until 0x2000
-                self.sys_ram.write(address & 0x07FF, data);
+                self.sys_ram[(address & 0x07FF) as usize] = data;
             },
+
+            // PPU Internal Registers
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
 
                 self.ppu.as_ref().borrow_mut().cpu_write(address & 0x0007, data);
             },
+
+            // PPU OAM DMA Register
+            0x4014 => {
+                const PAGE_SIZE: usize = 0x100;
+                let source_addr = ((data as u16) << 8) as usize;
+                let oam_dma_source = &self.sys_ram[source_addr..source_addr+PAGE_SIZE];
+                self.ppu.as_ref().borrow_mut().oam_dma_write(oam_dma_source);
+                self.cycles_remaining += 514;
+            },
+
+            // Player 1 Controller Port
             0x4016 => {
                 self.poll_p1.set(data & 1 == 1);
                 self.p1_read_state.set(ControllerReadState::new());
-            }
+            },
+
+            // Player 2 Controller Port
             0x4017 => {
                 self.poll_p2.set(data & 1 == 1);
                 self.p2_read_state.set(ControllerReadState::new());
-            }
+            },
+
+            // APU
             0x4000..=0x401F => {},
-            // 0x4000..=0x401F => {
-            //     // APU or I/O Writes
-            //     println!("APU WRITE OCCURED");
-            // },
+            
+            // Program ROM
             0x4020..=0xFFFF => {
                 // Read to program ROM through mapper
                 if let Some(mapped_addr) = self.mapper.get_cpu_write_addr(address, data) {
@@ -265,7 +283,7 @@ impl Cpu6502 {
         (hi << 8) | lo
     }
     /// Write a 2 byte value to a given address in LLHH form
-    pub fn write_word(&self, address: u16, data: u16) {
+    pub fn write_word(&mut self, address: u16, data: u16) {
         let lo = data as u8;
         let hi = (data >> 8) as u8;
         self.write(address, lo);
@@ -280,7 +298,7 @@ impl Cpu6502 {
     }
     /// Write a 2 byte value to the z-page in memory at given address. If address is 0xFF, the
     /// second byte will be written to 0x00 (wrapping z-page).
-    pub fn write_zpage_word(&self, zpage_address: u8, data: u16) {
+    pub fn write_zpage_word(&mut self, zpage_address: u8, data: u16) {
         let lo = data as u8;
         let hi = (data >> 8) as u8;
         self.write(zpage_address as u16, lo);
@@ -332,7 +350,7 @@ impl Cpu6502 {
 
         self.pc = self.read_word(RESET_PC_VECTOR);
 
-        self.total_clocks += 7;
+        self.cycles_remaining += 7;
     }
 
     // INTERRUPTS
@@ -361,7 +379,7 @@ impl Cpu6502 {
             self.pc = self.read_word(IRQ_PC_VECTOR);
 
             // Interrupts take 7 clock cycles
-            self.total_clocks += 7;
+            self.cycles_remaining += 7;
         }
     }
     /// Send a non-maskable interrupt to the CPU, which executes the defined
@@ -387,7 +405,7 @@ impl Cpu6502 {
         self.pc = self.read_word(NMI_PC_VECTOR);
 
         // Interrupts take 7 clock cycles
-        self.total_clocks += 7;
+        self.cycles_remaining += 7;
     }
 }
 

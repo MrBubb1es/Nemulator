@@ -22,7 +22,6 @@ pub struct Ppu2C02 {
     mask: PpuMask,
     status: PpuStatus,
     oam_address: u8,
-    oam_data: u8,
 
     oam_dma: u8,
 
@@ -51,6 +50,8 @@ pub struct Ppu2C02 {
 
     // Flag to signal the NES to trigger a CPU NMI
     cpu_nmi_flag: bool,
+    // Flag to signal the NES to suspend the CPU due to OAM DMA transfer
+    initiate_dma: bool,
 
     // Information for the next background tile to render. These essensially work
     // as data buffers for the next data to be read into the shift registers.
@@ -79,6 +80,8 @@ pub struct Ppu2C02 {
 
     // Keeps track of how many sprites were loaded into secondary OAM last sprite evaluation
     sprites_found: usize,
+    // Keeps track of which pixels in the background are opaque this scanline (used for sprited 0 hit detection)
+    bg_opaque_pixels: [bool; 256]
 }
 
 // Main functionality
@@ -95,12 +98,12 @@ impl Ppu2C02 {
             scanline: 0,
 
             cpu_nmi_flag: false,
+            initiate_dma: false,
 
             ctrl: 0.into(),
             mask: 0.into(),
             status: 0.into(),
             oam_address: 0,
-            oam_data: 0,
             oam_dma: 0,
 
             v_reg: 0.into(),
@@ -135,6 +138,7 @@ impl Ppu2C02 {
             odd_frame: false,
 
             sprites_found: 0,
+            bg_opaque_pixels: [false; 256],
         };
 
         // Read pagetable memories into arrays for debug view
@@ -164,11 +168,6 @@ impl Ppu2C02 {
         match self.scanline {
             0..=239 => { // Visible cycles
                 self.visible_scanline_cycle();
-                
-                if self.dot == 340 {
-                    self.draw_sprites();
-                    self.sprite_evaluation();
-                }
             }
             240 => {}, // Idle scanline (technically the start of vblank, but 
                        // the vblank flag isn't set until dot 1 of scanline 241)
@@ -183,8 +182,12 @@ impl Ppu2C02 {
             }
             242..=260 => {}, // Idle cycles
             261 => { // Pre-Render scanline
+
+                // end of vblank
                 if self.dot == 1 {
-                    self.status.set_in_vblank(0); // end of vblank
+                    self.status.set_in_vblank(0);
+                    self.status.set_spr_0_hit(0);
+                    self.status.set_spr_overflow(0);
                 }
 
                 self.visible_scanline_cycle(); // even though nothing is rendered
@@ -202,6 +205,10 @@ impl Ppu2C02 {
 
         if self.scanline < 240 && 0 < self.dot && self.dot <= 256 {
             self.draw_dot();
+        }
+
+        if self.scanline != 261 && self.dot == 257 {
+            self.sprite_evaluation();
         }
 
         self.dot += 1;
@@ -267,90 +274,6 @@ impl Ppu2C02 {
         }
     }
 
-    // TODO: We can optimize this function by only looping over the pixels
-    //       contained within the sprites we found.
-    fn draw_sprites(&mut self) {
-        // Most of the time the number of sprites we found should be 0, so return early in this case
-        if self.sprites_found == 0 { return; }
-
-        // All sprites are 8 pixels wide
-        const SPRITE_WIDTH: u16 = 8;
-
-        // True for 8x16 sprites, false for 8x8
-        let large_sprites = self.ctrl.spr_size() == 1;
-        let sprite_height: u16 = if large_sprites { 16 } else { 8 };
-
-        'pixel: for pix_idx in 0..=255 {
-            'sprite: for (sprite_idx, sprite_data) in self.secondary_oam.chunks(4).enumerate() {
-                // No more sprites to check, go to next pixel
-                if sprite_idx >= self.sprites_found {
-                    continue 'pixel;
-                }
-
-                let sprite_x = sprite_data[3];
-                let sprite_y = sprite_data[0];
-
-                // If sprite x does not intersect with this pixel, skip this sprite
-                if pix_idx < sprite_x || sprite_x as u16 + SPRITE_WIDTH <= pix_idx as u16 {
-                    continue 'sprite;
-                }
-
-                let spr_pal = 0x4 | (sprite_data[2] & 3);
-                let front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
-                let flip_horizontal = sprite_data[2] & 0x40 != 0;
-                let flip_vertical = sprite_data[2] & 0x80 != 0;
-
-                // row of the tile we are looking at
-                let sprite_row = if flip_vertical {
-                    sprite_height - (self.scanline as u16 - sprite_y as u16)
-                } else {
-                    self.scanline as u16 - sprite_y as u16
-                };
-
-                let screen_pix_idx = (self.scanline * 256 + pix_idx as usize)*4;
-    
-                let pt_select = if large_sprites {
-                    (sprite_data[1] & 1) as u16
-                } else {
-                    self.ctrl.spr_pattern_tbl() as u16
-                };
-                let sprite_pt_addr_lo = if large_sprites {
-                    (sprite_data[1] >> 1) as u16 * 32 // Large sprites have 1/2 the range of addresses
-                } else {
-                    sprite_data[1] as u16 * 16
-                };
-                let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
-
-                let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
-                let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
-
-                let horiz_shift = if flip_horizontal {
-                     pix_idx as u8 - sprite_x
-                } else {
-                    7 - (pix_idx as u8 - sprite_x)
-                };
-
-                let sprite_lsb = (sprite_hi_byte >> horiz_shift) & 1;
-                let sprite_msb = (sprite_lo_byte >> horiz_shift) & 1;
-                let spr_pix = (sprite_msb << 1) | sprite_lsb;
-                
-                // If sprite is transparent or has bg priority, don't draw over background
-                if spr_pix == 0 || !front_priority {
-                    continue;
-                }
-    
-                let col = self.color_from_tile_data(spr_pal as u16, spr_pix as u16);
-    
-                self.screen_buf[screen_pix_idx + 0] = col.r;
-                self.screen_buf[screen_pix_idx + 1] = col.g;
-                self.screen_buf[screen_pix_idx + 2] = col.b;
-                self.screen_buf[screen_pix_idx + 3] = 0xFF;
-
-                continue 'pixel; // Go to the next pixel instead of next sprite
-            }
-        }
-    }
-
     fn sprite_evaluation(&mut self) {
         // Clear secondary OAM to 0xFF
         for i in 0..SECONDARY_OAM_SIZE {
@@ -365,21 +288,30 @@ impl Ppu2C02 {
 
         // Find 8 "front-most" (with lowest primary OAM indices) sprites that show up on this scanline
         for (sprite_addr, sprite_data) in self.primary_oam.chunks(4).enumerate() {
-            if sprites_found >= 8 {
+            // Still room in secondary OAM
+            if sprites_found < 8 {
+                let sprite_y = sprite_data[0];
+
+                // Always copy first byte
+                self.secondary_oam[sprites_found*4] = sprite_y;
+
+                if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
+                    self.secondary_oam[sprites_found*4 + 1] = sprite_data[1];
+                    self.secondary_oam[sprites_found*4 + 2] = sprite_data[2];
+                    self.secondary_oam[sprites_found*4 + 3] = sprite_data[3];
+
+                    sprites_found += 1;
+                }
+            } 
+            // No more room in OAM, just check for sprite overflow
+            else {
+                let sprite_y = sprite_data[0];
+
+                if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
+                    self.status.set_spr_overflow(1);
+                }
+
                 break;
-            }
-
-            let sprite_y = sprite_data[0];
-
-            // Always copy first byte
-            self.secondary_oam[sprites_found*4] = sprite_y;
-
-            if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
-                self.secondary_oam[sprites_found*4 + 1] = sprite_data[1];
-                self.secondary_oam[sprites_found*4 + 2] = sprite_data[2];
-                self.secondary_oam[sprites_found*4 + 3] = sprite_data[3];
-
-                sprites_found += 1;
             }
         }
 
@@ -554,7 +486,7 @@ impl Ppu2C02 {
             3 => 0xEE, // Can't read OAMADDR
 
             // OAMDATA
-            4 => self.oam_data,
+            4 => { self.primary_oam[self.oam_address as usize] },
 
             // PPUSCROLL
             5 => 0xEE, // Can't read PPUSCROLL
@@ -618,7 +550,7 @@ impl Ppu2C02 {
             3 => { self.oam_address = data },
 
             // OAMDATA
-            4 => { self.oam_data = data },
+            4 => { self.primary_oam[self.oam_address as usize] = data },
 
             // PPUSCROLL
             5 => {
@@ -693,11 +625,8 @@ impl Ppu2C02 {
         };
     }
 
-    pub fn oam_dma_write(&mut self, source: &[u8]) {
-        // Copy a page of CPU memory into the PPUs Primary OAM
-        for i in 0..PRIMARY_OAM_SIZE {
-            self.primary_oam[i] = source[i];
-        }
+    pub fn oam_dma_write(&mut self, oam_data: u8, oam_addr: u8) {
+        self.primary_oam[oam_addr as usize] = oam_data;
     }
 
     /// Increment the coarse x value in the v register. Also handles wrap around
@@ -823,9 +752,19 @@ impl Ppu2C02 {
     /// does not internally check to ensure the scanline and dot are within the bounds
     /// of the screen.
     fn draw_dot(&mut self) {
-        let mut bg_pix = 0;
-        let mut bg_pal = 0;
+        let mut bg_pix: u16 = 0;
+        let mut bg_pal: u16 = 0;
 
+        let mut spr_pix: u16 = 0;
+        let mut spr_pal: u16 = 0;
+        let mut front_priority = false;
+        let mut drawing_spr_0 = false;
+        
+        let mut pixel: u16 = 0;
+        let mut palette: u16 = 0;
+
+
+        // Get Background Pixel Data
         if self.mask.draw_bg() == 1 {
             let bg_pix_hi = (self.bg_tile_nt_hi >> (15 - self.fine_x)) & 1;
             let bg_pix_lo = (self.bg_tile_nt_lo >> (15 - self.fine_x)) & 1;
@@ -837,7 +776,107 @@ impl Ppu2C02 {
             bg_pal = (bg_pal_hi << 1) | bg_pal_lo;
         }
 
-        let col = self.color_from_tile_data(bg_pal, bg_pix);
+        
+        // Get Foreground/Sprite Pixel Data (on scanlines > 0)
+        if self.scanline > 0 && self.mask.draw_sprites() == 1 {
+            // Most of the time the number of sprites we found should be 0, 
+            // so check for this right away.
+            if self.sprites_found > 0 {
+                // All sprites are 8 pixels wide
+                const SPRITE_WIDTH: u16 = 8;
+
+                // True for 8x16 sprites, false for 8x8
+                let large_sprites = self.ctrl.spr_size() == 1;
+                let sprite_height: u16 = if large_sprites { 16 } else { 8 };
+
+                for (sprite_idx, sprite_data) in self.secondary_oam.chunks(4).enumerate() {
+                    // No more sprites to check, so there won't be any spr_pix this dot
+                    if sprite_idx >= self.sprites_found { break; }
+
+                    let sprite_x = sprite_data[3];
+                    let sprite_y = sprite_data[0];
+
+                    let too_far_left = self.dot < sprite_x as usize;
+                    let too_far_right = sprite_x as usize + SPRITE_WIDTH as usize <= self.dot;
+                    // If sprite x does not intersect with this pixel, skip this sprite
+                    if too_far_left || too_far_right { continue; }
+
+                    let flip_horizontal = sprite_data[2] & 0x40 != 0;
+                    let flip_vertical = sprite_data[2] & 0x80 != 0;
+
+                    // row of the tile we are looking at
+                    let sprite_row = if flip_vertical {
+                        sprite_height - (self.scanline as u16 - sprite_y as u16)
+                    } else {
+                        self.scanline as u16 - sprite_y as u16
+                    };
+
+                    let pt_select = if large_sprites {
+                        (sprite_data[1] & 1) as u16
+                    } else {
+                        self.ctrl.spr_pattern_tbl() as u16
+                    };
+                    let sprite_pt_addr_lo = if large_sprites {
+                        (sprite_data[1] >> 1) as u16 * 32 // Large sprites have 1/2 the range of addresses
+                    } else {
+                        sprite_data[1] as u16 * 16
+                    };
+                    let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
+
+                    let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
+                    let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
+
+                    let horiz_shift = if flip_horizontal {
+                        self.dot - sprite_x as usize
+                    } else {
+                        7 - (self.dot - sprite_x as usize)
+                    };
+
+                    let sprite_lsb = (sprite_hi_byte >> horiz_shift) & 1;
+                    let sprite_msb = (sprite_lo_byte >> horiz_shift) & 1;
+                    
+                    spr_pix = ((sprite_msb << 1) | sprite_lsb) as u16;
+                    spr_pal = (0x4 | (sprite_data[2] & 3)) as u16;
+                    front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
+                    drawing_spr_0 = sprite_pt_addr == 0;
+                }
+            }
+        }
+
+        if bg_pix == 0 && spr_pix == 0 {
+            // pixel and palette stay 0 bc we are drawing the universal bg color 
+        } 
+        else if bg_pix == 0 && spr_pix > 0 {
+            // background is transparent, sprite isn't, so draw sprite
+            pixel = spr_pix;
+            palette = spr_pal;
+        }
+        else if bg_pix > 0 && spr_pix == 0 {
+            // background is opaque, sprite is transparent, so draw bg
+            pixel = bg_pix;
+            palette = bg_pal;
+        }
+        else {
+            // tie between bg and spr, so check priorities
+            if front_priority {
+                // Sprite has priority
+                pixel = spr_pix;
+                palette = spr_pal;
+            }
+            else {
+                // Background has priority
+                pixel = bg_pix;
+                palette = bg_pal;
+            }
+
+            // If we are drawing sprite 0, and we pass the sprite 0 hit check,
+            // we need to set the ppu status bit to alert the CPU of a spr 0 hit
+            if drawing_spr_0 && self.sprite_0_hit_check() {
+                self.status.set_spr_0_hit(1);
+            }
+        }
+
+        let col = self.color_from_tile_data(palette, pixel);
         let pix_idx = (self.scanline * 256 + self.dot-1)*4;
 
         let frame = self.screen_buf.as_mut_slice();
@@ -846,6 +885,35 @@ impl Ppu2C02 {
         frame[pix_idx + 1] = col.g;
         frame[pix_idx + 2] = col.b;
         frame[pix_idx + 3] = 0xFF;
+
+
+        // if hit_sprite {
+        //     frame[pix_idx + 0] = 0xFF;
+        //     frame[pix_idx + 1] = 0xFF;
+        //     frame[pix_idx + 2] = 0xFF;
+        // }
+    }
+
+    fn sprite_0_hit_check(&self) -> bool {
+        // Sprite zero is a collision between foreground and background
+        // so they must both be enabled
+        if self.mask.draw_bg() == 1 && self.mask.draw_sprites() == 1 {
+            // The left edge of the screen has specific switches to control
+            // its appearance. This is used to smooth inconsistencies when
+            // scrolling (since sprites x coord must be >= 0)
+            if self.mask.draw_bg_left() == 0 && self.mask.draw_spr_left() == 0 {
+                if self.dot >= 9 && self.dot < 258 {
+                    return true;
+                }
+            }
+            else {
+                if self.dot >= 1 && self.dot < 258 {
+                    return true;
+                }
+            }
+        }
+        
+        false
     }
 }
 
@@ -877,6 +945,9 @@ impl Ppu2C02 {
     pub fn cpu_nmi_flag(&self) -> bool {
         self.cpu_nmi_flag
     }
+    pub fn initiate_dma(&self) -> bool {
+        self.initiate_dma
+    }
     
     /// Set the value of the frame finished flag
     pub fn set_frame_finished(&mut self, val: bool) {
@@ -884,6 +955,9 @@ impl Ppu2C02 {
     }
     pub fn set_cpu_nmi_flag(&mut self, val: bool) {
         self.cpu_nmi_flag = val;
+    }
+    pub fn set_initiate_dma(&mut self, val: bool) {
+        self.initiate_dma = val;
     }
 }
 

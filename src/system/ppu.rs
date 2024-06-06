@@ -45,6 +45,9 @@ pub struct Ppu2C02 {
     primary_oam: [u8; PRIMARY_OAM_SIZE],
     secondary_oam: [u8; SECONDARY_OAM_SIZE],
 
+    // Flag to keep track of if sprite 0 made it into secondary OAM during the last sprite evaluation phase
+    spr_0_in_secondary_oam: bool,
+
     // Mapper used by the cartridge, Rc because both the CPU and PPU access to it
     mapper: Rc<dyn Mapper>,
 
@@ -117,6 +120,9 @@ impl Ppu2C02 {
             chr_rom: chr_rom,
             primary_oam: [0; PRIMARY_OAM_SIZE],
             secondary_oam: [0; SECONDARY_OAM_SIZE],
+
+            spr_0_in_secondary_oam: false,
+
             mapper: Rc::clone(&mapper),
 
             bg_next_tile_nt_addr: 0,
@@ -279,6 +285,7 @@ impl Ppu2C02 {
         for i in 0..SECONDARY_OAM_SIZE {
             self.secondary_oam[i] = 0xFF;
         }
+        self.spr_0_in_secondary_oam = false;
 
         let next_scanline = self.scanline + 1;
 
@@ -301,6 +308,10 @@ impl Ppu2C02 {
                     self.secondary_oam[sprites_found*4 + 3] = sprite_data[3];
 
                     sprites_found += 1;
+
+                    if sprite_addr == 0 {
+                        self.spr_0_in_secondary_oam = true;
+                    }
                 }
             } 
             // No more room in OAM, just check for sprite overflow
@@ -764,6 +775,8 @@ impl Ppu2C02 {
         let mut palette: u16 = 0;
 
 
+        let screen_pixel_x = self.dot - 1;
+
         // Get Background Pixel Data
         if self.mask.draw_bg() == 1 {
             let bg_pix_hi = (self.bg_tile_nt_hi >> (15 - self.fine_x)) & 1;
@@ -796,8 +809,8 @@ impl Ppu2C02 {
                     let sprite_x = sprite_data[3];
                     let sprite_y = sprite_data[0];
 
-                    let too_far_left = self.dot < sprite_x as usize;
-                    let too_far_right = sprite_x as usize + SPRITE_WIDTH as usize <= self.dot;
+                    let too_far_left = screen_pixel_x < sprite_x as usize;
+                    let too_far_right = sprite_x as usize + SPRITE_WIDTH as usize <= screen_pixel_x;
                     // If sprite x does not intersect with this pixel, skip this sprite
                     if too_far_left || too_far_right { continue; }
 
@@ -823,13 +836,17 @@ impl Ppu2C02 {
                     };
                     let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
 
+
+                    // println!("Sprite with pt addr: {}", sprite_pt_addr);
+
+
                     let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
                     let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
 
                     let horiz_shift = if flip_horizontal {
-                        self.dot - sprite_x as usize
+                        screen_pixel_x - sprite_x as usize
                     } else {
-                        7 - (self.dot - sprite_x as usize)
+                        7 - (screen_pixel_x - sprite_x as usize)
                     };
 
                     let sprite_lsb = (sprite_hi_byte >> horiz_shift) & 1;
@@ -838,7 +855,12 @@ impl Ppu2C02 {
                     spr_pix = ((sprite_msb << 1) | sprite_lsb) as u16;
                     spr_pal = (0x4 | (sprite_data[2] & 3)) as u16;
                     front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
-                    drawing_spr_0 = sprite_pt_addr == 0;
+                    
+                    // If sprite 0 is in secondary OAM, it will always be the 0th
+                    // sprite here, so we can check if we are drawing spite 0 like this 
+                    if self.spr_0_in_secondary_oam && sprite_idx == 0 {
+                        drawing_spr_0 = true;
+                    }
                 }
             }
         }
@@ -877,7 +899,7 @@ impl Ppu2C02 {
         }
 
         let col = self.color_from_tile_data(palette, pixel);
-        let pix_idx = (self.scanline * 256 + self.dot-1)*4;
+        let pix_idx = (self.scanline * 256 + screen_pixel_x)*4;
 
         let frame = self.screen_buf.as_mut_slice();
 

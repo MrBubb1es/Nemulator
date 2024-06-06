@@ -1,20 +1,3 @@
-/*
-The double increment problem is caused by the following:
-    During CPU cycles, instructions go through a fetch, decode, and execute
-    stage. During the decode stage, we read the address that the instruction
-    will access. The instruction itself may want to read or write to that
-    address, we don't know during the decode stage. For convinience, we always
-    read the data that the CPU might use during the execute stage. This means
-    that if we have a writing instruction, such as STA, the data is read from
-    the address but ultimatly is discarded. If the CPU were to execute an
-    instrution like "STA $2007", PPUADDR would be read, even though the value
-    would be discarded. This would cause two problems:
-        1) The internal write latch inside the PPU would be left in the wrong state.
-        2) The internal v register would be incremented 2 times. First for the 
-           read from $2007 during the execute stage, and second for the write
-           done during the instruction execution phase. 
-*/
-
 use std::rc::Rc;
 
 use pixels::wgpu::SamplerBindingType;
@@ -284,7 +267,15 @@ impl Ppu2C02 {
         }
     }
 
+    // TODO: We can optimize this function by only looping over the pixels
+    //       contained within the sprites we found.
     fn draw_sprites(&mut self) {
+        // Most of the time the number of sprites we found should be 0, so return early in this case
+        if self.sprites_found == 0 { return; }
+
+        // All sprites are 8 pixels wide
+        const SPRITE_WIDTH: u16 = 8;
+
         // True for 8x16 sprites, false for 8x8
         let large_sprites = self.ctrl.spr_size() == 1;
         let sprite_height: u16 = if large_sprites { 16 } else { 8 };
@@ -300,7 +291,7 @@ impl Ppu2C02 {
                 let sprite_y = sprite_data[0];
 
                 // If sprite x does not intersect with this pixel, skip this sprite
-                if pix_idx < sprite_x || sprite_x as u16 + 8 <= pix_idx as u16 {
+                if pix_idx < sprite_x || sprite_x as u16 + SPRITE_WIDTH <= pix_idx as u16 {
                     continue 'sprite;
                 }
 
@@ -326,12 +317,12 @@ impl Ppu2C02 {
                 let sprite_pt_addr_lo = if large_sprites {
                     (sprite_data[1] >> 1) as u16 * 32 // Large sprites have 1/2 the range of addresses
                 } else {
-                    sprite_data[1] as u16 * 32
+                    sprite_data[1] as u16 * 16
                 };
                 let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
 
-                let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
-                let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
+                let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
+                let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
 
                 let horiz_shift = if flip_horizontal {
                      pix_idx as u8 - sprite_x

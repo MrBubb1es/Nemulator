@@ -197,59 +197,82 @@ impl ApplicationHandler for NesApp {
             let update = match controller_event {
                 // Up / Down input
                 gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadUp, val, ..), .. } => {                    
-                    if val > DPAD_PRESSED_THRESH {
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Down,
-                                player_id: 0,
-                                pressed: true });
-                    } else if val < (1.0 - DPAD_PRESSED_THRESH) {
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Up,
-                                player_id: 0,
-                                pressed: true });
-                    } else {
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Down,
-                                player_id: 0,
-                                pressed: false });
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Up,
-                                player_id: 0,
-                                pressed: false });
-                    }
+                    let down_pressed = val > DPAD_PRESSED_THRESH;
+                    let up_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Down,
+                            player_id: 0,
+                            pressed: down_pressed });
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Up,
+                            player_id: 0,
+                            pressed: up_pressed });
                 }
 
                 // Left / Right input
                 gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadRight, val, ..), .. } => {                    
-                    if val > DPAD_PRESSED_THRESH {
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Right,
-                                player_id: 0,
-                                pressed: true });
-                    } else if val < (1.0 - DPAD_PRESSED_THRESH) {
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Left,
-                                player_id: 0,
-                                pressed: true });
-                    } else {
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Right,
-                                player_id: 0,
-                                pressed: false });
-                        self.nes.update_controllers(
-                            ControllerUpdate{
-                                button: ControllerButton::Left,
-                                player_id: 0,
-                                pressed: false });
-                    }
+                    let right_pressed = val > DPAD_PRESSED_THRESH;
+                    let left_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Right,
+                            player_id: 0,
+                            pressed: right_pressed });
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Left,
+                            player_id: 0,
+                            pressed: left_pressed });
                 }
+
+                // Start button input
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::Start, val, .. ), .. } => {
+                    let start_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Start,
+                            player_id: 0,
+                            pressed: start_pressed });
+                }
+
+                // Select button input
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::Select, val, .. ), .. } => {
+                    let select_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Select,
+                            player_id: 0,
+                            pressed: select_pressed });
+                }
+
+                // A button pressed
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::South, val, .. ), .. } => {
+                    let a_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::A,
+                            player_id: 0,
+                            pressed: a_pressed });
+                }
+
+                // B button pressed
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::East, val, .. ), .. } => {
+                    let b_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::A,
+                            player_id: 0,
+                            pressed: b_pressed });
+                }
+
                 _ => (),
             };
         }

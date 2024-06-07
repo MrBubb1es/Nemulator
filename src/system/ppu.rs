@@ -1,6 +1,4 @@
-use std::rc::Rc;
-
-use pixels::wgpu::SamplerBindingType;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::cartridge::{mapper::NametableMirror, Mapper};
 
@@ -22,8 +20,6 @@ pub struct Ppu2C02 {
     mask: PpuMask,
     status: PpuStatus,
     oam_address: u8,
-
-    oam_dma: u8,
 
     // Current VRAM Address (15 least significant bits)
     v_reg: PpuScrollReg,
@@ -49,7 +45,7 @@ pub struct Ppu2C02 {
     spr_0_in_secondary_oam: bool,
 
     // Mapper used by the cartridge, Rc because both the CPU and PPU access to it
-    mapper: Rc<dyn Mapper>,
+    mapper: Rc<RefCell<dyn Mapper>>,
 
     // Flag to signal the NES to trigger a CPU NMI
     cpu_nmi_flag: bool,
@@ -83,8 +79,6 @@ pub struct Ppu2C02 {
 
     // Keeps track of how many sprites were loaded into secondary OAM last sprite evaluation
     sprites_found: usize,
-    // Keeps track of which pixels in the background are opaque this scanline (used for sprited 0 hit detection)
-    bg_opaque_pixels: [bool; 256]
 }
 
 // Main functionality
@@ -95,7 +89,7 @@ impl Ppu2C02 {
     ///                 and CPU to access the PPU registers, as the CPU needs to
     ///                 read and write to some of them.
     ///  * `mapper` - Pointer the the mapper being used by the cartridge.
-    pub fn new(chr_rom: Memory, mapper: Rc<dyn Mapper>) -> Self {
+    pub fn new(chr_rom: Memory, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         let mut ppu = Ppu2C02 {
             dot: 0,
             scanline: 0,
@@ -107,7 +101,6 @@ impl Ppu2C02 {
             mask: 0.into(),
             status: 0.into(),
             oam_address: 0,
-            oam_dma: 0,
 
             v_reg: 0.into(),
             t_reg: 0.into(),
@@ -144,7 +137,6 @@ impl Ppu2C02 {
             odd_frame: false,
 
             sprites_found: 0,
-            bg_opaque_pixels: [false; 256],
         };
 
         // Read pagetable memories into arrays for debug view
@@ -539,17 +531,17 @@ impl Ppu2C02 {
     ///
     ///  * `address` - 16 bit address used to access data
     pub fn ppu_read(&self, address: u16) -> u8 {
-        let mapped_addr = self.mapper
-            .get_ppu_read_addr(address)
-            .unwrap_or(address);
-        
-        match mapped_addr & 0x3FFF {
+        match address {
             0x0000..=0x1FFF => {
-                self.chr_rom.read(mapped_addr & 0x1FFF)
+                let mapped_addr = self.mapper
+                    .borrow_mut()
+                    .get_ppu_read_addr(address)
+                    .unwrap_or(address);
+                self.chr_rom.read(mapped_addr)
             },
             0x2000..=0x3EFF => {
-                let mirrored_addr1 = mapped_addr & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = match self.mapper.get_nt_mirror_type() {
+                let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
+                let mirrored_addr2 = match self.mapper.borrow().get_nt_mirror_type() {
                     NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
                     NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
                     // NametableMirror::Horizontal => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) },
@@ -558,7 +550,7 @@ impl Ppu2C02 {
                 self.vram.read(mirrored_addr2)
             },
             0x3F00..=0x3FFF => {
-                let mirrored_addr = mapped_addr & 0x1F;
+                let mirrored_addr = address & 0x1F;
                 
                 let mut data = self.palette_mem.read(mirrored_addr);
 
@@ -589,25 +581,25 @@ impl Ppu2C02 {
     ///  * `data` - Single byte of data to write
     pub fn ppu_write(&self, address: u16, data: u8) {
         // println!("Writing to ppu w/ addr 0x{address:02X} and data: 0x{data:02X}");
-        
-        let mapped_addr = self.mapper
-            .get_ppu_write_addr(address, data)
-            .unwrap_or(address);
 
-        match mapped_addr & 0x3FFF {
+        match address & 0x3FFF {
             0x0000..=0x1FFF => {
+                let mapped_addr = self.mapper
+                    .borrow_mut()
+                    .get_ppu_write_addr(address, data)
+                    .unwrap_or(address);        
                 self.chr_rom.write(mapped_addr, data);
             },
             0x2000..=0x3EFF => {
-                let mirrored_addr1 = mapped_addr & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = match self.mapper.get_nt_mirror_type() {
+                let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
+                let mirrored_addr2 = match self.mapper.borrow().get_nt_mirror_type() {
                     NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
                     NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
                 };
                 self.vram.write(mirrored_addr2, data);
             },
             0x3F00..=0x3FFF => {
-                let mirrored_addr = mapped_addr & 0x1F;
+                let mirrored_addr = address & 0x1F;
 
                 // println!("Writing data 0x{data:02X} to pal mem w/ addr 0x{mirrored_addr:02X}");
 

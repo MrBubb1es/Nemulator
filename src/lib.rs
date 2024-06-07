@@ -43,7 +43,7 @@ pub fn run(path: &str) {
     // nes_app.init("prg_tests/ppu_tests/sprite_overflow_tests/2.Details.nes"); // Passing
     // nes_app.init("prg_tests/ppu_tests/sprite_overflow_tests/3.Timing.nes"); // Failing
 
-    nes_app.init("prg_tests/ppu_tests/ppu_read_buffer/test_ppu_read_buffer.nes");
+    // nes_app.init("prg_tests/ppu_tests/ppu_read_buffer/test_ppu_read_buffer.nes");
 
     event_loop.run_app(&mut nes_app).unwrap();
 }

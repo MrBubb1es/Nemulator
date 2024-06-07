@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::cartridge::mapper;
@@ -232,7 +233,9 @@ impl Cartridge {
         self.chr_rom.clone()
     }
 
-    pub fn get_mapper(&self) -> Rc<dyn Mapper> {
+    pub fn get_mapper(&self) -> Rc<RefCell<dyn Mapper>> {
+        println!("Loading cart with mapper {}", self._header.mapper_num);
+
         mapper::get_mapper(&self._header)
     }
 }

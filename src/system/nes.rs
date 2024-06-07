@@ -7,7 +7,7 @@ use super::{controller::{ControllerButton, ControllerUpdate, NesController}, cpu
 pub struct NES {
     cpu: Option<Cpu6502>,
     ppu: Option<Rc<RefCell<Ppu2C02>>>,
-    mapper: Option<Rc<dyn Mapper>>,
+    mapper: Option<Rc<RefCell<dyn Mapper>>>,
 
     p1_controller: NesController,
     p2_controller: NesController,
@@ -67,7 +67,7 @@ impl NES {
         let cart = Cartridge::from_bytes(data.as_slice()).unwrap();
 
         // let ppu_regs = Rc::new(PpuRegisters::default());
-        let mapper: Rc<dyn Mapper> = cart.get_mapper();
+        let mapper: Rc<RefCell<dyn Mapper>> = cart.get_mapper();
 
         let ppu = Rc::new(RefCell::new(
             Ppu2C02::new(

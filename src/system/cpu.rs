@@ -70,7 +70,7 @@ pub struct Cpu6502 {
 
     // References to the cartridge mapper and PPU are required so the CPU can
     // map addresses & read/write data to and from the PPU
-    mapper: Rc<dyn Mapper>,
+    mapper: Rc<RefCell<dyn Mapper>>,
     ppu: Rc<RefCell<Ppu2C02>>,
 
     oam_data: u8,
@@ -86,7 +86,7 @@ pub struct Cpu6502 {
 
 impl Cpu6502 {
     /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
-    pub fn new(prg_rom: Memory, ppu: Rc<RefCell<Ppu2C02>>, mapper: Rc<dyn Mapper>) -> Self {
+    pub fn new(prg_rom: Memory, ppu: Rc<RefCell<Ppu2C02>>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         let mut new_cpu = Cpu6502{
             acc: 0,
             x: 0,
@@ -226,7 +226,7 @@ impl Cpu6502 {
             // },
             0x4020..=0xFFFF => {
                 // Read to program ROM through mapper
-                if let Some(mapped_addr) = self.mapper.get_cpu_read_addr(address) {
+                if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
                     self.prg_rom.read(mapped_addr)
                 } else {
                     0
@@ -274,8 +274,8 @@ impl Cpu6502 {
             
             // Program ROM
             0x4020..=0xFFFF => {
-                // Read to program ROM through mapper
-                if let Some(mapped_addr) = self.mapper.get_cpu_write_addr(address, data) {
+                // Write to program ROM through mapper
+                if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_write_addr(address, data) {
                     self.prg_rom.write(mapped_addr, data);
                 }
             },

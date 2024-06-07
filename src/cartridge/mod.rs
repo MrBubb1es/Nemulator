@@ -1,5 +1,7 @@
 pub mod cartridge;
 pub mod mapper;
+pub mod mappers;
 
-pub use mapper::Mapper;
 pub use cartridge::Cartridge;
+pub use mapper::Mapper;
+

@@ -14,9 +14,18 @@
 *   - Local online Co-op
 *   - Online multiplayer (with servers and junk)
 */
+use std::{env, os};
 
 use nes_emulator;
 
-pub fn main() {
-    nes_emulator::run();
+pub fn main() -> Result<(), String> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        println!("usage: {} <filename>", args[0]);
+        return Ok(());
+    }
+
+    nes_emulator::run(&args[1]);
+    Ok(())
 }
+

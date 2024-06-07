@@ -1,12 +1,11 @@
-use bitfield_struct::bitfield;
+use gilrs::Gilrs;
 use winit::event::{ElementState, KeyEvent, Modifiers, WindowEvent};
-use winit::keyboard::{Key, KeyCode, ModifiersKeyState, ModifiersState, NamedKey, PhysicalKey, SmolStr};
+use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::{application::ApplicationHandler, window::WindowId};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 use pixels::{Pixels, SurfaceTexture};
-use std::sync::Arc;
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
@@ -30,6 +29,8 @@ pub struct NesApp {
     paused: bool,
     view_mode: ViewMode,
 
+    controller_handler: Gilrs,
+
     last_frame: std::time::Instant,
 }
 
@@ -43,6 +44,8 @@ impl Default for NesApp {
             nes: NES::default(),
             paused: false,
             view_mode: ViewMode::default(),
+
+            controller_handler: Gilrs::new().unwrap(),
 
             last_frame: std::time::Instant::now(),
         }
@@ -108,46 +111,61 @@ impl ApplicationHandler for NesApp {
                 println!("The close button was pressed; stopping");
                 event_loop.exit();
             },
+
             WindowEvent::ModifiersChanged(new_mods) => {
                 self.modifiers = Some(new_mods);
             },
-            WindowEvent::KeyboardInput {
-                event: KeyEvent {
-                    logical_key: Key::Named(
-                        NamedKey::Space,
-                    ),
-                    state: ElementState::Pressed,
-                    // repeat: false,
-                    ..
-                },
-                ..
-            } => {
-                // if !self.nes.handle_input()
-                if self.modifiers.unwrap().state().shift_key() {
-                    if self.paused {
-                        self.nes.cycle_instr();
-                    } else {
-                        self.paused = true;
-                    }
-                } else {
-                    self.paused = !self.paused;
-                }
-            },
-            WindowEvent::KeyboardInput {
-                event: KeyEvent {
-                    physical_key: PhysicalKey::Code(KeyCode::KeyV),
-                    state: ElementState::Pressed,
-                    repeat: false,
-                    ..
-                },
-                ..
-            } => self.switch_view_mode(),
 
             WindowEvent::KeyboardInput {
                 event, ..
             } => {
+                let mut handled = false;
+                
                 if !event.repeat {
-                    self.handle_nes_input(event);
+                    handled = self.handle_nes_input(event.clone());
+                }
+
+                if !handled {
+                    match event {
+                        KeyEvent { 
+                            physical_key: PhysicalKey::Code(KeyCode::KeyV),
+                            state: ElementState::Pressed,
+                            repeat: false,
+                            ..
+                        } => {
+                            self.switch_view_mode()
+                        },
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::KeyC),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            if self.paused {
+                                self.nes.cycle_instr();
+                            }
+                        }
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::KeyF),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            if self.paused {
+                                self.nes.cycle_until_frame();
+                            }
+                        },
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::Space),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            self.paused = !self.paused;
+                        },
+
+                        _ => {},
+                    }
                 }
             },
 
@@ -183,6 +201,93 @@ impl ApplicationHandler for NesApp {
                 self.last_frame = std::time::Instant::now();
             }
             _ => (),
+        }
+    
+
+        const DPAD_PRESSED_THRESH: f32 = 0.90;
+        // Handle controller input
+        if let Some(controller_event) = self.controller_handler.next_event() {
+            let update = match controller_event {
+                // Up / Down input
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadUp, val, ..), .. } => {                    
+                    let down_pressed = val > DPAD_PRESSED_THRESH;
+                    let up_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Down,
+                            player_id: 0,
+                            pressed: down_pressed });
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Up,
+                            player_id: 0,
+                            pressed: up_pressed });
+                }
+
+                // Left / Right input
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadRight, val, ..), .. } => {                    
+                    let right_pressed = val > DPAD_PRESSED_THRESH;
+                    let left_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Right,
+                            player_id: 0,
+                            pressed: right_pressed });
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Left,
+                            player_id: 0,
+                            pressed: left_pressed });
+                }
+
+                // Start button input
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::Start, val, .. ), .. } => {
+                    let start_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Start,
+                            player_id: 0,
+                            pressed: start_pressed });
+                }
+
+                // Select button input
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::Select, val, .. ), .. } => {
+                    let select_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::Select,
+                            player_id: 0,
+                            pressed: select_pressed });
+                }
+
+                // A button pressed
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::South, val, .. ), .. } => {
+                    let a_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::A,
+                            player_id: 0,
+                            pressed: a_pressed });
+                }
+
+                // B button pressed
+                gilrs::Event { id, event: gilrs::EventType::ButtonChanged(gilrs::Button::East, val, .. ), .. } => {
+                    let b_pressed = val > 0.50;
+
+                    self.nes.update_controllers(
+                        ControllerUpdate{
+                            button: ControllerButton::B,
+                            player_id: 0,
+                            pressed: b_pressed });
+                }
+
+                _ => (),
+            };
         }
     }
 }

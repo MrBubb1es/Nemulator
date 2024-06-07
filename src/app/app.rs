@@ -1,13 +1,11 @@
-use bitfield_struct::bitfield;
 use gilrs::Gilrs;
 use winit::event::{ElementState, KeyEvent, Modifiers, WindowEvent};
-use winit::keyboard::{Key, KeyCode, ModifiersKeyState, ModifiersState, NamedKey, PhysicalKey, SmolStr};
+use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::{application::ApplicationHandler, window::WindowId};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 use pixels::{Pixels, SurfaceTexture};
-use std::sync::Arc;
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
@@ -113,48 +111,63 @@ impl ApplicationHandler for NesApp {
                 println!("The close button was pressed; stopping");
                 event_loop.exit();
             },
+
             WindowEvent::ModifiersChanged(new_mods) => {
                 self.modifiers = Some(new_mods);
             },
+
             WindowEvent::KeyboardInput {
-                event: KeyEvent {
-                    logical_key: Key::Named(
-                        NamedKey::Space,
-                    ),
-                    state: ElementState::Pressed,
-                    // repeat: false,
-                    ..
-                },
-                ..
+                event, ..
             } => {
-                // if !self.nes.handle_input()
-                if self.modifiers.unwrap().state().shift_key() {
-                    if self.paused {
-                        self.nes.cycle_instr();
-                    } else {
-                        self.paused = true;
+                let mut handled = false;
+                
+                if !event.repeat {
+                    handled = self.handle_nes_input(event.clone());
+                }
+
+                if !handled {
+                    match event {
+                        KeyEvent { 
+                            physical_key: PhysicalKey::Code(KeyCode::KeyV),
+                            state: ElementState::Pressed,
+                            repeat: false,
+                            ..
+                        } => {
+                            self.switch_view_mode()
+                        },
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::KeyC),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            if self.paused {
+                                self.nes.cycle_instr();
+                            }
+                        }
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::KeyF),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            if self.paused {
+                                self.nes.cycle_until_frame();
+                            }
+                        },
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::Space),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            self.paused = !self.paused;
+                        },
+
+                        _ => {},
                     }
-                } else {
-                    self.paused = !self.paused;
                 }
             },
-            WindowEvent::KeyboardInput {
-                event: KeyEvent {
-                    physical_key: PhysicalKey::Code(KeyCode::KeyV),
-                    state: ElementState::Pressed,
-                    repeat: false,
-                    ..
-                },
-                ..
-            } => self.switch_view_mode(),
-
-            // WindowEvent::KeyboardInput {
-            //     event, ..
-            // } => {
-            //     if !event.repeat {
-            //         self.handle_nes_input(event);
-            //     }
-            // },
 
             WindowEvent::RedrawRequested => {
                 if !self.paused {
@@ -268,7 +281,7 @@ impl ApplicationHandler for NesApp {
 
                     self.nes.update_controllers(
                         ControllerUpdate{
-                            button: ControllerButton::A,
+                            button: ControllerButton::B,
                             player_id: 0,
                             pressed: b_pressed });
                 }

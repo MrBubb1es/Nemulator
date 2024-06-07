@@ -14,6 +14,9 @@ pub struct NES {
 
     clocks: u64,
 
+    // Keeps track of when the CPU has initiated an OAM DMA transfer
+    dma_in_progress: bool,
+
     cart: Option<Cartridge>,
     cart_loaded: bool,
 }
@@ -29,6 +32,8 @@ impl Default for NES {
             p2_controller: NesController::default(),
 
             clocks: 0,
+
+            dma_in_progress: false,
 
             cart: None,
             cart_loaded: false,
@@ -175,16 +180,41 @@ impl NES {
     pub fn cycle(&mut self) -> bool {
         self.get_ppu_mut().cycle();
 
+
+        let mut cpu_cycled = false;
+        
+        if self.clocks % 3 == 0 {
+            if self.get_cpu().dma_in_progress() {
+
+                // Even CPU cycles are read cycles
+                if self.get_cpu().total_clocks() & 1 == 0 {
+                    self.get_cpu_mut().read_next_oam_data();
+                    self.get_cpu_mut().increment_clock();
+                } 
+                // Odd CPU cycles are write cycles
+                else {
+                    let addr = self.get_cpu().get_oam_addr();
+                    let data = self.get_cpu().get_oam_data();
+
+                    self.get_ppu_mut().oam_dma_write(data, addr);
+                    self.get_cpu_mut().increment_clock();
+                }
+
+            } else {
+
+                let p1_controller_state = self.p1_controller;
+                let p2_controller_state = self.p2_controller;
+
+                cpu_cycled = self.get_cpu_mut().cycle(p1_controller_state, p2_controller_state);
+            }
+        } else {
+            cpu_cycled = false;
+        };
+
         if self.get_ppu().cpu_nmi_flag() {
             self.cpu.as_mut().unwrap().trigger_ppu_nmi();
             self.get_ppu_mut().set_cpu_nmi_flag(false);
         }
-
-        let cpu_cycled = if self.clocks % 3 == 0 {
-            self.cpu.as_mut().unwrap().cycle(self.p1_controller, self.p2_controller)
-        } else {
-            false
-        };
 
         self.clocks += 1;
 

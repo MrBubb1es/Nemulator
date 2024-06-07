@@ -916,6 +916,10 @@ pub fn draw_nes_screen(frame: &mut [u8], frame_width: usize, frame_height: usize
     for (py, row) in screen_buf.chunks(256*4).enumerate() {
         for (px, pix) in row.chunks(4).enumerate() {
             dot(frame, frame_width, frame_height, x+s*px, y+s*py, s, Color::from(pix));
+        
+            if px % 8 == 0 && py % 8 == 0 {
+                dot(frame, frame_width, frame_height, x+s*px, y+s*py, s, RED);
+            }
         }
     }
 }

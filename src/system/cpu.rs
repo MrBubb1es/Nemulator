@@ -73,6 +73,10 @@ pub struct Cpu6502 {
     mapper: Rc<dyn Mapper>,
     ppu: Rc<RefCell<Ppu2C02>>,
 
+    oam_data: u8,
+    oam_address: u16,
+    dma_in_progress: bool,
+
     cycles_remaining: usize, // Number of CPU clocks before next instruction
     total_clocks: u64, // Total number of clocks since CPU started running
 
@@ -103,8 +107,12 @@ impl Cpu6502 {
             poll_p1: Cell::new(true),
             poll_p2: Cell::new(true),
 
-            ppu: Rc::clone(&ppu),
             mapper: Rc::clone(&mapper),
+            ppu: Rc::clone(&ppu),
+
+            oam_data: 0,
+            oam_address: 0,
+            dma_in_progress: false,
 
             cycles_remaining: 0,
             total_clocks: 0,
@@ -245,11 +253,8 @@ impl Cpu6502 {
 
             // PPU OAM DMA Register
             0x4014 => {
-                const PAGE_SIZE: usize = 0x100;
-                let source_addr = ((data as u16) << 8) as usize;
-                let oam_dma_source = &self.sys_ram[source_addr..source_addr+PAGE_SIZE];
-                self.ppu.as_ref().borrow_mut().oam_dma_write(oam_dma_source);
-                self.cycles_remaining += 514;
+                self.oam_address = (data as u16) << 8;
+                self.dma_in_progress = true;
             },
 
             // Player 1 Controller Port
@@ -282,6 +287,22 @@ impl Cpu6502 {
         let hi = self.read(address + 1) as u16;
         (hi << 8) | lo
     }
+    /// Reads the next OAM DMA byte into an internal register to be fetched a few
+    /// NES cycles down the line.
+    pub fn read_next_oam_data(&mut self) {
+        self.oam_data = self.read(self.oam_address);
+        
+        self.oam_address = self.oam_address.wrapping_add(1);
+
+        // OAM DMA ends when address wraps back to $XX00, so as long as the low
+        // byte of the OAM address isn't 0, the DMA is still going on.
+        if self.oam_address & 0xFF == 0 {
+            self.dma_in_progress = false;
+        } else {
+            self.dma_in_progress = true;
+        }
+    }
+    
     /// Write a 2 byte value to a given address in LLHH form
     pub fn write_word(&mut self, address: u16, data: u16) {
         let lo = data as u8;
@@ -463,6 +484,18 @@ impl Cpu6502 {
     pub fn get_pc(&self) -> u16 {
         self.pc
     }
+    /// Get the last read byte from the OAM DMA process
+    pub fn get_oam_data(&self) -> u8 {
+        self.oam_data
+    }
+    /// Get the 8-bit address last used to read data from the page being accessed for the OAM DMA process
+    pub fn get_oam_addr(&self) -> u8 {
+        ((self.oam_address.wrapping_sub(1)) & 0xFF) as u8
+    }
+
+    pub fn dma_in_progress(&self) -> bool {
+        self.dma_in_progress
+    }
 
     /// Set the value of the accumulator
     pub fn set_acc(&mut self, val: u8) {
@@ -487,6 +520,10 @@ impl Cpu6502 {
 
     pub fn trigger_ppu_nmi(&mut self) {
         self.nmi_flag = true;
+    }
+
+    pub fn increment_clock(&mut self) {
+        self.total_clocks += 1;
     }
 
 

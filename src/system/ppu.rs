@@ -320,9 +320,18 @@ impl Ppu2C02 {
             } 
             // No more room in OAM, just check for sprite overflow
             else {
+                // No sprite overflow if rendering disabled
+                if !self.rendering_enabled() {
+                    break;
+                }
+
                 let sprite_y = sprite_data[0];
 
                 if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
+                    // No sprite overflow if sprite y == 240 or sprite y == 255
+                    // (241 and 0 bc of +1 when sprite y is written to OAM, and 255 wraps to 0)
+                    if sprite_y >= 241 || sprite_y == 0 { continue; }
+                    
                     self.status.set_spr_overflow(1);
                 }
 
@@ -390,10 +399,10 @@ impl Ppu2C02 {
 
                     let flip_horizontal = sprite_data[2] & 0x40 != 0;
                     let flip_vertical = sprite_data[2] & 0x80 != 0;
-
+                    
                     // row of the tile we are looking at
                     let sprite_row = if flip_vertical {
-                        sprite_height - (self.scanline as u16 - sprite_y as u16)
+                        (sprite_height - 1) - (self.scanline as u16 - sprite_y as u16)
                     } else {
                         self.scanline as u16 - sprite_y as u16
                     };
@@ -921,25 +930,29 @@ impl Ppu2C02 {
     }
 
     fn sprite_0_hit_check(&self) -> bool {
-        // Sprite zero is a collision between foreground and background
-        // so they must both be enabled
-        if self.mask.draw_bg() == 1 && self.mask.draw_sprites() == 1 {
-            // The left edge of the screen has specific switches to control
-            // its appearance. This is used to smooth inconsistencies when
-            // scrolling (since sprites x coord must be >= 0)
-            if self.mask.draw_bg_left() == 0 && self.mask.draw_spr_left() == 0 {
-                if self.dot >= 9 && self.dot < 258 {
-                    return true;
-                }
-            }
-            else {
-                if self.dot >= 1 && self.dot < 258 {
-                    return true;
-                }
+        // Spr 0 hit cannot happen if bg or spr rendering disabled
+        if self.mask.draw_bg() == 0 || self.mask.draw_sprites() == 0 {
+            return false;
+        }
+
+        // Spr 0 hit cannot happen on first 8 pixels if left clipping enabled
+        if self.mask.draw_bg_left() == 0 || self.mask.draw_spr_left() == 0 {
+            if 1 <= self.dot && self.dot <= 8 { // x in 0..=7
+                return false;
             }
         }
+
+        // Spr 0 hit cannot happen at x == 255 (for reasons)
+        if self.dot == 256 {
+            return false;
+        }
+
+        // Spr 0 hit cannot happen if scanline >= 239
+        if self.scanline >= 239 {
+            return false;
+        }
         
-        false
+        true
     }
 }
 

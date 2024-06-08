@@ -1,5 +1,6 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
+use std::sync::{Arc, Mutex};
 use std::{default, rc::Rc};
 
 use super::mappers::{Mapper0, Mapper1, Mapper3};
@@ -17,7 +18,7 @@ pub enum NametableMirror {
 /// cartridge memory. We pass the data to be written on the _write calls to
 /// allow for memory banking (e.g., to write the data into a register in
 /// memory that controls which memory bank is active).
-pub trait Mapper {
+pub trait Mapper: Send + Sync {
     /// Initializes any mapper information based on the cartridge file header
     fn init(&mut self, header: &Header);
     /// Translates the given address from the CPU addressing space to the PRG
@@ -48,14 +49,14 @@ pub trait Mapper {
     fn get_nt_mirror_type(&self) -> NametableMirror;
 }
 
-pub fn get_mapper(header: &Header) -> Rc<RefCell<dyn Mapper>> {
-    let mapper: Rc<RefCell<dyn Mapper>> = match header.mapper_num {
-        0 => Rc::new(RefCell::new(Mapper0::default())),
-        3 => Rc::new(RefCell::new(Mapper3::default())),
-        _ => Rc::new(RefCell::new(Mapper0::default())),
+pub fn get_mapper(header: &Header) -> Box<dyn Mapper> {
+    let mut mapper: Box<dyn Mapper> = match header.mapper_num {
+        0 => Box::new(Mapper0::default()),
+        3 => Box::new(Mapper3::default()),
+        _ => Box::new(Mapper0::default()),
     };
 
-    mapper.as_ref().borrow_mut().init(header);
+    mapper.init(header);
 
     mapper
 }

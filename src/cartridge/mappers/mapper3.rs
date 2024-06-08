@@ -59,3 +59,7 @@ impl Mapper for Mapper3 {
         self.nt_mirror_type
     }
 }
+
+
+unsafe impl Send for Mapper3 {}
+unsafe impl Sync for Mapper3 {}

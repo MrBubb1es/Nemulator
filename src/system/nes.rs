@@ -1,18 +1,35 @@
-use std::{borrow::Borrow, cell::{Ref, RefCell, RefMut}, fs, io::Read, rc::Rc};
+use std::{borrow::{Borrow, BorrowMut}, cell::{Ref, RefCell, RefMut}, fs, io::Read, rc::Rc, sync::{Arc, Mutex, MutexGuard}};
 
 use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 
 use super::{controller::{ControllerButton, ControllerUpdate, NesController}, cpu::{self, Cpu6502, CpuState}, ppu::Ppu2C02, ppu_util::PpuMask};
 
-pub struct NES {
+
+const NES_SCREEN_WIDTH: usize = 256;
+const NES_SCREEN_HEIGHT: usize = 240;
+const BYTES_PER_PIXEL: usize = 4; // R, G, B, A == 4 bytes
+
+const SCREEN_BUFFER_SIZE: usize = NES_SCREEN_WIDTH
+                                * NES_SCREEN_HEIGHT
+                                * BYTES_PER_PIXEL;
+
+pub struct Nes {
     cpu: Option<Cpu6502>,
-    ppu: Option<Rc<RefCell<Ppu2C02>>>,
-    mapper: Option<Rc<RefCell<dyn Mapper>>>,
+    ppu: Option<Arc<Mutex<Ppu2C02>>>,
+    mapper: Option<Arc<Mutex<Box<dyn Mapper>>>>,
 
     p1_controller: NesController,
     p2_controller: NesController,
 
     clocks: u64,
+
+    /// Frame buffer used to render NES screen. This is the buffer that 
+    /// contains the frame that was last rendered, which is used to draw to
+    /// the screen while the next frame is being rendered in draw_buf.
+    screen_buf: Box<[u8; SCREEN_BUFFER_SIZE]>,
+    /// Frame buffer used to render the next frame while the screen is being
+    /// drawn from the data in screen_buf.
+    draw_buf: Box<[u8; SCREEN_BUFFER_SIZE]>,
 
     // Keeps track of when the CPU has initiated an OAM DMA transfer
     dma_in_progress: bool,
@@ -21,9 +38,9 @@ pub struct NES {
     cart_loaded: bool,
 }
 
-impl Default for NES {
+impl Default for Nes {
     fn default() -> Self {
-        NES {
+        Nes {
             cpu: None,
             ppu: None,
             mapper: None,
@@ -33,6 +50,9 @@ impl Default for NES {
 
             clocks: 0,
 
+            screen_buf: Box::new([0; SCREEN_BUFFER_SIZE]),
+            draw_buf: Box::new([0; SCREEN_BUFFER_SIZE]),
+
             dma_in_progress: false,
 
             cart: None,
@@ -41,10 +61,10 @@ impl Default for NES {
     }
 }
 
-impl NES {
+impl Nes {
     /// Create a new NES object with a cart pre-loaded
     pub fn with_cart(cart_path_str: &str) -> Self {
-        let mut nes = NES::default();
+        let mut nes = Nes::default();
         nes.load_cart(cart_path_str);
 
         nes
@@ -67,15 +87,15 @@ impl NES {
         let cart = Cartridge::from_bytes(data.as_slice()).unwrap();
 
         // let ppu_regs = Rc::new(PpuRegisters::default());
-        let mapper: Rc<RefCell<dyn Mapper>> = cart.get_mapper();
+        let mapper: Arc<Mutex<Box<dyn Mapper>>> = Arc::new(Mutex::new(cart.get_mapper()));
 
-        let ppu = Rc::new(RefCell::new(
+        let ppu = Arc::new(Mutex::new(
             Ppu2C02::new(
                 cart.get_chr_rom(), 
-                Rc::clone(&mapper),
+                Arc::clone(&mapper),
             ))
         );
-        let cpu = Cpu6502::new(cart.get_prg_rom(), Rc::clone(&ppu), Rc::clone(&mapper));
+        let cpu = Cpu6502::new(cart.get_prg_rom(), Arc::clone(&ppu), Arc::clone(&mapper));
 
         self.cpu = Some(cpu);
         self.ppu = Some(ppu);
@@ -126,8 +146,8 @@ impl NES {
 
     pub fn update_controllers(&mut self, update: ControllerUpdate) {
         match update.player_id {
-            0 => NES::update_controller_state(&mut self.p1_controller, update),
-            1 => NES::update_controller_state(&mut self.p2_controller, update),
+            0 => Nes::update_controller_state(&mut self.p1_controller, update),
+            1 => Nes::update_controller_state(&mut self.p2_controller, update),
             _ => {},
         }
     }
@@ -155,16 +175,6 @@ impl NES {
         self.cpu.as_mut().unwrap()
     }
 
-    // Get a reference to the PPU. Does not check if a cart is loaded.
-    pub fn get_ppu(&self) -> Ref<Ppu2C02> {
-        self.ppu.as_ref().unwrap().as_ref().borrow()
-    }
-
-    // Get a mutable reference to the PPU. Does not check if a cart is loaded.
-    pub fn get_ppu_mut(&self) -> RefMut<Ppu2C02> {
-        self.ppu.as_ref().unwrap().as_ref().borrow_mut()
-    }
-
     /// Get the number of CPU cLocks
     pub fn get_cpu_clks(&self) -> u64 {
         if let Some(cpu) = self.cpu.borrow() {
@@ -178,25 +188,25 @@ impl NES {
     // might cycle (CPU cycles every 3 PPU cycles). Returns a bool reporting 
     // whether the CPU was cycled.
     pub fn cycle(&mut self) -> bool {
-        self.get_ppu_mut().cycle();
+        self.ppu.as_mut().unwrap().lock().unwrap().cycle(self.draw_buf.as_mut_slice());
 
 
         let mut cpu_cycled = false;
         
         if self.clocks % 3 == 0 {
-            if self.get_cpu().dma_in_progress() {
+            if self.get_cpu_mut().dma_in_progress() {
 
                 // Even CPU cycles are read cycles
-                if self.get_cpu().total_clocks() & 1 == 0 {
+                if self.get_cpu_mut().total_clocks() & 1 == 0 {
                     self.get_cpu_mut().read_next_oam_data();
                     self.get_cpu_mut().increment_clock();
                 } 
                 // Odd CPU cycles are write cycles
                 else {
-                    let addr = self.get_cpu().get_oam_addr();
-                    let data = self.get_cpu().get_oam_data();
+                    let addr = self.get_cpu_mut().get_oam_addr();
+                    let data = self.get_cpu_mut().get_oam_data();
 
-                    self.get_ppu_mut().oam_dma_write(data, addr);
+                    self.ppu.as_mut().unwrap().lock().unwrap().oam_dma_write(data, addr);
                     self.get_cpu_mut().increment_clock();
                 }
 
@@ -211,9 +221,13 @@ impl NES {
             cpu_cycled = false;
         };
 
-        if self.get_ppu().cpu_nmi_flag() {
-            self.cpu.as_mut().unwrap().trigger_ppu_nmi();
-            self.get_ppu_mut().set_cpu_nmi_flag(false);
+        if self.ppu.as_ref().unwrap().lock().unwrap().cpu_nmi_flag() {
+            self.get_cpu_mut().trigger_ppu_nmi();
+            self.ppu.as_mut().unwrap().lock().unwrap().set_cpu_nmi_flag(false);
+        }
+
+        if self.ppu.as_ref().unwrap().lock().unwrap().frame_finished() {
+            self.swap_buffers();
         }
 
         self.clocks += 1;
@@ -228,6 +242,15 @@ impl NES {
         while !self.cycle() {}
     }
 
+    fn swap_buffers(&mut self) {
+        unsafe { 
+            std::ptr::swap(
+                self.screen_buf.as_mut_ptr(), 
+                self.draw_buf.as_mut_ptr()
+            ); 
+        };
+    }
+
     pub fn get_cpu_state(&self) -> CpuState {
         if let Some(cpu) = &self.cpu {
             cpu.get_state()
@@ -238,7 +261,7 @@ impl NES {
 
     pub fn get_pgtbl1(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.as_ref().borrow().pgtbl1.clone()
+            ppu.lock().unwrap().pgtbl1.clone()
         } else {
             Box::new([0; 0x1000])
         }
@@ -246,19 +269,24 @@ impl NES {
 
     pub fn get_pgtbl2(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.as_ref().borrow().pgtbl2.clone() // fix this later i too tired
+            ppu.lock().unwrap().pgtbl2.clone() // fix this later i too tired
         } else {
             Box::new([0; 0x1000])
         }
     }
 
+    pub fn get_screen_buf(&self) -> &[u8] {
+        self.screen_buf.as_slice()
+    }
+
     pub fn cycle_until_frame(&mut self) {
         if self.cart_loaded {
-            while !self.get_ppu().frame_finished() {
+
+            while !self.ppu.as_ref().unwrap().lock().unwrap().frame_finished() {
                 self.cycle();
             }
 
-            self.get_ppu_mut().set_frame_finished(false);
+            self.ppu.as_mut().unwrap().lock().unwrap().set_frame_finished(false);
         }
     }
 
@@ -290,11 +318,11 @@ impl NES {
 mod tests {
     use std::fs::read_to_string;
 
-    use super::NES;
+    use super::Nes;
 
     #[test]
     fn test_load_cart() {
-        let mut test_nemulator = NES::with_cart("prg_tests/1.Branch_Basics.nes");
+        let mut test_nemulator = Nes::with_cart("prg_tests/1.Branch_Basics.nes");
 
         test_nemulator.reset_cpu();
 
@@ -330,7 +358,7 @@ mod tests {
         }
 
 
-        let mut test_nemulator = NES::with_cart("prg_tests/nestest.nes");
+        let mut test_nemulator = Nes::with_cart("prg_tests/nestest.nes");
         test_nemulator.set_cpu_state(Some(0xC000), None, None, None, None, None, None); // run tests automatically
 
         for i in 0..expected_vals.len() {

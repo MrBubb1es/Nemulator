@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use bitfield_struct::bitfield;
 
@@ -8,13 +9,12 @@ use crate::cartridge::mapper::Mapper;
 use super::controller::{ControllerReadState, NesController};
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
-use super::mem::Memory;
+// use super::mem::Memory;
 use super::ppu::Ppu2C02;
 
 // NES has 2KiB of internal memory that only the CPU can access
 const SYS_RAM_SIZE: usize = 0x800;
 
-// NVUBDIZC
 #[bitfield(u8)]
 pub struct CpuStatus {
     pub carry: bool,
@@ -56,7 +56,7 @@ pub struct Cpu6502 {
 
     // Memory accessable only by the CPU
     sys_ram: [u8; SYS_RAM_SIZE],
-    prg_rom: Memory,
+    prg_rom: Vec<u8>,
 
     // Last polled states of each controller
     polled_p1_controller: NesController,
@@ -70,8 +70,8 @@ pub struct Cpu6502 {
 
     // References to the cartridge mapper and PPU are required so the CPU can
     // map addresses & read/write data to and from the PPU
-    mapper: Rc<RefCell<dyn Mapper>>,
-    ppu: Rc<RefCell<Ppu2C02>>,
+    mapper: Arc<Mutex<Box<dyn Mapper>>>,
+    ppu: Arc<Mutex<Ppu2C02>>,
 
     oam_data: u8,
     oam_address: u16,
@@ -86,7 +86,7 @@ pub struct Cpu6502 {
 
 impl Cpu6502 {
     /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
-    pub fn new(prg_rom: Memory, ppu: Rc<RefCell<Ppu2C02>>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+    pub fn new(prg_rom: Vec<u8>, ppu: Arc<Mutex<Ppu2C02>>, mapper: Arc<Mutex<Box<dyn Mapper>>>) -> Self {
         let mut new_cpu = Cpu6502{
             acc: 0,
             x: 0,
@@ -107,8 +107,8 @@ impl Cpu6502 {
             poll_p1: Cell::new(true),
             poll_p2: Cell::new(true),
 
-            mapper: Rc::clone(&mapper),
-            ppu: Rc::clone(&ppu),
+            mapper: mapper,
+            ppu: ppu,
 
             oam_data: 0,
             oam_address: 0,
@@ -141,6 +141,7 @@ impl Cpu6502 {
         if self.poll_p1.get() { self.polled_p1_controller = p1_controller_state; }
         if self.poll_p2.get() { self.polled_p2_controller = p2_controller_state; }
 
+        // We only do the next instruction when cycles_remaining == 0.
         if self.cycles_remaining == 0 {
             if self.nmi_flag {
                 self.nmi();
@@ -185,8 +186,6 @@ impl Cpu6502 {
 
 // Internal & Helper functionality
 impl Cpu6502 {
-    // HELPER FUNCTIONS
-
     /// Read a single byte from a given address off the bus
     pub fn read(&self, address: u16) -> u8 {
         match address {
@@ -196,8 +195,8 @@ impl Cpu6502 {
             },
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
-                self.ppu.as_ref().borrow_mut().cpu_read(address & 0x0007)
-            }
+                self.ppu.lock().as_mut().unwrap().cpu_read(address)
+                }
             0x4016 => {
                 // Player 1 controller port
                 let data = self.polled_p1_controller.read_button(self.p1_read_state.get());
@@ -219,15 +218,11 @@ impl Cpu6502 {
                 data
             }
             0x4000..=0x401F => { 0xEE },
-            // 0x4000..=0x401F => {
-            //     // APU or I/O Reads
-            //     println!("APU READ OCCURED");
-            //     0xEE
-            // },
+
             0x4020..=0xFFFF => {
                 // Read to program ROM through mapper
-                if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
-                    self.prg_rom.read(mapped_addr)
+                if let Some(mapped_addr) = self.mapper.lock().as_mut().unwrap().get_cpu_read_addr(address) {
+                    self.prg_rom[mapped_addr as usize]
                 } else {
                     0
                 }
@@ -236,7 +231,6 @@ impl Cpu6502 {
     }
     /// Write a single byte to the bus at a given address
     pub fn write(&mut self, address: u16, data: u8) {
-        // println!("CPU Write to ${address:04X} w/ 0x{data:02X}");
         match address {
             // CPU RAM
             0x0000..=0x1FFF => {
@@ -247,8 +241,7 @@ impl Cpu6502 {
             // PPU Internal Registers
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
-
-                self.ppu.as_ref().borrow_mut().cpu_write(address & 0x0007, data);
+                self.ppu.lock().as_mut().unwrap().cpu_write(address & 0x0007, data);
             },
 
             // PPU OAM DMA Register
@@ -275,8 +268,8 @@ impl Cpu6502 {
             // Program ROM
             0x4020..=0xFFFF => {
                 // Write to program ROM through mapper
-                if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_write_addr(address, data) {
-                    self.prg_rom.write(mapped_addr, data);
+                if let Some(mapped_addr) = self.mapper.lock().as_mut().unwrap().get_cpu_write_addr(address, data) {
+                    self.prg_rom[mapped_addr as usize] = data;
                 }
             },
         };

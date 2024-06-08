@@ -1,11 +1,13 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::{Arc, Mutex}};
 
 use crate::cartridge::{mapper::NametableMirror, Mapper};
 
-use super::{mem::Memory, nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
+use super::{nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
 
 const PRIMARY_OAM_SIZE: usize = 256;
 const SECONDARY_OAM_SIZE: usize = 32;
+const VRAM_SIZE: usize = 0x800;
+const PALETTE_MEM_SIZE: usize = 32;
 
 /// Representation of the NES Picture Processing Unit. Details on how the PPU
 /// works can be found here: https://www.nesdev.org/wiki/PPU_registers
@@ -35,9 +37,9 @@ pub struct Ppu2C02 {
 
 
     // Memories accessable only by the PPU
-    vram: Memory,
-    palette_mem: Memory,
-    chr_rom: Memory,
+    vram: [u8; VRAM_SIZE],
+    palette_mem: [u8; PALETTE_MEM_SIZE],
+    chr_rom: Vec<u8>,
     primary_oam: [u8; PRIMARY_OAM_SIZE],
     secondary_oam: [u8; SECONDARY_OAM_SIZE],
 
@@ -45,7 +47,7 @@ pub struct Ppu2C02 {
     spr_0_in_secondary_oam: bool,
 
     // Mapper used by the cartridge, Rc because both the CPU and PPU access to it
-    mapper: Rc<RefCell<dyn Mapper>>,
+    mapper: Arc<Mutex<Box<dyn Mapper>>>,
 
     // Flag to signal the NES to trigger a CPU NMI
     cpu_nmi_flag: bool,
@@ -69,9 +71,6 @@ pub struct Ppu2C02 {
     pub pgtbl1: Box<[u8; 0x1000]>,
     pub pgtbl2: Box<[u8; 0x1000]>,
 
-    /// Frame buffer used to render NES screen
-    screen_buf: Box<[u8; 256*240*4]>,
-
     // flag set when the ppu finishes rendering a frame
     frame_finished: bool,
     // flag to keep track of when the ppu is rendering an odd or even number frame
@@ -89,7 +88,7 @@ impl Ppu2C02 {
     ///                 and CPU to access the PPU registers, as the CPU needs to
     ///                 read and write to some of them.
     ///  * `mapper` - Pointer the the mapper being used by the cartridge.
-    pub fn new(chr_rom: Memory, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+    pub fn new(chr_rom: Vec<u8>, mapper: Arc<Mutex<Box<dyn Mapper>>>) -> Self {
         let mut ppu = Ppu2C02 {
             dot: 0,
             scanline: 0,
@@ -108,15 +107,15 @@ impl Ppu2C02 {
             read_buffer: 0,
             write_latch: 0,
 
-            vram: Memory::new(0x800), // 2KiB ppu ram
-            palette_mem: Memory::new(0x20),
+            vram: [0; 0x800], // 2KiB ppu ram
+            palette_mem: [0; PALETTE_MEM_SIZE],
             chr_rom: chr_rom,
             primary_oam: [0; PRIMARY_OAM_SIZE],
             secondary_oam: [0; SECONDARY_OAM_SIZE],
 
             spr_0_in_secondary_oam: false,
 
-            mapper: Rc::clone(&mapper),
+            mapper: mapper,
 
             bg_next_tile_nt_addr: 0,
             bg_next_tile_attrib: 0,
@@ -130,8 +129,6 @@ impl Ppu2C02 {
 
             pgtbl1: Box::new([0; 0x1000]),
             pgtbl2: Box::new([0; 0x1000]),
-
-            screen_buf: Box::new([0; 256*240*4]),
 
             frame_finished: false,
             odd_frame: false,
@@ -160,7 +157,7 @@ impl Ppu2C02 {
     }
 
     /// Cycle the PPU through the rendering/execution of a single pixel/dot.
-    pub fn cycle(&mut self) {        
+    pub fn cycle(&mut self, draw_buf: &mut [u8]) {        
         self.frame_finished = false;
 
         match self.scanline {
@@ -202,7 +199,7 @@ impl Ppu2C02 {
         }
 
         if self.scanline < 240 && 0 < self.dot && self.dot <= 256 {
-            self.draw_dot();
+            self.draw_dot(draw_buf);
         }
 
         if self.dot == 257 {
@@ -213,22 +210,9 @@ impl Ppu2C02 {
             }
         }
 
-        self.dot += 1;
-        if self.dot > 340 {
-            self.dot = 0;
-
-            self.scanline += 1;
-            if self.scanline > 261 {
-                self.scanline = 0;
-                self.frame_finished = true;
-
-                if self.odd_frame && self.rendering_enabled() {
-                    self.dot = 1; // Skip one cycle on odd frames if rendering
-                }
-
-                self.odd_frame = !self.odd_frame;
-            }
-        }
+        // Increment the dot & do all of the required checks (e.g. increments
+        // scanline if it is time, sets flags, etc.)
+        self.increment_dot();
     }
     
     /// Helper function to handle the memory accesses/internal register changes
@@ -337,7 +321,7 @@ impl Ppu2C02 {
     /// Draw to the given frame buffer at the current scanline and dot. This function
     /// does not internally check to ensure the scanline and dot are within the bounds
     /// of the screen.
-    fn draw_dot(&mut self) {
+    fn draw_dot(&mut self, draw_buf: &mut [u8]) {
         let mut bg_pix: u16 = 0;
         let mut bg_pal: u16 = 0;
 
@@ -413,10 +397,11 @@ impl Ppu2C02 {
 
 
                     // println!("Sprite with pt addr: {}", sprite_pt_addr);
+                    let spr_hi_idx = (sprite_pt_addr + sprite_row) as usize;
+                    let spr_lo_idx = (sprite_pt_addr + sprite_row + sprite_height) as usize;
 
-
-                    let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
-                    let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
+                    let sprite_hi_byte = self.chr_rom[spr_hi_idx];
+                    let sprite_lo_byte = self.chr_rom[spr_lo_idx];
 
                     let horiz_shift = if flip_horizontal {
                         screen_pixel_x - sprite_x as usize
@@ -481,17 +466,33 @@ impl Ppu2C02 {
         let col = self.color_from_tile_data(palette, pixel);
         let pix_idx = (self.scanline * 256 + screen_pixel_x)*4;
 
-        let frame = self.screen_buf.as_mut_slice();
-
-        frame[pix_idx + 0] = col.r;
-        frame[pix_idx + 1] = col.g;
-        frame[pix_idx + 2] = col.b;
-        frame[pix_idx + 3] = 0xFF;
+        draw_buf[pix_idx + 0] = col.r;
+        draw_buf[pix_idx + 1] = col.g;
+        draw_buf[pix_idx + 2] = col.b;
+        draw_buf[pix_idx + 3] = 0xFF;
     }
 }
 
 // Internal & Helper functionality
 impl Ppu2C02 {
+    fn increment_dot(&mut self) {
+        self.dot += 1;
+        if self.dot > 340 {
+            self.dot = 0;
+
+            self.scanline += 1;
+            if self.scanline > 261 {
+                self.scanline = 0;
+                self.frame_finished = true;
+
+                if self.odd_frame && self.rendering_enabled() {
+                    self.dot = 1; // Skip one cycle on odd frames if rendering
+                }
+
+                self.odd_frame = !self.odd_frame;
+            }
+        }
+    }
     /// Put the background buffer registers into the least significant byte of the shift registers
     fn load_shift_regs(&mut self) {
         self.bg_tile_nt_hi = (self.bg_tile_nt_hi & 0xFF00) | self.bg_next_tile_msb as u16;
@@ -533,34 +534,48 @@ impl Ppu2C02 {
     pub fn ppu_read(&self, address: u16) -> u8 {
         match address {
             0x0000..=0x1FFF => {
-                let mapped_addr = self.mapper
-                    .borrow_mut()
+                let mapped_addr = self.mapper.lock().as_mut().unwrap()
                     .get_ppu_read_addr(address)
                     .unwrap_or(address);
-                self.chr_rom.read(mapped_addr)
+
+                self.chr_rom[mapped_addr as usize]
             },
             0x2000..=0x3EFF => {
+                let mapper = self.mapper.lock().unwrap();
+
                 let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = match self.mapper.borrow().get_nt_mirror_type() {
-                    NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
-                    NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
-                    // NametableMirror::Horizontal => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) },
-                    // NametableMirror::Vertical => { mirrored_addr1 & 0x07FF },
+                let mirrored_addr2 = match mapper.get_nt_mirror_type() {
+                    NametableMirror::Horizontal => { 
+                        match mirrored_addr1 {
+                            0x2000..=0x23FF => { mirrored_addr1 - 0x2000 },
+                            0x2400..=0x27FF => { mirrored_addr1 - 0x2400 },
+                            0x2800..=0x2CFF => { mirrored_addr1 - 0x2400 },
+                            0x2D00..=0x2FFF => { mirrored_addr1 - 0x2800 },
+                            _ => {unreachable!()}
+                        }
+                    },
+                    NametableMirror::Vertical => {
+                        match mirrored_addr1 {
+                            0x2000..=0x23FF => { mirrored_addr1 - 0x2000 },
+                            0x2400..=0x27FF => { mirrored_addr1 - 0x2000 },
+                            0x2800..=0x2CFF => { mirrored_addr1 - 0x2800 },
+                            0x2D00..=0x2FFF => { mirrored_addr1 - 0x2800 },
+                            _ => {unreachable!()}
+                        }
+                    }
                 };
-                self.vram.read(mirrored_addr2)
+                self.vram[mirrored_addr2 as usize]
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = address & 0x1F;
                 
-                let mut data = self.palette_mem.read(mirrored_addr);
+                let mut data = self.palette_mem[mirrored_addr as usize];
 
                 if self.mask.greyscale() == 1 {
                     data &= 0x30;
                 } else {
                     data &= 0x3F;
                 }
-
-                // println!("Reading data 0x{data:02X} from pal mem w/ addr 0x{mapped_addr:02X}");
 
                 data
             },
@@ -579,24 +594,38 @@ impl Ppu2C02 {
     ///
     ///  * `address` - 16 bit address used to access data
     ///  * `data` - Single byte of data to write
-    pub fn ppu_write(&self, address: u16, data: u8) {
-        // println!("Writing to ppu w/ addr 0x{address:02X} and data: 0x{data:02X}");
-
+    pub fn ppu_write(&mut self, address: u16, data: u8) {
         match address & 0x3FFF {
             0x0000..=0x1FFF => {
-                let mapped_addr = self.mapper
-                    .borrow_mut()
+                let mapped_addr = self.mapper.lock().as_mut().unwrap()
                     .get_ppu_write_addr(address, data)
-                    .unwrap_or(address);        
-                self.chr_rom.write(mapped_addr, data);
+                    .unwrap_or(address);  
+
+                self.chr_rom[mapped_addr as usize] = data;
             },
             0x2000..=0x3EFF => {
                 let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = match self.mapper.borrow().get_nt_mirror_type() {
-                    NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
-                    NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
+                let mirrored_addr2 = match self.mapper.lock().as_ref().unwrap().get_nt_mirror_type() {
+                    NametableMirror::Horizontal => { 
+                        match mirrored_addr1 {
+                            0x2000..=0x23FF => { mirrored_addr1 - 0x2000 },
+                            0x2400..=0x27FF => { mirrored_addr1 - 0x2400 },
+                            0x2800..=0x2CFF => { mirrored_addr1 - 0x2400 },
+                            0x2D00..=0x2FFF => { mirrored_addr1 - 0x2800 },
+                            _ => {unreachable!()},
+                        }
+                    },
+                    NametableMirror::Vertical => {
+                        match mirrored_addr1 {
+                            0x2000..=0x23FF => { mirrored_addr1 - 0x2000 },
+                            0x2400..=0x27FF => { mirrored_addr1 - 0x2000 },
+                            0x2800..=0x2CFF => { mirrored_addr1 - 0x2800 },
+                            0x2D00..=0x2FFF => { mirrored_addr1 - 0x2800 },
+                            _ => {unreachable!()},
+                        }
+                    }
                 };
-                self.vram.write(mirrored_addr2, data);
+                self.vram[mirrored_addr2 as usize] = data;
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = address & 0x1F;
@@ -611,20 +640,20 @@ impl Ppu2C02 {
                 // almost nothing I think, but there's a lesson to be learned
                 // from this idea anyways. I wouldn't have thought of this myself)
                 match mirrored_addr {
-                    0x00 => { self.palette_mem.write(0x10, data); },
-                    0x04 => { self.palette_mem.write(0x14, data); },
-                    0x08 => { self.palette_mem.write(0x18, data); },
-                    0x0C => { self.palette_mem.write(0x1C, data); },
+                    0x00 => { self.palette_mem[0x10] = data; },
+                    0x04 => { self.palette_mem[0x14] = data; },
+                    0x08 => { self.palette_mem[0x18] = data; },
+                    0x0C => { self.palette_mem[0x1C] = data; },
 
-                    0x10 => { self.palette_mem.write(0x00, data); },
-                    0x14 => { self.palette_mem.write(0x04, data); },
-                    0x18 => { self.palette_mem.write(0x08, data); },
-                    0x1C => { self.palette_mem.write(0x0C, data); },
+                    0x10 => { self.palette_mem[0x00] = data; },
+                    0x14 => { self.palette_mem[0x04] = data; },
+                    0x18 => { self.palette_mem[0x08] = data; },
+                    0x1C => { self.palette_mem[0x0C] = data; },
 
                     _ => {},
                 }
 
-                self.palette_mem.write(mirrored_addr, data);
+                self.palette_mem[mirrored_addr as usize] = data;
 
             },
             _ => {unreachable!("I never thought I'd live to see a Resonance Cascade, let alone create one...");}
@@ -968,10 +997,6 @@ impl Ppu2C02 {
     /// currently being rendered by the PPU.
     pub fn rendering_enabled(&self) -> bool {
         self.mask.draw_bg() == 1 || self.mask.draw_sprites() == 1
-    }
-    /// Get the frame buffer as a slice
-    pub fn frame_buf_slice(&self) -> &[u8] {
-        self.screen_buf.as_slice()
     }
     pub fn cpu_nmi_flag(&self) -> bool {
         self.cpu_nmi_flag

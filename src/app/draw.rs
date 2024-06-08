@@ -1,4 +1,6 @@
-use crate::system::nes::NES;
+use std::sync::MutexGuard;
+
+use crate::system::nes::Nes;
 
 pub const DEBUG_FRAME_WIDTH: usize = 960;
 pub const DEBUG_FRAME_HEIGHT: usize = 540;
@@ -871,7 +873,7 @@ pub fn draw_box(frame: &mut [u8], frame_width: usize, frame_height: usize,
 /// Draw the background of the debug view to the frame buffer. This renders the
 /// title, outlines, and pagetables (i.e. everything that doesn't change)
 /// This function should only be called once.
-pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
+pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &MutexGuard<Nes>) {
     // TITLE DECOR
     horizontal_line(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 5, 255, 4, 2, palette.border_col);
     horizontal_line(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 10, 250, 10, 2, palette.border_col);
@@ -902,8 +904,8 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &NES) {
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 160, 390, 188, 2, palette, Some("Zero-Page"))
 }
 
-pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &mut NES) {
-    draw_nes_screen(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes.get_ppu().frame_buf_slice(), 9, 38, true);
+pub fn draw_debug(frame: &mut [u8], palette: DebugPalette, nes: &mut MutexGuard<Nes>) {
+    draw_nes_screen(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes.get_screen_buf(), 9, 38, true);
     draw_cpu_state(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 45, palette);
     draw_zpage(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, nes, 543, 171, palette);
 }
@@ -961,7 +963,7 @@ pub fn draw_nes_pagetable(frame: &mut [u8], frame_width: usize, frame_height: us
 }
 
 pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
-                    nes: &NES, x: usize, y: usize, palette: DebugPalette) {
+                    nes: &Nes, x: usize, y: usize, palette: DebugPalette) {
     
     let cpu_state = nes.get_cpu_state();
 
@@ -1016,7 +1018,7 @@ pub fn draw_cpu_state(frame: &mut [u8], frame_width: usize, frame_height: usize,
 }
 
 fn draw_zpage(frame: &mut [u8], frame_width: usize, frame_height: usize,
-            nes: &mut NES, x: usize, y: usize, palette: DebugPalette) {
+            nes: &mut Nes, x: usize, y: usize, palette: DebugPalette) {
     
     let zpage_str = nes.zpage_str();
 
@@ -1040,8 +1042,8 @@ pub fn draw_game_view_bg(frame: &mut [u8], palette: DebugPalette) {
     // draw_box(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, 30, 30, 259, 243, 2, palette, None);
 }
 
-pub fn draw_game_view(frame: &mut [u8], nes: &mut NES) {
-    draw_nes_screen(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, nes.get_ppu().frame_buf_slice(), 0, 0, false);
+pub fn draw_game_view(frame: &mut [u8], nes: &MutexGuard<Nes>) {
+    draw_nes_screen(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, nes.get_screen_buf(), 0, 0, false);
 }
 
 struct DrawDiff {

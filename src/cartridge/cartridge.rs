@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use crate::cartridge::mapper;
-use crate::system::mem::Memory;
 
 use super::mapper::Mapper;
 
@@ -81,12 +81,12 @@ pub struct Header {
 pub struct Cartridge {
     _format: CartFormat,
 
-    _header: Header,
+    header: Header,
 
     // trainer_area: Option<[u8; 512]>,
-    prg_rom: Memory,
-    chr_rom: Memory,
-    _misc_rom: Memory,
+    prg_rom: Vec<u8>,
+    chr_rom: Vec<u8>,
+    _misc_rom: Vec<u8>,
 }
 
 impl Cartridge {
@@ -178,7 +178,7 @@ impl Cartridge {
         let prg_rom_banks = Cartridge::rom_size(header.prg_rom_size);
         let prg_rom_end = prg_rom_start + prg_rom_banks * PRG_ROM_BANK_SIZE;
         
-        let prg_rom_vec = if header.prg_rom_size > 0 {
+        let prg_rom = if header.prg_rom_size > 0 {
             data[prg_rom_start..prg_rom_end].to_vec()
         } else {
             vec![0; PRG_ROM_BANK_SIZE] // If no prg rom allocated by program, give cpu 1 bank so it doesn't freak out
@@ -190,25 +190,25 @@ impl Cartridge {
         let chr_rom_banks = Cartridge::rom_size(header.chr_rom_size);
         let chr_rom_end = chr_rom_start + chr_rom_banks * CHR_ROM_BANK_SIZE;
 
-        let chr_rom_vec = if header.chr_rom_size > 0 {
+        let chr_rom = if header.chr_rom_size > 0 {
             data[chr_rom_start..chr_rom_end].to_vec()
         } else {
             vec![0; CHR_ROM_BANK_SIZE] // If no chr rom allocated by program, give ppu 1 bank so it doesn't freak out
         };
 
-        let misc_rom_vec = data[chr_rom_end..].to_vec();
+        let misc_rom = data[chr_rom_end..].to_vec();
 
-        println!("Prg ROM Size: {} (given by {})", prg_rom_vec.len(), header.prg_rom_size);
-        println!("Chr ROM Size: {} (given by {})", chr_rom_vec.len(), header.chr_rom_size);
-        println!("Misc ROM Size: {}", misc_rom_vec.len());
+        println!("Prg ROM Size: {} (given by {})", prg_rom.len(), header.prg_rom_size);
+        println!("Chr ROM Size: {} (given by {})", chr_rom.len(), header.chr_rom_size);
+        println!("Misc ROM Size: {}", misc_rom.len());
 
         Ok(Cartridge {
             _format: format,
-            _header: header,
+            header,
             // trainer_area: None,
-            prg_rom: Memory::from_vec(prg_rom_vec),
-            chr_rom: Memory::from_vec(chr_rom_vec),
-            _misc_rom: Memory::from_vec(misc_rom_vec),
+            prg_rom,
+            chr_rom,
+            _misc_rom: misc_rom,
         })
     }
 
@@ -225,17 +225,17 @@ impl Cartridge {
         rom_size_bytes as usize
     }
 
-    pub fn get_prg_rom(&self) -> Memory {
+    pub fn get_prg_rom(&self) -> Vec<u8> {
         self.prg_rom.clone()
     }
 
-    pub fn get_chr_rom(&self) -> Memory {
+    pub fn get_chr_rom(&self) -> Vec<u8> {
         self.chr_rom.clone()
     }
 
-    pub fn get_mapper(&self) -> Rc<RefCell<dyn Mapper>> {
-        println!("Loading cart with mapper {}", self._header.mapper_num);
+    pub fn get_mapper(&self) -> Box<dyn Mapper> {
+        println!("Loading cart with mapper {}", self.header.mapper_num);
 
-        mapper::get_mapper(&self._header)
+        mapper::get_mapper(&self.header)
     }
 }

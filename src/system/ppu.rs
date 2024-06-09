@@ -2,8 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::cartridge::{mapper::NametableMirror, Mapper};
 
-use super::{mem::Memory, nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
+use super::{nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
 
+const VRAM_SIZE: usize = 0x800;
+const PALETTE_MEM_SIZE: usize = 32;
 const PRIMARY_OAM_SIZE: usize = 256;
 const SECONDARY_OAM_SIZE: usize = 32;
 
@@ -35,11 +37,11 @@ pub struct Ppu2C02 {
 
 
     // Memories accessable only by the PPU
-    vram: Memory,
-    palette_mem: Memory,
-    chr_rom: Memory,
+    vram: [u8; VRAM_SIZE],
+    palette_mem: [u8; PALETTE_MEM_SIZE],
     primary_oam: [u8; PRIMARY_OAM_SIZE],
     secondary_oam: [u8; SECONDARY_OAM_SIZE],
+    chr_rom: Vec<u8>,
 
     // Flag to keep track of if sprite 0 made it into secondary OAM during the last sprite evaluation phase
     spr_0_in_secondary_oam: bool,
@@ -89,7 +91,7 @@ impl Ppu2C02 {
     ///                 and CPU to access the PPU registers, as the CPU needs to
     ///                 read and write to some of them.
     ///  * `mapper` - Pointer the the mapper being used by the cartridge.
-    pub fn new(chr_rom: Memory, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+    pub fn new(chr_rom: Vec<u8>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         let mut ppu = Ppu2C02 {
             dot: 0,
             scanline: 0,
@@ -108,11 +110,11 @@ impl Ppu2C02 {
             read_buffer: 0,
             write_latch: 0,
 
-            vram: Memory::new(0x800), // 2KiB ppu ram
-            palette_mem: Memory::new(0x20),
-            chr_rom: chr_rom,
+            vram: [0; VRAM_SIZE], // 2KiB ppu ram
+            palette_mem: [0; PALETTE_MEM_SIZE],
             primary_oam: [0; PRIMARY_OAM_SIZE],
             secondary_oam: [0; SECONDARY_OAM_SIZE],
+            chr_rom: chr_rom,
 
             spr_0_in_secondary_oam: false,
 
@@ -414,9 +416,11 @@ impl Ppu2C02 {
 
                     // println!("Sprite with pt addr: {}", sprite_pt_addr);
 
+                    let spr_addr_hi = (sprite_pt_addr + sprite_row) as usize;
+                    let spr_addr_lo = (sprite_pt_addr + sprite_row + sprite_height) as usize;
 
-                    let sprite_hi_byte = self.chr_rom.read(sprite_pt_addr + sprite_row);
-                    let sprite_lo_byte = self.chr_rom.read(sprite_pt_addr + sprite_row + sprite_height);
+                    let sprite_hi_byte = self.chr_rom[spr_addr_hi];
+                    let sprite_lo_byte = self.chr_rom[spr_addr_lo];
 
                     let horiz_shift = if flip_horizontal {
                         screen_pixel_x - sprite_x as usize
@@ -537,7 +541,7 @@ impl Ppu2C02 {
                     .borrow_mut()
                     .get_ppu_read_addr(address)
                     .unwrap_or(address);
-                self.chr_rom.read(mapped_addr)
+                self.chr_rom[mapped_addr as usize]
             },
             0x2000..=0x3EFF => {
                 let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
@@ -547,12 +551,12 @@ impl Ppu2C02 {
                     // NametableMirror::Horizontal => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) },
                     // NametableMirror::Vertical => { mirrored_addr1 & 0x07FF },
                 };
-                self.vram.read(mirrored_addr2)
+                self.vram[mirrored_addr2 as usize]
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = address & 0x1F;
                 
-                let mut data = self.palette_mem.read(mirrored_addr);
+                let mut data = self.palette_mem[mirrored_addr as usize];
 
                 if self.mask.greyscale() == 1 {
                     data &= 0x30;
@@ -579,7 +583,7 @@ impl Ppu2C02 {
     ///
     ///  * `address` - 16 bit address used to access data
     ///  * `data` - Single byte of data to write
-    pub fn ppu_write(&self, address: u16, data: u8) {
+    pub fn ppu_write(&mut self, address: u16, data: u8) {
         // println!("Writing to ppu w/ addr 0x{address:02X} and data: 0x{data:02X}");
 
         match address & 0x3FFF {
@@ -588,7 +592,7 @@ impl Ppu2C02 {
                     .borrow_mut()
                     .get_ppu_write_addr(address, data)
                     .unwrap_or(address);        
-                self.chr_rom.write(mapped_addr, data);
+                self.chr_rom[mapped_addr as usize] = data;
             },
             0x2000..=0x3EFF => {
                 let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
@@ -596,7 +600,7 @@ impl Ppu2C02 {
                     NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
                     NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
                 };
-                self.vram.write(mirrored_addr2, data);
+                self.vram[mirrored_addr2 as usize] = data;
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = address & 0x1F;
@@ -611,20 +615,20 @@ impl Ppu2C02 {
                 // almost nothing I think, but there's a lesson to be learned
                 // from this idea anyways. I wouldn't have thought of this myself)
                 match mirrored_addr {
-                    0x00 => { self.palette_mem.write(0x10, data); },
-                    0x04 => { self.palette_mem.write(0x14, data); },
-                    0x08 => { self.palette_mem.write(0x18, data); },
-                    0x0C => { self.palette_mem.write(0x1C, data); },
+                    0x00 => { self.palette_mem[0x10 as usize] = data; },
+                    0x04 => { self.palette_mem[0x14 as usize] = data; },
+                    0x08 => { self.palette_mem[0x18 as usize] = data; },
+                    0x0C => { self.palette_mem[0x1C as usize] = data; },
 
-                    0x10 => { self.palette_mem.write(0x00, data); },
-                    0x14 => { self.palette_mem.write(0x04, data); },
-                    0x18 => { self.palette_mem.write(0x08, data); },
-                    0x1C => { self.palette_mem.write(0x0C, data); },
+                    0x10 => { self.palette_mem[0x00 as usize] = data; },
+                    0x14 => { self.palette_mem[0x04 as usize] = data; },
+                    0x18 => { self.palette_mem[0x08 as usize] = data; },
+                    0x1C => { self.palette_mem[0x0C as usize] = data; },
 
                     _ => {},
                 }
 
-                self.palette_mem.write(mirrored_addr, data);
+                self.palette_mem[mirrored_addr as usize] = data;
 
             },
             _ => {unreachable!("I never thought I'd live to see a Resonance Cascade, let alone create one...");}

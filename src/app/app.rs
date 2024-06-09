@@ -5,7 +5,7 @@ use winit::{application::ApplicationHandler, window::WindowId};
 use winit::dpi::PhysicalSize;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
-use pixels::{Pixels, SurfaceTexture};
+use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
@@ -74,24 +74,26 @@ impl ApplicationHandler for NesApp {
 
         match self.view_mode {
             ViewMode::DEBUG => {
-                self.pixel_buf = Some(Pixels::new(
+                let pixels_builder = PixelsBuilder::new(
                     draw::DEBUG_FRAME_WIDTH as u32, 
                     draw::DEBUG_FRAME_HEIGHT as u32, 
                     pixel_surface)
-                    .unwrap());
-        
-                self.pixel_buf.as_mut().unwrap().clear_color(wgpu_bg_col);
+                    .enable_vsync(false)
+                    .clear_color(wgpu_bg_col);
+
+                self.pixel_buf = Some(pixels_builder.build().unwrap());
 
                 draw::draw_debug_bg(self.pixel_buf.as_mut().unwrap().frame_mut(), DEFAULT_DEBUG_PAL, &self.nes);
             },
             ViewMode::NORMAL => {
-                self.pixel_buf = Some(Pixels::new(
+                let pixels_builder = PixelsBuilder::new(
                     draw::GAME_FRAME_WIDTH as u32, 
                     draw::GAME_FRAME_HEIGHT as u32, 
                     pixel_surface)
-                    .unwrap());
-                
-                self.pixel_buf.as_mut().unwrap().clear_color(wgpu_bg_col);
+                    .enable_vsync(false)
+                    .clear_color(wgpu_bg_col);
+
+                self.pixel_buf = Some(pixels_builder.build().unwrap());
 
                 draw::draw_game_view_bg(self.pixel_buf.as_mut().unwrap().frame_mut(), DEFAULT_DEBUG_PAL);
             },
@@ -100,7 +102,7 @@ impl ApplicationHandler for NesApp {
         self.window.as_ref().unwrap().request_redraw();
 
         self.modifiers = Some(Modifiers::default());
-        self.paused = true;
+        // self.paused = true;
 
         self.last_frame = std::time::Instant::now();
     }

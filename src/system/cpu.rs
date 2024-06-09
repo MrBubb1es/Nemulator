@@ -8,7 +8,6 @@ use crate::cartridge::mapper::Mapper;
 use super::controller::{ControllerReadState, NesController};
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
-use super::mem::Memory;
 use super::ppu::Ppu2C02;
 
 // NES has 2KiB of internal memory that only the CPU can access
@@ -56,7 +55,7 @@ pub struct Cpu6502 {
 
     // Memory accessable only by the CPU
     sys_ram: [u8; SYS_RAM_SIZE],
-    prg_rom: Memory,
+    prg_rom: Vec<u8>,
 
     // Last polled states of each controller
     polled_p1_controller: NesController,
@@ -86,7 +85,7 @@ pub struct Cpu6502 {
 
 impl Cpu6502 {
     /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
-    pub fn new(prg_rom: Memory, ppu: Rc<RefCell<Ppu2C02>>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+    pub fn new(prg_rom: Vec<u8>, ppu: Rc<RefCell<Ppu2C02>>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         let mut new_cpu = Cpu6502{
             acc: 0,
             x: 0,
@@ -227,7 +226,7 @@ impl Cpu6502 {
             0x4020..=0xFFFF => {
                 // Read to program ROM through mapper
                 if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
-                    self.prg_rom.read(mapped_addr)
+                    self.prg_rom[mapped_addr as usize]
                 } else {
                     0
                 }
@@ -276,7 +275,7 @@ impl Cpu6502 {
             0x4020..=0xFFFF => {
                 // Write to program ROM through mapper
                 if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_write_addr(address, data) {
-                    self.prg_rom.write(mapped_addr, data);
+                    self.prg_rom[mapped_addr as usize] = data;
                 }
             },
         };

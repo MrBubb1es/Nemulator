@@ -6,3 +6,5 @@ mod nes_graphics;
 mod instructions;
 pub mod controller;
 pub mod audio;
+pub mod apu;
+mod apu_util;

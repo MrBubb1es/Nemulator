@@ -2,48 +2,47 @@ pub mod app;
 pub mod cartridge;
 pub mod system;
 
+use std::sync::Arc;
+
+use system::audio::{self, NesAudioHandler, NES_AUDIO_FREQUENCY};
 use winit::event_loop::{ControlFlow, EventLoop};
+
+use tokio;
+use tokio::time::{sleep, Duration};
+use tokio::sync::mpsc::channel;
+
+const AUDIO_SLEEP_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / NES_AUDIO_FREQUENCY as u64);
 
 // use app::window::Window;
 
-pub fn run(path: &str) {
+pub async fn run(path: &str) {
+    let path_thread_safe_thing = Arc::new(path.to_string());
+
     env_logger::init();
+
+    let (audio_over_sender, audio_over_receiver) = channel::<bool>(1);  
+
+    let audio_thread = tokio::spawn(async move {
+        let mut audio_handler = NesAudioHandler::new();
+
+        while audio_over_receiver.is_empty() {
+            audio_handler.play();
+
+            // sleep(AUDIO_SLEEP_INTERVAL).await;
+        }
+    });
 
     let event_loop = EventLoop::new().unwrap();
     let mut nes_app = app::NesApp::default();
 
-    event_loop.set_control_flow(ControlFlow::Poll);
+    event_loop.set_control_flow(ControlFlow::Wait);
 
-    nes_app.init(path);
-    // nes_app.init("games/Donkey Kong Classics (U).nes");
-    // nes_app.init("games/donkey kong.nes");
+    let my_path = path_thread_safe_thing.as_ref();
 
-    // ===== TESTS =====
-
-    // CPU TESTS
-    // nes_app.init("prg_tests/nestest.nes"); // Passing
-    // nes_app.init("prg_tests/1.Branch_Basics.nes"); // Passing
-    // nes_app.init("prg_tests/2.Backward_Branch.nes"); // Passing
-    // nes_app.init("prg_tests/3.Forward_Branch.nes"); // Passing
-
-    // PPU TESTS
-    // nes_app.init("prg_tests/ppu_tests/color_test.nes"); // Passing (except color emphasis)
-    // nes_app.init("prg_tests/ppu_tests/full_nes_palette.nes"); // Shows some colors, not all colors
-
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/01.basics.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/02.alignment.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/03.corners.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/04.flip.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/05.left_clip.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/06.right_edge.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/07.screen_bottom.nes"); // Failing
-    // nes_app.init("prg_tests/ppu_tests/sprite_hit_tests_2005.10.05/08.double_height.nes"); // Failing
-
-    // nes_app.init("prg_tests/ppu_tests/sprite_overflow_tests/1.Basics.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_overflow_tests/2.Details.nes"); // Passing
-    // nes_app.init("prg_tests/ppu_tests/sprite_overflow_tests/3.Timing.nes"); // Failing
-
-    // nes_app.init("prg_tests/ppu_tests/ppu_read_buffer/test_ppu_read_buffer.nes");
-
+    nes_app.init(my_path);
+    
     event_loop.run_app(&mut nes_app).unwrap();
+
+    audio_over_sender.send(true).await;
+    audio_thread.await;
 }

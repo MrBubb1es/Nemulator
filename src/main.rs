@@ -18,7 +18,8 @@ use std::env;
 
 use nes_emulator;
 
-pub fn main() -> Result<(), String> {
+#[tokio::main]
+pub async fn main() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 2 {
@@ -26,7 +27,7 @@ pub fn main() -> Result<(), String> {
         return Ok(());
     }
 
-    nes_emulator::run(&args[1]);
+    nes_emulator::run(&args[1]).await;
 
     Ok(())
 }

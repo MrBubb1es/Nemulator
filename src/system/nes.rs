@@ -7,7 +7,7 @@ use std::{
     sync::Arc,
 };
 
-use tokio::sync::mpsc::Sender;
+use rodio::queue::SourcesQueueInput;
 
 use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 
@@ -59,16 +59,8 @@ impl Default for NES {
 }
 
 impl NES {
-    /// Create a new NES object with a cart pre-loaded
-    pub fn with_cart(cart_path_str: &str, sound_output_channel: Arc<Sender<f32>>) -> Self {
-        let mut nes = NES::default();
-        nes.load_cart(cart_path_str, sound_output_channel);
-
-        nes
-    }
-
     /// Load a new cart into this NES object
-    pub fn load_cart(&mut self, cart_path_str: &str, sound_output_channel: Arc<Sender<f32>>) {
+    pub fn load_cart(&mut self, cart_path_str: &str, sound_output_channel: Arc<SourcesQueueInput<f32>>) {
         let mut cart_file = match fs::File::open(cart_path_str) {
             Ok(v) => v,
             Err(..) => panic!("Could not find file '{cart_path_str}'"),

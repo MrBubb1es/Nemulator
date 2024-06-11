@@ -1,5 +1,6 @@
 use gilrs::Gilrs;
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
+use rodio::queue::SourcesQueueInput;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, KeyEvent, Modifiers, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -7,7 +8,6 @@ use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::window::Window;
 use winit::{application::ApplicationHandler, window::WindowId};
 use std::sync::Arc;
-use tokio::sync::mpsc::Sender;
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
@@ -331,7 +331,7 @@ impl ApplicationHandler for NesApp {
 }
 
 impl NesApp {
-    pub fn init(&mut self, cart_path_str: &str, sound_output_channel: Arc<Sender<f32>>) {
+    pub fn init(&mut self, cart_path_str: &str, sound_output_channel: Arc<SourcesQueueInput<f32>>) {
         self.nes.load_cart(cart_path_str, sound_output_channel);
     }
 

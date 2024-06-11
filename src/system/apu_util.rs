@@ -1,4 +1,62 @@
+use std::{collections::{vec_deque, VecDeque}, time::Duration};
+
 use bitfield_struct::bitfield;
+use rodio::Source;
+
+const SAMPLE_BATCH_SIZE: usize = 512;
+pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
+pub const AUDIO_SLEEP_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / NES_AUDIO_FREQUENCY as u64);
+
+
+#[derive(Debug, Default, Clone)]
+pub struct NesAudioStream {
+    sample_queue: VecDeque<f32>,
+}
+
+impl Iterator for NesAudioStream {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.sample_queue.pop_front()
+    }
+}
+
+impl Source for NesAudioStream {
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+    fn channels(&self) -> u16 {
+        1
+    }
+    fn sample_rate(&self) -> u32 {
+        NES_AUDIO_FREQUENCY
+    }
+    fn total_duration(&self) -> Option<Duration> {
+        None
+    }
+}
+
+impl NesAudioStream {
+    pub fn new() -> Self {
+        Self {
+            sample_queue: VecDeque::new(),
+        }
+    }
+
+    pub fn push_sample(&mut self, sample: f32) {
+        self.sample_queue.push_back(sample);
+    }
+
+    /// Clones the audio stream and empties the current sample queue
+    pub fn drain_as_clone(&mut self) -> Self {
+        Self {
+            sample_queue: self.sample_queue.drain(..).collect(),
+        }
+    }
+
+    pub fn is_full(&self) -> bool { self.sample_queue.len() >= SAMPLE_BATCH_SIZE }
+}
+
 
 /// This struct encapsulates all 4 registers of the pulse
 /// channels into a single object.

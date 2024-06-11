@@ -1,7 +1,6 @@
 use bitfield_struct::bitfield;
 
-
-/// This struct encapsulates all 4 registers of the pulse 
+/// This struct encapsulates all 4 registers of the pulse
 /// channels into a single object.
 #[bitfield(u32)]
 pub struct PulseRegisters {
@@ -36,8 +35,7 @@ pub struct PulseRegisters {
     pub timer_hi: u8,
 }
 
-
-/// This struct encapsulates all 3 registers used for the 
+/// This struct encapsulates all 3 registers used for the
 /// triangle channel of the APU.
 #[bitfield(u32)]
 pub struct TriangleRegisters {
@@ -46,7 +44,7 @@ pub struct TriangleRegisters {
     pub counter_disabled: bool,
     #[bits(7)]
     pub counter_reload: u8,
-    
+
     // Second byte
     #[bits(8)]
     pub timer_lo: u8,
@@ -58,9 +56,8 @@ pub struct TriangleRegisters {
     pub timer_hi: u8,
 
     #[bits(8)]
-    _unused: u8
+    _unused: u8,
 }
-
 
 /// This struct encapsulates all 3 registers of the noise channel in the APU.
 #[bitfield(u16)]
@@ -121,7 +118,6 @@ pub struct DmcRegisters {
     pub sample_length: u8,
 }
 
-
 #[bitfield(u8)]
 pub struct ApuControl {
     #[bits(3)]
@@ -137,7 +133,6 @@ pub struct ApuControl {
     #[bits(1)]
     pub pulse1_counter_enabled: bool,
 }
-
 
 #[bitfield(u8)]
 pub struct ApuStatus {
@@ -158,3 +153,6 @@ pub struct ApuStatus {
     #[bits(1)]
     pub pulse1_counter_status: bool,
 }
+
+
+

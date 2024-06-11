@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, time::Duration};
 
 use rodio::{source::SineWave, OutputStream, OutputStreamHandle, Sink, Source};
+use tokio::sync::mpsc::Receiver;
 
 pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
 
@@ -14,11 +15,9 @@ pub struct NesAudioHandler {
 }
 
 impl NesAudioHandler {
-    pub fn new() -> Self {
+    pub fn new(sound_input_channel: Receiver<f32>) -> Self {
         let (output_stream, output_handle) = OutputStream::try_default().unwrap();
         let sink = Sink::try_new(&output_handle).unwrap();
-
-
 
         Self {
             output_stream: output_stream,
@@ -29,11 +28,12 @@ impl NesAudioHandler {
     }
 
     pub fn play(&mut self) {
+        let period: f32 = 1. / 44100.;
         let square_wave = SineWave::new(440.0)
-            .take_duration(Duration::from_secs_f32(10.0))
+            .take_duration(Duration::from_secs_f32(period))
             .map(|s| s.signum())
             .collect::<Vec<_>>();
-        
+
         self.audio_stream.batch_queue_samples(square_wave);
 
         let source = self.audio_stream.drain_as_clone();
@@ -62,10 +62,18 @@ impl Iterator for NesAudioStream {
 }
 
 impl Source for NesAudioStream {
-    fn current_frame_len(&self) -> Option<usize> { None }
-    fn channels(&self) -> u16 { 1 }
-    fn sample_rate(&self) -> u32 { NES_AUDIO_FREQUENCY }
-    fn total_duration(&self) -> Option<Duration> { None }
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+    fn channels(&self) -> u16 {
+        1
+    }
+    fn sample_rate(&self) -> u32 {
+        NES_AUDIO_FREQUENCY
+    }
+    fn total_duration(&self) -> Option<Duration> {
+        None
+    }
 }
 
 impl NesAudioStream {
@@ -79,7 +87,7 @@ impl NesAudioStream {
 
     pub fn drain_as_clone(&mut self) -> Self {
         Self {
-            sample_queue: self.sample_queue.drain(..).collect()
+            sample_queue: self.sample_queue.drain(..).collect(),
         }
     }
 
@@ -102,3 +110,4 @@ impl NesAudioStream {
         }
     }
 }
+

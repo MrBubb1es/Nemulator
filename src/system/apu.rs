@@ -1,12 +1,20 @@
+use std::f32::consts::TAU;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Sender;
 
-use super::apu_util::{ApuControl, ApuStatus, DmcRegisters, NoiseRegisters, PulseRegisters, TriangleRegisters};
+use super::apu_util::{
+    ApuControl, ApuStatus, DmcRegisters, NoiseRegisters, PulseRegisters, TriangleRegisters,
+};
+
+const SAMPLE_PERIOD: f32 = 1f32 / 44_100f32;
+const CPU_FREQ: f32 = 1_789_773f32; // For NTSC systems
+const CPU_CYCLE_PERIOD: f32 = 1.0 / CPU_FREQ;
 
 pub struct Apu2A03 {
     sample_output_channel: Arc<Sender<f32>>,
     clocks: u64,
+    emulator_time: f32,
 
     pulse1_regs: PulseRegisters,
     pulse2_regs: PulseRegisters,
@@ -22,8 +30,32 @@ pub struct Apu2A03 {
 }
 
 impl Apu2A03 {
-    pub fn cycle(&self) {
-        // self.sample_output_channel.send(value)
+    pub fn new(sample_output_channel: Arc<tokio::sync::mpsc::Sender<f32>>) -> Self {
+        Self {
+            sample_output_channel,
+            clocks: 0,
+            emulator_time: 0.0,
+
+            pulse1_regs: PulseRegisters::default(),
+            pulse2_regs: PulseRegisters::default(),
+            triangle_regs: TriangleRegisters::default(),
+            noise_regs: NoiseRegisters::default(),
+            dmc_regs: DmcRegisters::default(),
+
+            control: ApuControl::default(),
+            status: ApuStatus::default(),
+
+            frame_sequence: false,
+            disable_frame_interrupt: false,
+        }
+    }
+
+    pub fn cycle(&mut self) {
+        self.clocks += 1;
+        let emulated_time = self.clocks as f32 * CPU_CYCLE_PERIOD;
+        if emulated_time > SAMPLE_PERIOD {
+            self.send_sample(emulated_time);
+        }
     }
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
@@ -52,9 +84,19 @@ impl Apu2A03 {
                 self.pulse2_regs.set_envelope_volume(new_volume);
             }
 
-            
-
             _ => {}
         }
+    }
+
+    pub fn send_sample(&self, time: f32) {
+        // let timer1 = (self.pulse1_regs.timer_hi() << 8) | self.pulse1_regs.timer_lo();
+        // let freq: f32 = CPU_FREQ / (16 * (timer1 as f32 + 1));
+
+        // NOTE: only for testing
+        let freq: f32 = 440.0;
+
+        let sample = f32::sin(TAU * freq * time);
+
+        self.sample_output_channel.send(sample);
     }
 }

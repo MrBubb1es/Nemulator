@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
-use crate::system::nes::NES;
+use crate::system::nes::{Nes, NES_SCREEN_BUF_SIZE};
 
 use super::draw;
 
@@ -27,9 +27,8 @@ pub enum ViewMode {
 pub struct NesApp {
     window: Option<Window>,
     pixel_buf: Option<Pixels>,
-    modifiers: Option<Modifiers>,
 
-    nes: NES,
+    nes: Nes,
     paused: bool,
     view_mode: ViewMode,
 
@@ -43,9 +42,8 @@ impl Default for NesApp {
         NesApp {
             window: None,
             pixel_buf: None,
-            modifiers: None,
 
-            nes: NES::default(),
+            nes: Nes::default(),
             paused: false,
             view_mode: ViewMode::default(),
 
@@ -115,9 +113,6 @@ impl ApplicationHandler for NesApp {
 
         self.window.as_ref().unwrap().request_redraw();
 
-        self.modifiers = Some(Modifiers::default());
-        // self.paused = true;
-
         self.last_frame = std::time::Instant::now();
     }
 
@@ -136,35 +131,37 @@ impl ApplicationHandler for NesApp {
                 event_loop.exit();
             }
 
-            WindowEvent::ModifiersChanged(new_mods) => {
-                self.modifiers = Some(new_mods);
-            }
-
             WindowEvent::KeyboardInput { event, .. } => {
                 self.handle_keyboard_input(event);
             }
 
             WindowEvent::RedrawRequested => {
-                if !self.paused {
-                    self.nes.cycle_until_frame();
-                }
-                // Draw.
-                if let Some(buf) = self.pixel_buf.as_mut() {
-                    let frame = buf.frame_mut();
+                const MICROS_PER_FRAME: u128 = 1_000_000 / 60;
 
-                    match self.view_mode {
-                        ViewMode::DEBUG => {
-                            draw::draw_debug(frame, draw::DEFAULT_DEBUG_PAL, &mut self.nes);
+                if self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME {
+                    self.last_frame = std::time::Instant::now();
+                    
+                    // Draw.
+                    if let Some(buf) = self.pixel_buf.as_mut() {
+                        let frame = buf.frame_mut();
+    
+                        match self.view_mode {
+                            ViewMode::DEBUG => {
+                                draw::draw_debug(frame, draw::DEFAULT_DEBUG_PAL, &mut self.nes);
+                            }
+                            ViewMode::NORMAL => {
+                                draw::draw_game_view(frame, &mut self.nes);
+                            }
                         }
-                        ViewMode::NORMAL => {
-                            draw::draw_game_view(frame, &mut self.nes);
-                        }
+    
+                        buf.render().unwrap();
                     }
 
-                    buf.render().unwrap();
+                    if !self.paused {
+                        self.nes.cycle_until_frame();
+                        self.nes.swap_screen_buffers();
+                    }
                 }
-
-                self.last_frame = std::time::Instant::now();
 
                 self.window.as_ref().unwrap().request_redraw();
             }

@@ -3,7 +3,6 @@ use std::{collections::{vec_deque, VecDeque}, sync::{Arc, Mutex}, time::Duration
 use bitfield_struct::bitfield;
 use rodio::Source;
 
-const SAMPLE_BATCH_SIZE: usize = 512;
 pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
 pub const AUDIO_SLEEP_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / NES_AUDIO_FREQUENCY as u64);
 

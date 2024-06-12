@@ -9,12 +9,17 @@ use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
 use super::{
     apu::Apu2A03,
     controller::{ControllerButton, ControllerUpdate, NesController},
-    cpu::{self, Cpu6502, CpuState},
+    cpu::{Cpu6502, CpuState},
     ppu::Ppu2C02,
-    ppu_util::PpuMask,
 };
 
-pub struct NES {
+pub const NES_SCREEN_WIDTH: usize = 256;
+pub const NES_SCREEN_HEIGHT: usize = 240;
+
+// times 4 bc there are 4 colors per pixel: R, G, B, A
+pub const NES_SCREEN_BUF_SIZE: usize = NES_SCREEN_WIDTH * NES_SCREEN_HEIGHT * 4;
+
+pub struct Nes {
     cpu: Option<Cpu6502>,
     apu: Option<Apu2A03>,
     ppu: Option<Rc<RefCell<Ppu2C02>>>,
@@ -23,18 +28,20 @@ pub struct NES {
     p1_controller: NesController,
     p2_controller: NesController,
 
-    clocks: u64,
+    // The screen buffer currently being drawn to by the ppu
+    screen_buf1: Box<[u8; NES_SCREEN_BUF_SIZE]>,
+    // The screen buffer currently being rendered by the app
+    screen_buf2: Box<[u8; NES_SCREEN_BUF_SIZE]>,
 
-    // Keeps track of when the CPU has initiated an OAM DMA transfer
-    dma_in_progress: bool,
+    clocks: u64,
 
     cart: Option<Cartridge>,
     cart_loaded: bool,
 }
 
-impl Default for NES {
+impl Default for Nes {
     fn default() -> Self {
-        NES {
+        Nes {
             cpu: None,
             apu: None,
             ppu: None,
@@ -43,9 +50,10 @@ impl Default for NES {
             p1_controller: NesController::default(),
             p2_controller: NesController::default(),
 
-            clocks: 0,
+            screen_buf1: Box::new([0; NES_SCREEN_BUF_SIZE]),
+            screen_buf2: Box::new([0; NES_SCREEN_BUF_SIZE]),
 
-            dma_in_progress: false,
+            clocks: 0,
 
             cart: None,
             cart_loaded: false,
@@ -53,7 +61,7 @@ impl Default for NES {
     }
 }
 
-impl NES {
+impl Nes {
     /// Load a new cart into this NES object
     pub fn load_cart(&mut self, cart_path_str: &str, sample_queue: Arc<Mutex<VecDeque<f32>>>) {
         let mut cart_file = match fs::File::open(cart_path_str) {
@@ -133,8 +141,8 @@ impl NES {
 
     pub fn update_controllers(&mut self, update: ControllerUpdate) {
         match update.player_id {
-            0 => NES::update_controller_state(&mut self.p1_controller, update),
-            1 => NES::update_controller_state(&mut self.p2_controller, update),
+            0 => Nes::update_controller_state(&mut self.p1_controller, update),
+            1 => Nes::update_controller_state(&mut self.p2_controller, update),
             _ => {}
         }
     }
@@ -172,6 +180,10 @@ impl NES {
         self.ppu.as_ref().unwrap().as_ref().borrow_mut()
     }
 
+    // Get a reference to the APU. Does not check if a cart is loaded.
+    pub fn get_apu(&self) -> &Apu2A03 {
+        self.apu.as_ref().unwrap()
+    }
     // Get a mutable reference to the APU. Does not check if a cart is loaded.
     pub fn get_apu_mut(&mut self) -> &mut Apu2A03 {
         self.apu.as_mut().unwrap()
@@ -190,7 +202,8 @@ impl NES {
     // might cycle (CPU cycles every 3 PPU cycles). Returns a bool reporting
     // whether the CPU was cycled.
     pub fn cycle(&mut self) -> bool {
-        self.get_ppu_mut().cycle();
+        self.ppu.as_ref().unwrap().borrow_mut().cycle(self.screen_buf1.as_mut_slice());
+        // self.get_ppu_mut().cycle(self.screen_buf1.as_mut_slice());
 
         let mut cpu_cycled = false;
 
@@ -297,77 +310,19 @@ impl NES {
 
         mem_str
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use std::fs::read_to_string;
+    pub fn swap_screen_buffers(&mut self) {
+        let buf_ptr1 = self.screen_buf1.as_mut_ptr() as *mut [u8; NES_SCREEN_BUF_SIZE];
+        let buf_ptr2 = self.screen_buf2.as_mut_ptr() as *mut [u8; NES_SCREEN_BUF_SIZE];
 
-    use super::NES;
+        unsafe { std::ptr::swap(buf_ptr1, buf_ptr2); }
+    }
 
-    // #[test]
-    // fn test_load_cart() {
-    //     let mut test_nemulator = NES::with_cart("prg_tests/1.Branch_Basics.nes");
+    pub fn screen_buf_slice(&self) -> &[u8] {
+        self.screen_buf2.as_slice()
+    }
 
-    //     test_nemulator.reset_cpu();
-
-    //     //run_debug(&mut test_nemulator);
-    // }
-
-    // #[test]
-    // fn run_nes_test() {
-    //     // Big vector of the expected CPU states from start to finish of the nestest program.
-    //     // Stored as tuples of (PC, SP, ACC, X, Y, STATUS, CLOCKS)
-    //     let mut expected_vals = Vec::new();
-
-    //     for line in read_to_string("prg_tests/cpu_tests/expected_log.txt")
-    //         .unwrap()
-    //         .lines()
-    //     {
-    //         expected_vals.push({
-    //             let temp: Vec<usize> = line
-    //                 .split(",")
-    //                 .map(|num| {
-    //                     if num.contains("0x") {
-    //                         usize::from_str_radix(&num[2..], 16).unwrap()
-    //                     } else {
-    //                         usize::from_str_radix(num, 10).unwrap()
-    //                     }
-    //                 })
-    //                 .collect();
-
-    //             (
-    //                 temp[0] as u16, // pc
-    //                 temp[1] as u8,  // sp
-    //                 temp[2] as u8,  // acc
-    //                 temp[3] as u8,  // x
-    //                 temp[4] as u8,  // y
-    //                 temp[5] as u8,  // status
-    //                 temp[6] as u64,
-    //             ) // clocks
-    //         })
-    //     }
-
-    //     let mut test_nemulator = NES::with_cart("prg_tests/nestest.nes");
-    //     test_nemulator.set_cpu_state(Some(0xC000), None, None, None, None, None, None); // run tests automatically
-
-    //     for i in 0..expected_vals.len() {
-    //         // test_nemulator.cpu.as_ref().unwrap().print_state();
-
-    //         let (exp_pc, exp_sp, exp_acc, exp_x, exp_y, exp_flags, exp_clks) = expected_vals[i];
-
-    //         assert_eq!(exp_pc, test_nemulator.get_cpu().get_pc());
-    //         assert_eq!(exp_sp, test_nemulator.get_cpu().get_sp());
-    //         assert_eq!(exp_acc, test_nemulator.get_cpu().get_acc());
-    //         assert_eq!(exp_x, test_nemulator.get_cpu().get_x_reg());
-    //         assert_eq!(exp_y, test_nemulator.get_cpu().get_y_reg());
-    //         assert_eq!(exp_flags, test_nemulator.get_cpu().get_status());
-    //         assert_eq!(exp_clks, test_nemulator.get_cpu().total_clocks());
-
-    //         test_nemulator.cycle_instr()
-    //     }
-
-    //     assert_eq!(test_nemulator.get_cpu().read(0x0002), 0);
-    //     assert_eq!(test_nemulator.get_cpu().read(0x0003), 0);
-    // }
+    pub fn audio_samples_queued(&self) -> usize {
+        self.get_apu().audio_samples_queued()
+    }
 }

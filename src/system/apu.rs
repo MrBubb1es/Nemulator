@@ -123,4 +123,8 @@ impl Apu2A03 {
                 .extend(self.sample_batch.drain(..));
         }
     }
+
+    pub fn audio_samples_queued(&self) -> usize {
+        self.sample_queue.lock().unwrap().len()
+    }
 }

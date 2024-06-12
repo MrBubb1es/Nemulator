@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::cartridge::{mapper::NametableMirror, Mapper};
 
-use super::{nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
+use super::{nes::NES_SCREEN_BUF_SIZE, nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
 
 const VRAM_SIZE: usize = 0x800;
 const PALETTE_MEM_SIZE: usize = 32;
@@ -71,9 +71,6 @@ pub struct Ppu2C02 {
     pub pgtbl1: Box<[u8; 0x1000]>,
     pub pgtbl2: Box<[u8; 0x1000]>,
 
-    /// Frame buffer used to render NES screen
-    screen_buf: Box<[u8; 256*240*4]>,
-
     // flag set when the ppu finishes rendering a frame
     frame_finished: bool,
     // flag to keep track of when the ppu is rendering an odd or even number frame
@@ -133,8 +130,6 @@ impl Ppu2C02 {
             pgtbl1: Box::new([0; 0x1000]),
             pgtbl2: Box::new([0; 0x1000]),
 
-            screen_buf: Box::new([0; 256*240*4]),
-
             frame_finished: false,
             odd_frame: false,
 
@@ -162,7 +157,7 @@ impl Ppu2C02 {
     }
 
     /// Cycle the PPU through the rendering/execution of a single pixel/dot.
-    pub fn cycle(&mut self) {        
+    pub fn cycle(&mut self, frame: &mut [u8]) {        
         self.frame_finished = false;
 
         match self.scanline {
@@ -204,7 +199,7 @@ impl Ppu2C02 {
         }
 
         if self.scanline < 240 && 0 < self.dot && self.dot <= 256 {
-            self.draw_dot();
+            self.draw_dot(frame);
         }
 
         if self.dot == 257 {
@@ -339,7 +334,7 @@ impl Ppu2C02 {
     /// Draw to the given frame buffer at the current scanline and dot. This function
     /// does not internally check to ensure the scanline and dot are within the bounds
     /// of the screen.
-    fn draw_dot(&mut self) {
+    fn draw_dot(&mut self, frame: &mut [u8]) {
         let mut bg_pix: u16 = 0;
         let mut bg_pal: u16 = 0;
 
@@ -484,8 +479,6 @@ impl Ppu2C02 {
 
         let col = self.color_from_tile_data(palette, pixel);
         let pix_idx = (self.scanline * 256 + screen_pixel_x)*4;
-
-        let frame = self.screen_buf.as_mut_slice();
 
         frame[pix_idx + 0] = col.r;
         frame[pix_idx + 1] = col.g;
@@ -972,10 +965,6 @@ impl Ppu2C02 {
     /// currently being rendered by the PPU.
     pub fn rendering_enabled(&self) -> bool {
         self.mask.draw_bg() == 1 || self.mask.draw_sprites() == 1
-    }
-    /// Get the frame buffer as a slice
-    pub fn frame_buf_slice(&self) -> &[u8] {
-        self.screen_buf.as_slice()
     }
     pub fn cpu_nmi_flag(&self) -> bool {
         self.cpu_nmi_flag

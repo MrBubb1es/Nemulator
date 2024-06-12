@@ -105,6 +105,12 @@ pub struct PulseRegisters {
     pub timer_hi: u8,
 }
 
+#[derive(Default)]
+pub struct PulseChannel {
+    pub freq: f32,
+    pub enabled: bool
+}
+
 /// This struct encapsulates all 3 registers used for the
 /// triangle channel of the APU.
 #[bitfield(u32)]

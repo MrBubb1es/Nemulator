@@ -5,6 +5,7 @@ use bitfield_struct::bitfield;
 
 use crate::cartridge::mapper::Mapper;
 
+use super::apu::Apu2A03;
 use super::controller::{ControllerReadState, NesController};
 use super::instructions::{AddressingMode, Instruction, OpcodeData, INSTRUCTION_TABLE, DEFAULT_ILLEGAL_OP};
 
@@ -71,6 +72,7 @@ pub struct Cpu6502 {
     // map addresses & read/write data to and from the PPU
     mapper: Rc<RefCell<dyn Mapper>>,
     ppu: Rc<RefCell<Ppu2C02>>,
+    apu: Rc<RefCell<Apu2A03>>,
 
     oam_data: u8,
     oam_address: u16,
@@ -85,7 +87,12 @@ pub struct Cpu6502 {
 
 impl Cpu6502 {
     /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
-    pub fn new(prg_rom: Vec<u8>, ppu: Rc<RefCell<Ppu2C02>>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+    pub fn new(prg_rom: Vec<u8>, 
+            ppu: Rc<RefCell<Ppu2C02>>, 
+            apu: Rc<RefCell<Apu2A03>>, 
+            mapper: Rc<RefCell<dyn Mapper>>
+        ) -> Self {
+
         let mut new_cpu = Cpu6502{
             acc: 0,
             x: 0,
@@ -106,8 +113,9 @@ impl Cpu6502 {
             poll_p1: Cell::new(true),
             poll_p2: Cell::new(true),
 
-            mapper: Rc::clone(&mapper),
-            ppu: Rc::clone(&ppu),
+            mapper,
+            ppu,
+            apu,
 
             oam_data: 0,
             oam_address: 0,
@@ -250,11 +258,20 @@ impl Cpu6502 {
                 self.ppu.as_ref().borrow_mut().cpu_write(address & 0x0007, data);
             },
 
+            // APU Addresses
+            0x4000..=0x4013 => {
+                self.apu.as_ref().borrow_mut().cpu_write(address, data);
+            },
+
             // PPU OAM DMA Register
             0x4014 => {
                 self.oam_address = (data as u16) << 8;
                 self.dma_in_progress = true;
             },
+
+            0x4015 => {
+                self.apu.as_ref().borrow_mut().cpu_write(address, data);
+            }
 
             // Player 1 Controller Port
             0x4016 => {
@@ -262,14 +279,15 @@ impl Cpu6502 {
                 self.p1_read_state.set(ControllerReadState::new());
             },
 
-            // Player 2 Controller Port
+            // Player 2 Controller Port & APU Register
             0x4017 => {
                 self.poll_p2.set(data & 1 == 1);
                 self.p2_read_state.set(ControllerReadState::new());
+
+                self.apu.as_ref().borrow_mut().cpu_write(address, data);
             },
 
-            // APU
-            0x4000..=0x401F => {},
+            0x4018 | 0x4019 => {},
             
             // Program ROM
             0x4020..=0xFFFF => {
@@ -278,6 +296,8 @@ impl Cpu6502 {
                     self.prg_rom[mapped_addr as usize] = data;
                 }
             },
+
+            _ => {},
         };
     }
     /// Read a 2 byte value starting at the given address in LLHH (little-endian) form

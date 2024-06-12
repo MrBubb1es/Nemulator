@@ -4,8 +4,7 @@ use std::sync::{Arc, Mutex};
 use rodio::queue::SourcesQueueInput;
 
 use super::apu_util::{
-    ApuControl, ApuStatus, DmcRegisters, NesAudioStream, 
-    NoiseRegisters, PulseRegisters, TriangleRegisters
+    ApuControl, ApuStatus, DmcRegisters, NoiseRegisters, PulseChannel, PulseRegisters, TriangleRegisters, NES_AUDIO_FREQUENCY
 };
 
 const SAMPLE_PERIOD: f32 = 1f32 / 44_100f32;
@@ -25,6 +24,8 @@ pub struct Apu2A03 {
     triangle_regs: TriangleRegisters,
     noise_regs: NoiseRegisters,
     dmc_regs: DmcRegisters,
+
+    pulse1_channel: PulseChannel,
 
     control: ApuControl,
     status: ApuStatus,
@@ -47,6 +48,9 @@ impl Apu2A03 {
             triangle_regs: TriangleRegisters::default(),
             noise_regs: NoiseRegisters::default(),
             dmc_regs: DmcRegisters::default(),
+
+            pulse1_channel: PulseChannel::default(),
+
 
             control: ApuControl::default(),
             status: ApuStatus::default(),
@@ -79,10 +83,14 @@ impl Apu2A03 {
                 let new_const_volume = (data & 0x10) != 0;
                 let new_volume = data & 0x0F;
 
-                self.pulse1_regs.set_duty_cycle(new_duty_cycle);
-                self.pulse1_regs.set_disable(new_disable);
-                self.pulse1_regs.set_const_volume(new_const_volume);
-                self.pulse1_regs.set_envelope_volume(new_volume);
+                self.pulse1_channel.enabled = !new_disable;
+
+                println!("Pulse 1 Enabled: {}", self.pulse1_channel.enabled);
+
+                // self.pulse1_regs.set_duty_cycle(new_duty_cycle);
+                // self.pulse1_regs.set_disable(new_disable);
+                // self.pulse1_regs.set_const_volume(new_const_volume);
+                // self.pulse1_regs.set_envelope_volume(new_volume);
             }
 
             0x4001 => {
@@ -91,10 +99,38 @@ impl Apu2A03 {
                 let new_const_volume = (data & 0x10) != 0;
                 let new_volume = data & 0x0F;
 
-                self.pulse2_regs.set_duty_cycle(new_duty_cycle);
-                self.pulse2_regs.set_disable(new_disable);
-                self.pulse2_regs.set_const_volume(new_const_volume);
-                self.pulse2_regs.set_envelope_volume(new_volume);
+                // self.pulse2_regs.set_duty_cycle(new_duty_cycle);
+                // self.pulse2_regs.set_disable(new_disable);
+                // self.pulse2_regs.set_const_volume(new_const_volume);
+                // self.pulse2_regs.set_envelope_volume(new_volume);
+            }
+
+            // Pulse 1 Timer Low
+            0x4002 => {
+                self.pulse1_regs.set_timer_lo(data);
+
+                self.update_pulse1_freq();
+
+                let t_hi = self.pulse1_regs.timer_hi() as u16;
+                let t_lo = self.pulse1_regs.timer_lo() as u16;
+
+                let timer = (t_hi << 8) | t_lo;
+
+                println!("Wrote to 0x4002. Timer: {timer}, Freq: {}", self.pulse1_channel.freq);
+            }
+
+            0x4003 => {
+                self.pulse1_regs.set_timer_hi(data & 7);
+                self.pulse1_regs.set_length_counter_load(data >> 3);
+
+                self.update_pulse1_freq();
+
+                let t_hi = self.pulse1_regs.timer_hi() as u16;
+                let t_lo = self.pulse1_regs.timer_lo() as u16;
+
+                let timer = (t_hi << 8) | t_lo;
+
+                println!("Wrote to 0x4003. Timer: {timer}, Freq: {}", self.pulse1_channel.freq);
             }
 
             _ => {}
@@ -102,15 +138,18 @@ impl Apu2A03 {
     }
 
     fn generate_sample(&self) -> f32 {
-        // let timer1 = (self.pulse1_regs.timer_hi() << 8) | self.pulse1_regs.timer_lo();
-        // let freq: f32 = CPU_FREQ / (16 * (timer1 as f32 + 1));
+        let mut pulse1_sample = 0.0;
 
-        // NOTE: only for testing
-        let freq: f32 = 440.0;
+        if self.pulse1_channel.enabled {
+            let freq: f32 = self.pulse1_channel.freq;
+            let time = self.clocks as f32 * CPU_CYCLE_PERIOD;
 
-        let time = self.clocks as f32 * CPU_CYCLE_PERIOD;
+            pulse1_sample = f32::sin(TAU * freq * time);
 
-        let sample = f32::sin(TAU * freq * time);
+            // println!("Pulse 1 Sample: {}", pulse1_sample);
+        }
+
+        let sample = pulse1_sample;
 
         sample
     }
@@ -126,5 +165,20 @@ impl Apu2A03 {
 
     pub fn audio_samples_queued(&self) -> usize {
         self.sample_queue.lock().unwrap().len()
+    }
+
+    fn update_pulse1_freq(&mut self) {
+        let t_hi = self.pulse1_regs.timer_hi() as u16;
+        let t_lo = self.pulse1_regs.timer_lo() as u16;
+
+        let t = (t_hi << 8) | t_lo;
+
+        let frequency = CPU_FREQ / (16.0 * (t + 1) as f32);
+
+        self.pulse1_channel.freq = frequency;
+
+        if t < 8 {
+            self.pulse1_channel.enabled = false;
+        }
     }
 }

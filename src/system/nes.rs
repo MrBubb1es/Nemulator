@@ -21,7 +21,7 @@ pub const NES_SCREEN_BUF_SIZE: usize = NES_SCREEN_WIDTH * NES_SCREEN_HEIGHT * 4;
 
 pub struct Nes {
     cpu: Option<Cpu6502>,
-    apu: Option<Apu2A03>,
+    apu: Option<Rc<RefCell<Apu2A03>>>,
     ppu: Option<Rc<RefCell<Ppu2C02>>>,
     mapper: Option<Rc<RefCell<dyn Mapper>>>,
 
@@ -81,13 +81,17 @@ impl Nes {
         // let ppu_regs = Rc::new(PpuRegisters::default());
         let mapper: Rc<RefCell<dyn Mapper>> = cart.get_mapper();
 
+        let apu = Rc::new(RefCell::new(Apu2A03::new(sample_queue)));
+
         let ppu = Rc::new(RefCell::new(Ppu2C02::new(
             cart.get_chr_rom(),
             Rc::clone(&mapper),
         )));
-        let cpu = Cpu6502::new(cart.get_prg_rom(), Rc::clone(&ppu), Rc::clone(&mapper));
-
-        let apu = Apu2A03::new(sample_queue);
+        let cpu = Cpu6502::new(
+            cart.get_prg_rom(), 
+            Rc::clone(&ppu), 
+            Rc::clone(&apu),
+            Rc::clone(&mapper));
 
         self.cpu = Some(cpu);
         self.apu = Some(apu);
@@ -181,12 +185,12 @@ impl Nes {
     }
 
     // Get a reference to the APU. Does not check if a cart is loaded.
-    pub fn get_apu(&self) -> &Apu2A03 {
-        self.apu.as_ref().unwrap()
+    pub fn get_apu(&self) -> Ref<Apu2A03> {
+        self.apu.as_ref().unwrap().as_ref().borrow()
     }
     // Get a mutable reference to the APU. Does not check if a cart is loaded.
-    pub fn get_apu_mut(&mut self) -> &mut Apu2A03 {
-        self.apu.as_mut().unwrap()
+    pub fn get_apu_mut(&mut self) -> RefMut<Apu2A03> {
+        self.apu.as_ref().unwrap().as_ref().borrow_mut()
     }
 
     /// Get the number of CPU cLocks

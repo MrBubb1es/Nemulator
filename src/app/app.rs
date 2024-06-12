@@ -17,6 +17,9 @@ use crate::system::nes::{Nes, NES_SCREEN_BUF_SIZE};
 
 use super::draw;
 
+const MICROS_PER_FRAME: u128 = 1_000_000 / 60;
+const MIN_SAMPLES_THRESH: usize = 600;
+
 #[derive(Default)]
 pub enum ViewMode {
     #[default]
@@ -136,9 +139,8 @@ impl ApplicationHandler for NesApp {
             }
 
             WindowEvent::RedrawRequested => {
-                const MICROS_PER_FRAME: u128 = 1_000_000 / 60;
-
-                if self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME {
+                if self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME
+                    || self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
                     self.last_frame = std::time::Instant::now();
                     
                     // Draw.

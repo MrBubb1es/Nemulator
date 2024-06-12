@@ -9,6 +9,7 @@ use winit::window::Window;
 use winit::{application::ApplicationHandler, window::WindowId};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
@@ -126,6 +127,9 @@ impl ApplicationHandler for NesApp {
         _window_id: WindowId,
         win_event: WindowEvent,
     ) {
+
+        self.handle_controller_input();
+
         match win_event {
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");
@@ -137,52 +141,7 @@ impl ApplicationHandler for NesApp {
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
-                let mut handled = false;
-
-                if !event.repeat {
-                    handled = self.handle_nes_input(event.clone());
-                }
-
-                if !handled {
-                    match event {
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::KeyV),
-                            state: ElementState::Pressed,
-                            repeat: false,
-                            ..
-                        } => self.switch_view_mode(),
-
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::KeyC),
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if self.paused {
-                                self.nes.cycle_instr();
-                            }
-                        }
-
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::KeyF),
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if self.paused {
-                                self.nes.cycle_until_frame();
-                            }
-                        }
-
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::Space),
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            self.paused = !self.paused;
-                        }
-
-                        _ => {}
-                    }
-                }
+                self.handle_keyboard_input(event);
             }
 
             WindowEvent::RedrawRequested => {
@@ -204,129 +163,12 @@ impl ApplicationHandler for NesApp {
 
                     buf.render().unwrap();
                 }
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
-                self.window.as_ref().unwrap().request_redraw();
 
-                // let micros_elapsed = self.last_frame.elapsed().as_micros();
-                // let fps = 1000000 / micros_elapsed;
-                // println!("FPS: {fps}");
                 self.last_frame = std::time::Instant::now();
+
+                self.window.as_ref().unwrap().request_redraw();
             }
             _ => (),
-        }
-
-        const DPAD_PRESSED_THRESH: f32 = 0.90;
-        // Handle controller input
-        if let Some(controller_event) = self.controller_handler.next_event() {
-            let update = match controller_event {
-                // Up / Down input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadUp, val, ..),
-                    ..
-                } => {
-                    let down_pressed = val > DPAD_PRESSED_THRESH;
-                    let up_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Down,
-                        player_id: 0,
-                        pressed: down_pressed,
-                    });
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Up,
-                        player_id: 0,
-                        pressed: up_pressed,
-                    });
-                }
-
-                // Left / Right input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadRight, val, ..),
-                    ..
-                } => {
-                    let right_pressed = val > DPAD_PRESSED_THRESH;
-                    let left_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Right,
-                        player_id: 0,
-                        pressed: right_pressed,
-                    });
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Left,
-                        player_id: 0,
-                        pressed: left_pressed,
-                    });
-                }
-
-                // Start button input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::Start, val, ..),
-                    ..
-                } => {
-                    let start_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Start,
-                        player_id: 0,
-                        pressed: start_pressed,
-                    });
-                }
-
-                // Select button input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::Select, val, ..),
-                    ..
-                } => {
-                    let select_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Select,
-                        player_id: 0,
-                        pressed: select_pressed,
-                    });
-                }
-
-                // A button pressed
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::South, val, ..),
-                    ..
-                } => {
-                    let a_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::A,
-                        player_id: 0,
-                        pressed: a_pressed,
-                    });
-                }
-
-                // B button pressed
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::East, val, ..),
-                    ..
-                } => {
-                    let b_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::B,
-                        player_id: 0,
-                        pressed: b_pressed,
-                    });
-                }
-
-                _ => (),
-            };
         }
     }
 }
@@ -448,6 +290,167 @@ impl NesApp {
         }
 
         false
+    }
+
+    fn handle_controller_input(&mut self) {
+        const DPAD_PRESSED_THRESH: f32 = 0.90;
+        // Handle controller input
+        if let Some(controller_event) = self.controller_handler.next_event() {
+            let update = match controller_event {
+                // Up / Down input
+                gilrs::Event {
+                    id,
+                    event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadUp, val, ..),
+                    ..
+                } => {
+                    let down_pressed = val > DPAD_PRESSED_THRESH;
+                    let up_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
+
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::Down,
+                        player_id: 0,
+                        pressed: down_pressed,
+                    });
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::Up,
+                        player_id: 0,
+                        pressed: up_pressed,
+                    });
+                }
+
+                // Left / Right input
+                gilrs::Event {
+                    id,
+                    event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadRight, val, ..),
+                    ..
+                } => {
+                    let right_pressed = val > DPAD_PRESSED_THRESH;
+                    let left_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
+
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::Right,
+                        player_id: 0,
+                        pressed: right_pressed,
+                    });
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::Left,
+                        player_id: 0,
+                        pressed: left_pressed,
+                    });
+                }
+
+                // Start button input
+                gilrs::Event {
+                    id,
+                    event: gilrs::EventType::ButtonChanged(gilrs::Button::Start, val, ..),
+                    ..
+                } => {
+                    let start_pressed = val > 0.50;
+
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::Start,
+                        player_id: 0,
+                        pressed: start_pressed,
+                    });
+                }
+
+                // Select button input
+                gilrs::Event {
+                    id,
+                    event: gilrs::EventType::ButtonChanged(gilrs::Button::Select, val, ..),
+                    ..
+                } => {
+                    let select_pressed = val > 0.50;
+
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::Select,
+                        player_id: 0,
+                        pressed: select_pressed,
+                    });
+                }
+
+                // A button pressed
+                gilrs::Event {
+                    id,
+                    event: gilrs::EventType::ButtonChanged(gilrs::Button::South, val, ..),
+                    ..
+                } => {
+                    let a_pressed = val > 0.50;
+
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::A,
+                        player_id: 0,
+                        pressed: a_pressed,
+                    });
+                }
+
+                // B button pressed
+                gilrs::Event {
+                    id,
+                    event: gilrs::EventType::ButtonChanged(gilrs::Button::East, val, ..),
+                    ..
+                } => {
+                    let b_pressed = val > 0.50;
+
+                    self.nes.update_controllers(ControllerUpdate {
+                        button: ControllerButton::B,
+                        player_id: 0,
+                        pressed: b_pressed,
+                    });
+                }
+
+                _ => (),
+            };
+        }
+    }
+
+    fn handle_keyboard_input(&mut self, event: KeyEvent) {
+        let mut handled = false;
+
+                if !event.repeat {
+                    handled = self.handle_nes_input(event.clone());
+                }
+
+                if !handled {
+                    match event {
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::KeyV),
+                            state: ElementState::Pressed,
+                            repeat: false,
+                            ..
+                        } => self.switch_view_mode(),
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::KeyC),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            if self.paused {
+                                self.nes.cycle_instr();
+                            }
+                        }
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::KeyF),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            if self.paused {
+                                self.nes.cycle_until_frame();
+                            }
+                        }
+
+                        KeyEvent {
+                            physical_key: PhysicalKey::Code(KeyCode::Space),
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            self.paused = !self.paused;
+                        }
+
+                        _ => {}
+                    }
+                }
     }
 }
 

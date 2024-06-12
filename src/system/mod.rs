@@ -7,4 +7,4 @@ mod instructions;
 pub mod controller;
 pub mod audio;
 pub mod apu;
-mod apu_util;
+pub mod apu_util;

@@ -1,4 +1,4 @@
-use std::{collections::{vec_deque, VecDeque}, time::Duration};
+use std::{collections::{vec_deque, VecDeque}, sync::{Arc, Mutex}, time::Duration};
 
 use bitfield_struct::bitfield;
 use rodio::Source;
@@ -10,14 +10,20 @@ pub const AUDIO_SLEEP_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / 
 
 #[derive(Debug, Default, Clone)]
 pub struct NesAudioStream {
-    sample_queue: VecDeque<f32>,
+    sample_queue: Arc<Mutex<VecDeque<f32>>>,
 }
 
 impl Iterator for NesAudioStream {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.sample_queue.pop_front()
+        let mut sample_queue = self.sample_queue.lock().unwrap();
+
+        if sample_queue.len() == 0 {
+            return Some(0.0);
+        } else {
+            sample_queue.pop_front()
+        }
     }
 }
 
@@ -37,24 +43,31 @@ impl Source for NesAudioStream {
 }
 
 impl NesAudioStream {
-    pub fn new() -> Self {
-        Self {
-            sample_queue: VecDeque::new(),
-        }
+    pub fn new() -> (Self, Arc<Mutex<VecDeque<f32>>>) {
+        let sample_queue = Arc::new(Mutex::new(VecDeque::new()));
+        let stream = Self { 
+            sample_queue: Arc::clone(&sample_queue) 
+        };
+
+        (stream, sample_queue)
     }
 
     pub fn push_sample(&mut self, sample: f32) {
-        self.sample_queue.push_back(sample);
+        self.sample_queue.lock().unwrap().push_back(sample);
     }
 
-    /// Clones the audio stream and empties the current sample queue
-    pub fn drain_as_clone(&mut self) -> Self {
-        Self {
-            sample_queue: self.sample_queue.drain(..).collect(),
-        }
+    pub fn push_sample_batch(&mut self, sample_batch: Vec<f32>) {
+        self.sample_queue.lock().unwrap().extend(sample_batch.into_iter());
     }
 
-    pub fn is_full(&self) -> bool { self.sample_queue.len() >= SAMPLE_BATCH_SIZE }
+    // Clones the audio stream and empties the current sample queue
+    // pub fn drain_as_clone(&mut self) -> Self {
+    //     Self {
+    //         sample_queue: self.sample_queue.drain(..).collect(),
+    //     }
+    // }
+
+    // pub fn is_full(&self) -> bool { self.sample_queue.len() >= SAMPLE_BATCH_SIZE }
 }
 
 

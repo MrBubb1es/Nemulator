@@ -1,5 +1,5 @@
-use std::f32::consts::TAU;
-use std::sync::Arc;
+use std::{collections::VecDeque, f32::consts::TAU};
+use std::sync::{Arc, Mutex};
 
 use rodio::queue::SourcesQueueInput;
 
@@ -11,10 +11,12 @@ use super::apu_util::{
 const SAMPLE_PERIOD: f32 = 1f32 / 44_100f32;
 const CPU_FREQ: f32 = 1_789_773f32; // For NTSC systems
 const CPU_CYCLE_PERIOD: f32 = 1.0 / CPU_FREQ;
+const SAMPLE_BATCH_SIZE: usize = 2048;
 
 pub struct Apu2A03 {
-    sample_batch: NesAudioStream,
-    sample_output_stream: Arc<SourcesQueueInput<f32>>,
+    sample_queue: Arc<Mutex<VecDeque<f32>>>,
+    sample_batch: Vec<f32>,
+    
     clocks: u64,
     clocks_since_sampled: usize,
 
@@ -32,10 +34,11 @@ pub struct Apu2A03 {
 }
 
 impl Apu2A03 {
-    pub fn new(sample_output_channel: Arc<SourcesQueueInput<f32>>) -> Self {
+    pub fn new(sample_queue: Arc<Mutex<VecDeque<f32>>>) -> Self {
         Self {
-            sample_batch: NesAudioStream::new(),
-            sample_output_stream: sample_output_channel,
+            sample_queue,
+            sample_batch: Vec::with_capacity(SAMPLE_BATCH_SIZE),
+
             clocks: 0,
             clocks_since_sampled: 0,
 
@@ -113,10 +116,11 @@ impl Apu2A03 {
     }
 
     fn push_sample(&mut self, sample: f32) {
-        self.sample_batch.push_sample(sample);
+        self.sample_batch.push(sample);
 
-        if self.sample_batch.is_full() {
-            self.sample_output_stream.append(self.sample_batch.drain_as_clone());
+        if self.sample_batch.len() >= SAMPLE_BATCH_SIZE {
+            self.sample_queue.lock().unwrap()
+                .extend(self.sample_batch.drain(..));
         }
     }
 }

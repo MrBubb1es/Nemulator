@@ -7,7 +7,8 @@ use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
 use winit::window::Window;
 use winit::{application::ApplicationHandler, window::WindowId};
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
@@ -331,8 +332,8 @@ impl ApplicationHandler for NesApp {
 }
 
 impl NesApp {
-    pub fn init(&mut self, cart_path_str: &str, sound_output_channel: Arc<SourcesQueueInput<f32>>) {
-        self.nes.load_cart(cart_path_str, sound_output_channel);
+    pub fn init(&mut self, cart_path_str: &str, sample_queue: Arc<Mutex<VecDeque<f32>>>) {
+        self.nes.load_cart(cart_path_str, sample_queue);
     }
 
     pub fn switch_view_mode(&mut self) {

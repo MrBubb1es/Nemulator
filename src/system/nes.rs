@@ -1,10 +1,5 @@
 use std::{
-    borrow::Borrow,
-    cell::{Ref, RefCell, RefMut},
-    fs,
-    io::Read,
-    rc::Rc,
-    sync::Arc,
+    borrow::Borrow, cell::{Ref, RefCell, RefMut}, collections::VecDeque, fs, io::Read, rc::Rc, sync::{Arc, Mutex}
 };
 
 use rodio::queue::SourcesQueueInput;
@@ -60,7 +55,7 @@ impl Default for NES {
 
 impl NES {
     /// Load a new cart into this NES object
-    pub fn load_cart(&mut self, cart_path_str: &str, sound_output_channel: Arc<SourcesQueueInput<f32>>) {
+    pub fn load_cart(&mut self, cart_path_str: &str, sample_queue: Arc<Mutex<VecDeque<f32>>>) {
         let mut cart_file = match fs::File::open(cart_path_str) {
             Ok(v) => v,
             Err(..) => panic!("Could not find file '{cart_path_str}'"),
@@ -84,7 +79,7 @@ impl NES {
         )));
         let cpu = Cpu6502::new(cart.get_prg_rom(), Rc::clone(&ppu), Rc::clone(&mapper));
 
-        let apu = Apu2A03::new(sound_output_channel);
+        let apu = Apu2A03::new(sample_queue);
 
         self.cpu = Some(cpu);
         self.apu = Some(apu);

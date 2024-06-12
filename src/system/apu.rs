@@ -79,13 +79,11 @@ impl Apu2A03 {
         match address {
             0x4000 => {
                 let new_duty_cycle = (data >> 6) & 3;
-                let new_disable = (data & 0x20) != 0;
+                let new_enable = (data & 0x20) == 0;
                 let new_const_volume = (data & 0x10) != 0;
                 let new_volume = data & 0x0F;
 
-                self.pulse1_channel.enabled = !new_disable;
-
-                println!("Pulse 1 Enabled: {}", self.pulse1_channel.enabled);
+                self.pulse1_channel.enabled = new_enable;
 
                 // self.pulse1_regs.set_duty_cycle(new_duty_cycle);
                 // self.pulse1_regs.set_disable(new_disable);
@@ -110,13 +108,6 @@ impl Apu2A03 {
                 self.pulse1_regs.set_timer_lo(data);
 
                 self.update_pulse1_freq();
-
-                let t_hi = self.pulse1_regs.timer_hi() as u16;
-                let t_lo = self.pulse1_regs.timer_lo() as u16;
-
-                let timer = (t_hi << 8) | t_lo;
-
-                println!("Wrote to 0x4002. Timer: {timer}, Freq: {}", self.pulse1_channel.freq);
             }
 
             0x4003 => {
@@ -124,13 +115,6 @@ impl Apu2A03 {
                 self.pulse1_regs.set_length_counter_load(data >> 3);
 
                 self.update_pulse1_freq();
-
-                let t_hi = self.pulse1_regs.timer_hi() as u16;
-                let t_lo = self.pulse1_regs.timer_lo() as u16;
-
-                let timer = (t_hi << 8) | t_lo;
-
-                println!("Wrote to 0x4003. Timer: {timer}, Freq: {}", self.pulse1_channel.freq);
             }
 
             _ => {}
@@ -142,10 +126,10 @@ impl Apu2A03 {
 
         if self.pulse1_channel.enabled {
             let freq: f32 = self.pulse1_channel.freq;
-            let time = self.clocks as f32 * CPU_CYCLE_PERIOD;
+            let time = (self.clocks as f64 * CPU_CYCLE_PERIOD as f64) as f32;
 
-            pulse1_sample = f32::sin(TAU * freq * time);
-
+            pulse1_sample = f32::sin(TAU * freq * time).signum();
+            
             // println!("Pulse 1 Sample: {}", pulse1_sample);
         }
 

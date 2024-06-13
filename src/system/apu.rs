@@ -105,9 +105,6 @@ impl Apu2A03 {
                     _ => { unreachable!("Holy wack unlyrical lyrics, Batman!"); }
                 };
 
-                // println!("Enabled: {}", self.pulse1_channel.enabled);
-                // println!("New duty cycle of {}%", (self.pulse1_channel.duty_cycle_percent * 100.0) as usize);
-
                 // self.pulse1_regs.set_duty_cycle(new_duty_cycle);
                 // self.pulse1_regs.set_disable(new_disable);
                 // self.pulse1_regs.set_const_volume(new_const_volume);
@@ -128,13 +125,16 @@ impl Apu2A03 {
 
             // Pulse 1 Timer Low
             0x4002 => {
-                self.pulse1_regs.set_timer_lo(data);
+                self.pulse1_channel.timer &= 0x700;
+                self.pulse1_channel.timer |= data as usize;
 
                 self.update_pulse1_freq();
             }
 
             0x4003 => {
-                self.pulse1_regs.set_timer_hi(data & 7);
+                self.pulse1_channel.timer &= 0xFF;
+                self.pulse1_channel.timer |= ((data & 7) as usize) << 8;
+
                 self.pulse1_channel.set_length_counter(data >> 3);
 
                 self.update_pulse1_freq();
@@ -173,20 +173,13 @@ impl Apu2A03 {
     }
 
     fn update_pulse1_freq(&mut self) {
-        let t_hi = self.pulse1_regs.timer_hi() as u16;
-        let t_lo = self.pulse1_regs.timer_lo() as u16;
-
-        let t = (t_hi << 8) | t_lo;
+        let t = self.pulse1_channel.timer;
 
         let frequency = CPU_FREQ / (16.0 * (t + 1) as f64);
 
         self.pulse1_channel.freq = frequency;
 
         println!("New Freq: {}", self.pulse1_channel.freq);
-
-        if t < 8 {
-            self.pulse1_channel.enabled = false;
-        }
     }
 
     fn frame_update(&mut self) {

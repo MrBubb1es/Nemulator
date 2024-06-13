@@ -118,6 +118,8 @@ pub struct PulseRegisters {
 
 #[derive(Default)]
 pub struct PulseChannel {
+    pub timer: usize,
+
     pub freq: f64,
     pub enabled: bool,
     pub duty_cycle_percent: f64,
@@ -130,7 +132,7 @@ impl PulseChannel {
     pub fn sample(&mut self, total_clocks: u64) -> f32 {
         let mut sample = 0.0;
 
-        if self.enabled {
+        if self.enabled && self.timer > 8 {
             if self.length_counter > 0 || !self.counter_enabled {
                 let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
     
@@ -156,7 +158,7 @@ impl PulseChannel {
             self.length_counter -= 1;
 
             if self.length_counter == 0 {
-                // self.enabled = false;
+                // self.counter_enabled = false;
             }
         }
     }

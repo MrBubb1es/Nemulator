@@ -374,12 +374,14 @@ impl Ppu2C02 {
                 let large_sprites = self.ctrl.spr_size() == 1;
                 let sprite_height: u16 = if large_sprites { 16 } else { 8 };
 
-                for (sprite_idx, sprite_data) in self.secondary_oam.chunks(4).enumerate() {
+                for (sprite_idx, sprite_data) in self.secondary_oam.chunks(4).enumerate() {                    
                     // No more sprites to check, so there won't be any spr_pix this dot
                     if sprite_idx >= self.sprites_found { break; }
 
                     let sprite_x = sprite_data[3];
                     let sprite_y = sprite_data[0];
+
+                    if sprite_y == 0 { break; }
 
                     let too_far_left = screen_pixel_x < sprite_x as usize;
                     let too_far_right = sprite_x as usize + SPRITE_WIDTH as usize <= screen_pixel_x;

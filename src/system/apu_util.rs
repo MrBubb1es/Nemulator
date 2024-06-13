@@ -8,6 +8,15 @@ use super::apu::CPU_CYCLE_PERIOD;
 pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
 pub const AUDIO_SLEEP_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / NES_AUDIO_FREQUENCY as u64);
 
+/// https://www.nesdev.org/wiki/APU_Length_Counter#Table_structure
+/// Lookup table for the lengths of the notes given a 5 bit number
+const PULSE_COUNTER_LOOKUP: [usize; 32] = [
+    10, 254, 20, 2, 40, 4, 80, 6, 
+    160, 8, 60, 10, 14, 12, 26, 14,
+    12, 16, 24, 18, 48, 20, 96, 22,
+    192, 24, 72, 26, 16, 28, 32, 30
+];
+
 
 #[derive(Debug, Default, Clone)]
 pub struct NesAudioStream {
@@ -112,22 +121,43 @@ pub struct PulseChannel {
     pub freq: f64,
     pub enabled: bool,
     pub duty_cycle_percent: f64,
+
+    pub length_counter: usize,
+    pub counter_enabled: bool,
 }
 
 impl PulseChannel {
-    pub fn sample(&self, total_clocks: u64) -> f32 {
+    pub fn sample(&mut self, total_clocks: u64) -> f32 {
+        let mut sample = 0.0;
+
         if self.enabled {
-            let time = (total_clocks as f64 * CPU_CYCLE_PERIOD as f64);
-
-            let remainder = (time / self.freq) % 1.0;
-
-            if remainder < self.duty_cycle_percent {
-                1.0
-            } else {
-                -1.0
+            if self.length_counter > 0 || !self.counter_enabled {
+                let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
+    
+                let remainder = (time * self.freq).fract();
+    
+                if remainder < self.duty_cycle_percent {
+                    sample = 1.0;
+                } else {
+                    sample = -1.0;
+                }
             }
-        } else {
-            0.0
+        }
+
+        sample
+    }
+
+    pub fn set_length_counter(&mut self, data: u8) {
+        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
+    }
+
+    pub fn update_counter(&mut self) {
+        if self.counter_enabled && self.length_counter > 0 {
+            self.length_counter -= 1;
+
+            if self.length_counter == 0 {
+                // self.enabled = false;
+            }
         }
     }
 }

@@ -1,7 +1,9 @@
-use std::{collections::{vec_deque, VecDeque}, sync::{Arc, Mutex}, time::Duration};
+use std::{collections::{vec_deque, VecDeque}, ops::Rem, sync::{Arc, Mutex}, time::Duration};
 
 use bitfield_struct::bitfield;
 use rodio::Source;
+
+use super::apu::CPU_CYCLE_PERIOD;
 
 pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
 pub const AUDIO_SLEEP_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / NES_AUDIO_FREQUENCY as u64);
@@ -107,8 +109,27 @@ pub struct PulseRegisters {
 
 #[derive(Default)]
 pub struct PulseChannel {
-    pub freq: f32,
-    pub enabled: bool
+    pub freq: f64,
+    pub enabled: bool,
+    pub duty_cycle_percent: f64,
+}
+
+impl PulseChannel {
+    pub fn sample(&self, total_clocks: u64) -> f32 {
+        if self.enabled {
+            let time = (total_clocks as f64 * CPU_CYCLE_PERIOD as f64);
+
+            let remainder = (time / self.freq) % 1.0;
+
+            if remainder < self.duty_cycle_percent {
+                1.0
+            } else {
+                -1.0
+            }
+        } else {
+            0.0
+        }
+    }
 }
 
 /// This struct encapsulates all 3 registers used for the

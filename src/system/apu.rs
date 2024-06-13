@@ -7,9 +7,9 @@ use super::apu_util::{
     ApuControl, ApuStatus, DmcRegisters, NoiseRegisters, PulseChannel, PulseRegisters, TriangleRegisters, NES_AUDIO_FREQUENCY
 };
 
-const SAMPLE_PERIOD: f32 = 1f32 / 44_100f32;
-const CPU_FREQ: f32 = 1_789_773f32; // For NTSC systems
-const CPU_CYCLE_PERIOD: f32 = 1.0 / CPU_FREQ;
+const SAMPLE_PERIOD: f64 = 1.0 / 44_100.0;
+const CPU_FREQ: f64 = 1_789_773f64; // For NTSC systems
+pub const CPU_CYCLE_PERIOD: f64 = 1.0 / CPU_FREQ;
 const SAMPLE_BATCH_SIZE: usize = 2048;
 
 pub struct Apu2A03 {
@@ -64,7 +64,7 @@ impl Apu2A03 {
         self.clocks += 1;
         self.clocks_since_sampled += 1;
 
-        let time_since_sampled = self.clocks_since_sampled as f32 * CPU_CYCLE_PERIOD;
+        let time_since_sampled = self.clocks_since_sampled as f64 * CPU_CYCLE_PERIOD;
 
         if time_since_sampled > SAMPLE_PERIOD {
             let sample = self.generate_sample();
@@ -84,6 +84,16 @@ impl Apu2A03 {
                 let new_volume = data & 0x0F;
 
                 self.pulse1_channel.enabled = new_enable;
+                self.pulse1_channel.duty_cycle_percent = match new_duty_cycle {
+                    0 => 0.125,
+                    1 => 0.25,
+                    2 => 0.50,
+                    3 => 0.75,
+                    _ => { unreachable!("Holy wack unlyrical lyrics, Batman!"); }
+                };
+
+                println!("Enabled: {}", self.pulse1_channel.enabled);
+                println!("New duty cycle of {}%", (self.pulse1_channel.duty_cycle_percent * 100.0) as usize);
 
                 // self.pulse1_regs.set_duty_cycle(new_duty_cycle);
                 // self.pulse1_regs.set_disable(new_disable);
@@ -122,16 +132,8 @@ impl Apu2A03 {
     }
 
     fn generate_sample(&self) -> f32 {
-        let mut pulse1_sample = 0.0;
 
-        if self.pulse1_channel.enabled {
-            let freq: f32 = self.pulse1_channel.freq;
-            let time = (self.clocks as f64 * CPU_CYCLE_PERIOD as f64) as f32;
-
-            pulse1_sample = f32::sin(TAU * freq * time).signum();
-            
-            // println!("Pulse 1 Sample: {}", pulse1_sample);
-        }
+        let pulse1_sample = self.pulse1_channel.sample(self.clocks);
 
         let sample = pulse1_sample;
 
@@ -157,7 +159,7 @@ impl Apu2A03 {
 
         let t = (t_hi << 8) | t_lo;
 
-        let frequency = CPU_FREQ / (16.0 * (t + 1) as f32);
+        let frequency = CPU_FREQ / (16.0 * (t + 1) as f64);
 
         self.pulse1_channel.freq = frequency;
 

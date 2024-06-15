@@ -5,7 +5,7 @@ zp_byte checksum_temp
 zp_byte checksum_off_
 
 ; Turns CRC updating on/off. Allows nesting.
-; Preserved: A, X, Y
+; Preserved: X, Y
 crc_off:
 	dec checksum_off_
 	rts
@@ -19,9 +19,7 @@ crc_on: inc checksum_off_
 ; Initializes checksum module. Might initialize tables
 ; in the future.
 init_crc:
-	jmp reset_crc
-
-
+	; FALL THROUGH
 ; Clears checksum and turns it on
 ; Preserved: X, Y
 reset_crc:
@@ -36,13 +34,12 @@ reset_crc:
 
 
 ; Updates checksum with byte in A (unless disabled via crc_off)
-; Preserved: A, X, Y
-; Time: 357 clocks average
+; Preserved: X, Y
+; Time: 350 clocks average
 update_crc:
 	bit checksum_off_
 	bmi update_crc_off
 update_crc_:
-	pha
 	stx checksum_temp
 	eor checksum
 	ldx #8
@@ -67,7 +64,6 @@ update_crc_:
 	bne @bit
 	sta checksum
 	ldx checksum_temp
-	pla
 update_crc_off:
 	rts
 
@@ -85,34 +81,3 @@ print_crc:
 	bpl :-
 	
 	jmp crc_on
-
-
-; EQ if checksum matches CRC
-; Out: A=0 and EQ if match, A>0 and NE if different
-; Preserved: X, Y
-.macro is_crc crc
-	jsr_with_addr is_crc_,{.dword crc}
-.endmacro
-
-is_crc_:
-	tya
-	pha
-	
-	; Compare with complemented checksum
-	ldy #3
-:       lda (ptr),y
-	sec
-	adc checksum,y
-	bne @wrong
-	dey
-	bpl :-
-	pla
-	tay
-	lda #0
-	rts
-	
-@wrong:
-	pla
-	tay
-	lda #1
-	rts

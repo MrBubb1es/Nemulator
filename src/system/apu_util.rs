@@ -134,7 +134,7 @@ impl PulseChannel {
                 if remainder < self.duty_cycle_percent {
                     sample = 1.0;
                 } else {
-                    sample = -1.0;
+                    sample = 0.0;
                 }
             }
         }

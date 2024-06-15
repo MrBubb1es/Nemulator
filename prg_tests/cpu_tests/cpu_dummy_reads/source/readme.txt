@@ -1,8 +1,3 @@
-These tests are created by Joel Yliluoma.
-
-The test framework however is created by Shay Green, and is documented below.
-
-
 NES Tests Source Code
 ---------------------
 

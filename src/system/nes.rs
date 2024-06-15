@@ -202,6 +202,11 @@ impl Nes {
         }
     }
 
+    pub fn reset(&mut self) {
+        self.get_cpu_mut().reset();
+        self.get_ppu_mut().reset();
+    }
+
     // Cycles the system through one system clock. The PPU will cycle, the CPU
     // might cycle (CPU cycles every 3 PPU cycles). Returns a bool reporting
     // whether the CPU was cycled.
@@ -239,7 +244,7 @@ impl Nes {
             }
         } else {
             cpu_cycled = false;
-        };
+        }
 
         if self.get_ppu().cpu_nmi_flag() {
             self.cpu.as_mut().unwrap().trigger_ppu_nmi();

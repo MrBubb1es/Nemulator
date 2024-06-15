@@ -24,10 +24,12 @@ impl Mapper for Mapper0 {
     fn get_cpu_read_addr(&mut self, addr: u16) -> Option<u16> {
         match addr {
             0x8000..=0xFFFF => Some(
-                addr & (if self.num_prg_banks > 1 {
+                addr & (if self.num_prg_banks == 2 {
                     0x7FFF
-                } else {
+                } else if self.num_prg_banks == 1 {
                     0x3FFF
+                } else {
+                    panic!("Mapper 0 should have 1 or 2 prg rom banks");
                 }),
             ),
             _ => None,
@@ -35,21 +37,10 @@ impl Mapper for Mapper0 {
     }
 
     fn get_ppu_read_addr(&mut self, _addr: u16) -> Option<u16> {
-        // Mapper zero doesn't touch ppu addresses
         None
     }
 
     fn get_cpu_write_addr(&mut self, _addr: u16, _data: u8) -> Option<u16> {
-        // match addr {
-        //     0x8000..=0xFFFF => Some(
-        //         addr & (if self.num_prg_banks > 1 {
-        //             0x7FFF
-        //         } else {
-        //             0x3FFF
-        //         }),
-        //     ),
-        //     _ => None,
-        // }
         None
     }
 

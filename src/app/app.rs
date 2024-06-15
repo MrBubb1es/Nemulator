@@ -448,6 +448,15 @@ impl NesApp {
                 }
 
                 KeyEvent {
+                    physical_key: PhysicalKey::Code(KeyCode::KeyR),
+                    state: ElementState::Pressed,
+                    repeat: false,
+                    ..
+                } => {
+                    self.nes.reset();
+                }
+
+                KeyEvent {
                     physical_key: PhysicalKey::Code(KeyCode::Space),
                     state: ElementState::Pressed,
                     ..

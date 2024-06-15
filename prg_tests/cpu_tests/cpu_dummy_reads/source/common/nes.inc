@@ -1,10 +1,7 @@
 ; NES I/O locations and masks
 
-; Clocks per second
-.ifndef CLOCK_RATE
-	CLOCK_RATE = 1789773 ; NTSC
-;       CLOCK_RATE = 1662607 ; PAL
-.endif
+; Clocks per second (NTSC)
+CLOCK_RATE = 1789773
 
 .ifndef BUILD_NSF
 

@@ -1,5 +1,3 @@
-use std::cell::Cell;
-
 use crate::cartridge::{mapper::NametableMirror, Cartridge, Header, Mapper};
 
 #[derive(Default)]
@@ -24,10 +22,12 @@ impl Mapper for Mapper3 {
     fn get_cpu_read_addr(&mut self, addr: u16) -> Option<u16> {
         match addr {
             0x8000..=0xFFFF => Some(
-                addr & (if self.num_prg_banks > 1 {
+                addr & (if self.num_prg_banks == 2 {
                     0x7FFF
-                } else {
+                } else if self.num_prg_banks == 1 {
                     0x3FFF
+                } else {
+                    panic!("Mapper 3 should have 1 or 2 prg rom banks");
                 }),
             ),
             _ => None,
@@ -42,13 +42,11 @@ impl Mapper for Mapper3 {
     }
 
     fn get_cpu_write_addr(&mut self, addr: u16, data: u8) -> Option<u16> {
-        match addr {
-            0x8000..=0xFFFF => {
-                self.bank_select = data;
-                None
-            },
-            _ => None,
+        if 0x8000 <= addr {
+            self.bank_select = data & 3;
         }
+
+        None
     }
 
     fn get_ppu_write_addr(&mut self, addr: u16, _data: u8) -> Option<u16> {

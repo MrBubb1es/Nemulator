@@ -196,6 +196,10 @@ impl Cpu6502 {
 
     /// Read a single byte from a given address off the bus
     pub fn read(&self, address: u16) -> u8 {
+        if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
+            return self.prg_rom[mapped_addr as usize];
+        }
+
         match address {
             0x0000..=0x1FFF => {
                 // First 2KiB of memory (0x0800) are mirrored until 0x2000
@@ -231,18 +235,24 @@ impl Cpu6502 {
             //     println!("APU READ OCCURED");
             //     0xEE
             // },
-            0x4020..=0xFFFF => {
-                // Read to program ROM through mapper
-                if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
-                    self.prg_rom[mapped_addr as usize]
-                } else {
-                    0
-                }
-            },
+            // 0x4020..=0xFFFF => {
+            //     // Read to program ROM through mapper
+            //     if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
+            //         self.prg_rom[mapped_addr as usize]
+            //     } else {
+            //         0
+            //     }
+            // },
+            _ => 0xEE,
         }
     }
     /// Write a single byte to the bus at a given address
     pub fn write(&mut self, address: u16, data: u8) {
+        if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_write_addr(address, data) {
+            self.prg_rom[mapped_addr as usize] = data;
+            return;
+        }
+
         // println!("CPU Write to ${address:04X} w/ 0x{data:02X}");
         match address {
             // CPU RAM
@@ -254,8 +264,7 @@ impl Cpu6502 {
             // PPU Internal Registers
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
-
-                self.ppu.as_ref().borrow_mut().cpu_write(address & 0x0007, data);
+                self.ppu.as_ref().borrow_mut().cpu_write(address, data);
             },
 
             // APU Addresses
@@ -267,6 +276,11 @@ impl Cpu6502 {
             0x4014 => {
                 self.oam_address = (data as u16) << 8;
                 self.dma_in_progress = true;
+                // let source_addr = ((data as u16) << 8) as usize;
+                // let oam_dma_source = &self.sys_ram[source_addr..source_addr+256];
+                // self.ppu.as_ref().borrow_mut().full_oam_dma_transfer(oam_dma_source);
+                // self.dma_in_progress = true;
+                // self.cycles_remaining += (513 + self.total_clocks & 1) as usize;
             },
 
             0x4015 => {
@@ -290,12 +304,12 @@ impl Cpu6502 {
             0x4018 | 0x4019 => {},
             
             // Program ROM
-            0x4020..=0xFFFF => {
-                // Write to program ROM through mapper
-                if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_write_addr(address, data) {
-                    self.prg_rom[mapped_addr as usize] = data;
-                }
-            },
+            // 0x4020..=0xFFFF => {
+            //     // Write to program ROM through mapper
+            //     if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_write_addr(address, data) {
+            //         self.prg_rom[mapped_addr as usize] = data;
+            //     }
+            // },
 
             _ => {},
         };

@@ -145,9 +145,6 @@ impl ApplicationHandler for NesApp {
                 if !self.limit_fps || 
                     self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME || 
                     self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
-                        
-                    // let fps = 1.0 / self.last_frame.elapsed().as_secs_f64();
-                    // println!("FPS: {fps}");
 
                     //self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
                     self.last_frame = std::time::Instant::now();

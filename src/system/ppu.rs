@@ -163,6 +163,12 @@ impl Ppu2C02 {
         match self.scanline {
             0..=239 => { // Visible cycles
                 self.visible_scanline_cycle();
+
+                if self.dot == 257 {
+                    self.sprites_found = 0;
+        
+                    self.sprite_evaluation();
+                }
             }
             240 => {}, // Idle scanline (technically the start of vblank, but 
                        // the vblank flag isn't set until dot 1 of scanline 241)
@@ -202,14 +208,6 @@ impl Ppu2C02 {
             self.draw_dot(frame);
         }
 
-        if self.dot == 257 {
-            self.sprites_found = 0;
-
-            if self.scanline != 261 {    
-                self.sprite_evaluation();
-            }
-        }
-
         self.dot += 1;
         if self.dot > 340 {
             self.dot = 0;
@@ -232,6 +230,10 @@ impl Ppu2C02 {
     /// that occur during a visible scanline (and the pre-render scanline).
     fn visible_scanline_cycle(&mut self) {
         // NEED TO HANDLE ODD FRAME SKIP
+
+        if 257 <= self.dot && self.dot <= 320 {
+            self.oam_address = 0;
+        }
 
         match self.dot {
             0 => {}, // Idle dot

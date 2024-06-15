@@ -8,11 +8,14 @@ use system::apu_util::NesAudioStream;
 // use system::audio::NesAudioHandler;
 use winit::event_loop::{ControlFlow, EventLoop};
 
-// use tokio::time::{sleep, Duration};
 
-// use app::window::Window;
+#[derive(Default)]
+pub struct RuntimeConfig {
+    pub cart_path: String,
+    pub limit_fps: bool,
+}
 
-pub fn run(path: &str) {
+pub fn run(config: RuntimeConfig) {
     env_logger::init();
 
     let (output_stream, output_handle) = OutputStream::try_default().unwrap();
@@ -24,8 +27,8 @@ pub fn run(path: &str) {
 
     event_loop.set_control_flow(ControlFlow::Wait);
 
-    nes_app.init(path, sample_queue);
-
+    nes_app.init(config, sample_queue);
+    
     // Start the sound system
     sink.append(sound_stream);
     sink.play();
@@ -33,11 +36,3 @@ pub fn run(path: &str) {
     // Run the application
     event_loop.run_app(&mut nes_app).unwrap();
 }
-
-
-// Testing notes: 
-//  Blargg's instr_test_v5:
-//   01 - Passing
-//   02 - Passing
-//   03 - Failing w/ codes 4B, 6B, AB (+ weird visual glitching)
-//   04 - Passing

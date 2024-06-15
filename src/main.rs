@@ -16,17 +16,22 @@
 */
 use std::env;
 
-use nes_emulator;
+use nes_emulator::{self, RuntimeConfig};
 
 pub fn main() -> Result<(), String> {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() != 2 {
+    if args.len() < 2 {
         println!("usage: {} <filename>", args[0]);
         return Ok(());
     }
 
-    nes_emulator::run(&args[1]);
+    let mut config = RuntimeConfig::default();
+
+    config.cart_path = args[1].clone();
+    config.limit_fps = !args.contains(&String::from("--nolimit"));
+
+    nes_emulator::run(config);
 
     Ok(())
 }

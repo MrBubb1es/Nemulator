@@ -288,10 +288,10 @@ impl Ppu2C02 {
 
         // Find 8 "front-most" (with lowest primary OAM indices) sprites that show up on this scanline
         for (sprite_addr, sprite_data) in self.primary_oam.chunks(4).enumerate() {
+            let sprite_y = sprite_data[0];
+            
             // Still room in secondary OAM
             if sprites_found < 8 {
-                let sprite_y = sprite_data[0];
-
                 // Always copy first byte
                 self.secondary_oam[sprites_found*4] = sprite_y;
 
@@ -313,8 +313,6 @@ impl Ppu2C02 {
                 if !self.rendering_enabled() {
                     break;
                 }
-
-                let sprite_y = sprite_data[0];
 
                 if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
                     // No sprite overflow if sprite y == 240 or sprite y == 255
@@ -655,6 +653,7 @@ impl Ppu2C02 {
             // OAMDATA
             4 => { 
                 if self.oam_address & 3 == 2 {
+                    // 3 bits of byte 2 in sprite data are always read back as 0
                     self.primary_oam[self.oam_address as usize] & 0xE3
                 } else {
                     self.primary_oam[self.oam_address as usize]
@@ -801,15 +800,13 @@ impl Ppu2C02 {
         };
     }
 
-    pub fn oam_dma_write(&mut self, oam_data: u8, _oam_addr: u8) {
+    pub fn oam_dma_write(&mut self, oam_data: u8, addr: u8) {
+        let oam_addr = self.oam_address.wrapping_add(addr);
         // println!("OAM DMA WRITE {:02X} TO ${:02X}", oam_data)
-        self.primary_oam[self.oam_address as usize] = oam_data.wrapping_add(
-            if self.oam_address & 3 == 0 { 1 } else { 0 }
+        self.primary_oam[oam_addr as usize] = oam_data.wrapping_add(
+            if oam_addr & 3 == 0 { 1 } else { 0 }
         );
-        self.oam_address = self.oam_address.wrapping_add(1);
     }
-
- 
 
     /// Increment the coarse x value in the v register. Also handles wrap around
     /// cases when the value of coarse x overflows. For more details, visit

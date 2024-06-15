@@ -14,6 +14,7 @@ use std::time::Instant;
 use crate::app::draw::DEFAULT_DEBUG_PAL;
 use crate::system::controller::{ControllerButton, ControllerUpdate};
 use crate::system::nes::{Nes, NES_SCREEN_BUF_SIZE};
+use crate::RuntimeConfig;
 
 use super::draw;
 
@@ -37,6 +38,7 @@ pub struct NesApp {
 
     controller_handler: Gilrs,
 
+    limit_fps: bool,
     last_frame: std::time::Instant,
 }
 
@@ -52,6 +54,7 @@ impl Default for NesApp {
 
             controller_handler: Gilrs::new().unwrap(),
 
+            limit_fps: false,
             last_frame: std::time::Instant::now(),
         }
     }
@@ -139,8 +142,9 @@ impl ApplicationHandler for NesApp {
             }
 
             WindowEvent::RedrawRequested => {
-                // if self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME
-                //     || self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
+                if !self.limit_fps || 
+                    self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME || 
+                    self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
                         
                     // let fps = 1.0 / self.last_frame.elapsed().as_secs_f64();
                     // println!("FPS: {fps}");
@@ -168,7 +172,7 @@ impl ApplicationHandler for NesApp {
                         self.nes.cycle_until_frame();
                         self.nes.swap_screen_buffers();
                     }
-                // }
+                }
 
                 self.window.as_ref().unwrap().request_redraw();
             }
@@ -178,8 +182,9 @@ impl ApplicationHandler for NesApp {
 }
 
 impl NesApp {
-    pub fn init(&mut self, cart_path_str: &str, sample_queue: Arc<Mutex<VecDeque<f32>>>) {
-        self.nes.load_cart(cart_path_str, sample_queue);
+    pub fn init(&mut self, config: RuntimeConfig, sample_queue: Arc<Mutex<VecDeque<f32>>>) {
+        self.nes.load_cart(&config.cart_path, sample_queue);
+        self.limit_fps = config.limit_fps;
     }
 
     pub fn switch_view_mode(&mut self) {

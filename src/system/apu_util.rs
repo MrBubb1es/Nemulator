@@ -3,10 +3,7 @@ use std::{collections::{vec_deque, VecDeque}, ops::Rem, sync::{Arc, Mutex}, time
 use bitfield_struct::bitfield;
 use rodio::Source;
 
-use super::apu::CPU_CYCLE_PERIOD;
-
-pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
-pub const AUDIO_SLEEP_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / NES_AUDIO_FREQUENCY as u64);
+use super::apu::{CPU_CYCLE_PERIOD, NES_AUDIO_FREQUENCY};
 
 /// https://www.nesdev.org/wiki/APU_Length_Counter#Table_structure
 /// Lookup table for the lengths of the notes given a 5 bit number
@@ -29,11 +26,7 @@ impl Iterator for NesAudioStream {
     fn next(&mut self) -> Option<Self::Item> {
         let mut sample_queue = self.sample_queue.lock().unwrap();
 
-        if sample_queue.len() == 0 {
-            return Some(0.0);
-        } else {
-            sample_queue.pop_front()
-        }
+        Some(sample_queue.pop_front().unwrap_or(0.0))
     }
 }
 
@@ -154,12 +147,10 @@ impl PulseChannel {
     }
 
     pub fn update_counter(&mut self) {
-        if self.counter_enabled && self.length_counter > 0 {
+        if !self.enabled {
+            self.length_counter = 0;
+        } else if self.length_counter > 0 && self.counter_enabled {
             self.length_counter -= 1;
-
-            if self.length_counter == 0 {
-                // self.counter_enabled = false;
-            }
         }
     }
 }

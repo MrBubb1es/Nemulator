@@ -139,8 +139,13 @@ impl ApplicationHandler for NesApp {
             }
 
             WindowEvent::RedrawRequested => {
-                if self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME
-                    || self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
+                // if self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME
+                //     || self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
+                        
+                    // let fps = 1.0 / self.last_frame.elapsed().as_secs_f64();
+                    // println!("FPS: {fps}");
+
+                    //self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
                     self.last_frame = std::time::Instant::now();
                     
                     // Draw.
@@ -163,7 +168,7 @@ impl ApplicationHandler for NesApp {
                         self.nes.cycle_until_frame();
                         self.nes.swap_screen_buffers();
                     }
-                }
+                // }
 
                 self.window.as_ref().unwrap().request_redraw();
             }
@@ -406,50 +411,51 @@ impl NesApp {
     fn handle_keyboard_input(&mut self, event: KeyEvent) {
         let mut handled = false;
 
-                if !event.repeat {
-                    handled = self.handle_nes_input(event.clone());
-                }
+        if !event.repeat {
+            handled = self.handle_nes_input(event.clone());
+        }
 
-                if !handled {
-                    match event {
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::KeyV),
-                            state: ElementState::Pressed,
-                            repeat: false,
-                            ..
-                        } => self.switch_view_mode(),
+        if !handled {
+            match event {
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(KeyCode::KeyV),
+                    state: ElementState::Pressed,
+                    repeat: false,
+                    ..
+                } => self.switch_view_mode(),
 
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::KeyC),
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if self.paused {
-                                self.nes.cycle_instr();
-                            }
-                        }
-
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::KeyF),
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            if self.paused {
-                                self.nes.cycle_until_frame();
-                            }
-                        }
-
-                        KeyEvent {
-                            physical_key: PhysicalKey::Code(KeyCode::Space),
-                            state: ElementState::Pressed,
-                            ..
-                        } => {
-                            self.paused = !self.paused;
-                        }
-
-                        _ => {}
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(KeyCode::KeyC),
+                    state: ElementState::Pressed,
+                    ..
+                } => {
+                    if self.paused {
+                        self.nes.cycle_instr();
                     }
                 }
+
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(KeyCode::KeyF),
+                    state: ElementState::Pressed,
+                    ..
+                } => {
+                    if self.paused {
+                        self.nes.cycle_until_frame();
+                        self.nes.swap_screen_buffers();
+                    }
+                }
+
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(KeyCode::Space),
+                    state: ElementState::Pressed,
+                    ..
+                } => {
+                    self.paused = !self.paused;
+                }
+
+                _ => {}
+            }
+        }
     }
 }
 

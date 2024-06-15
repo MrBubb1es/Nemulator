@@ -1043,20 +1043,3 @@ pub fn draw_game_view_bg(frame: &mut [u8], palette: DebugPalette) {
 pub fn draw_game_view(frame: &mut [u8], nes: &mut Nes) {
     draw_nes_screen(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, nes.screen_buf_slice(), 0, 0, false);
 }
-
-struct DrawDiff {
-    x: usize,
-    y: usize,
-    col: Color,
-    from_scroll_x: bool,
-    from_scroll_y: bool,
-}
-
-pub struct NesRenderer {
-    nes_screen: [u8; 256*240*4],
-    scroll_x: isize,
-    scroll_y: isize,
-
-    // Vector to keep track of the differences since last frame
-    diffs: Vec<DrawDiff>,
-}

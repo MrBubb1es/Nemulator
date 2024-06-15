@@ -410,10 +410,11 @@ impl Cpu6502 {
             self.push_to_stack(lo);
 
             // Set flags and store status
-            self.status.set_b(false);
+            self.status.set_b(true);
             self.status.set_unused(true);
-            self.status.set_interrupt(true);
             self.push_to_stack(self.get_status());
+            
+            self.status.set_interrupt(true);
 
             // Set PC to whatever is at addr 0xFFFE
             self.pc = self.read_word(IRQ_PC_VECTOR);
@@ -436,10 +437,11 @@ impl Cpu6502 {
         self.push_to_stack(lo);
 
         // Set flags and store status
-        self.status.set_b(false);
+        self.status.set_b(true);
         self.status.set_unused(true);
-        self.status.set_interrupt(true);
         self.push_to_stack(self.get_status());
+
+        self.status.set_interrupt(true);
 
         // Set PC to whatever is at addr 0xFFFE
         self.pc = self.read_word(NMI_PC_VECTOR);

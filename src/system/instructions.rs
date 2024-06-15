@@ -186,10 +186,12 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "STA", opcode_num: 0x99, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: sta, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "TXS", opcode_num: 0x9A, addr_mode: AddressingMode::Implied, addr_func: implied, func: txs, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     illegal_op!(0x9B), // SHA - IndirectY
-    illegal_op!(0x9C), // SHY
+    Instruction{name: "SHY", opcode_num: 0x9C, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: shy, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+
     Instruction{name: "STA", opcode_num: 0x9D, addr_mode: AddressingMode::AbsoluteX, addr_func: absolute_x, func: sta, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     illegal_op!(0x9E), // SHX
-    illegal_op!(0x9F), // SHA - AbsoluteY
+    Instruction{name: "SHY", opcode_num: 0x9E, addr_mode: AddressingMode::AbsoluteY, addr_func: absolute_y, func: shx, base_clocks: 5, bytes: 3, has_extra_fetch_cycles: false, is_illegal: true},
+
     Instruction{name: "LDY", opcode_num: 0xA0, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldy, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "LDA", opcode_num: 0xA1, addr_mode: AddressingMode::IndirectX, addr_func: indirect_x, func: lda, base_clocks: 6, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "LDX", opcode_num: 0xA2, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: ldx, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
@@ -201,7 +203,11 @@ pub const INSTRUCTION_TABLE: [Instruction; 256] = [
     Instruction{name: "TAY", opcode_num: 0xA8, addr_mode: AddressingMode::Implied, addr_func: implied, func: tay, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "LDA", opcode_num: 0xA9, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: lda, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "TAX", opcode_num: 0xAA, addr_mode: AddressingMode::Implied, addr_func: implied, func: tax, base_clocks: 2, bytes: 1, has_extra_fetch_cycles: false, is_illegal: false},
-    illegal_op!(0xAB), // LXA
+    
+    
+    //Instruction{name: "LXA", opcode_num: 0xAB, addr_mode: AddressingMode::Immediate, addr_func: immediate, func: lxa, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    Instruction{name: "LXA", opcode_num: 0xAB, addr_mode: AddressingMode::Immediate, addr_func: absolute, func: lax, base_clocks: 2, bytes: 2, has_extra_fetch_cycles: false, is_illegal: true},
+    
     Instruction{name: "LDY", opcode_num: 0xAC, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ldy, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "LDA", opcode_num: 0xAD, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: lda, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
     Instruction{name: "LDX", opcode_num: 0xAE, addr_mode: AddressingMode::Absolute, addr_func: absolute, func: ldx, base_clocks: 4, bytes: 3, has_extra_fetch_cycles: false, is_illegal: false},
@@ -1127,60 +1133,53 @@ fn anc(cpu: &mut Cpu6502, address: u16) -> usize {
     0
 }
 
-// ALR - Bitwise AND Memory with Accumulator then Logical Shift Right
+// ASR - Bitwise AND Memory with Accumulator then Logical Shift Right
 fn asr(cpu: &mut Cpu6502, address: u16) -> usize {
-    let data = cpu.read(address);
-
-    let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);
-    cpu.status.set_carry(data & cpu.get_acc() & 0x01 == 1);
-    cpu.status.set_zero(result == 0);
-    cpu.status.set_negative(false);
-    cpu.set_acc(result);
-
+    and(cpu, address);
+    lsr_acc(cpu, address);
     0
 }
 
 // ARR - Bitwise AND Memory with Accumulator then Rotate Right
 fn arr(cpu: &mut Cpu6502, address: u16) -> usize {
-    let data = cpu.read(address);
-    
-    let result = (data & cpu.get_acc()) >> 1 | (if cpu.status.carry() { 1 } else { 0 } << 7);
-    cpu.status.set_zero(result == 0);
-    cpu.status.set_negative(false);
-    cpu.set_acc(result);
-    
-    if cpu.status.decimal() {
-        cpu.status.set_carry(result & 0x40 != 0);
-        cpu.status.set_overflow(result & 0x40 != result & 0x20);
-    } else {
-        cpu.status.set_carry((result & 0xF0).wrapping_add(result & 0x10) > 0x50);
-        cpu.status.set_overflow(result & 0x40 != data & 0x40);
-    }
+    and(cpu, address);
+    ror_acc(cpu, address);
+    0
+}
+
+// LXA - Load Accumulator and Index Register X From Memory
+fn lxa(cpu: &mut Cpu6502, address: u16) -> usize {
+    // const RAND_CONST: u8 = 0xEE; // This instruction is highly unstable, and
+                                 // this constant may take on a value of 00, FF, 
+                                 // EE, etc. depending on the state of the
+                                 // device (like temperature)   
+
+    // let result = (cpu.get_acc() | RAND_CONST) & cpu.get_x_reg();
+    // cpu.status.set_zero(result == 0);
+    // cpu.status.set_negative(result & 0x80 != 0);
+    // cpu.set_acc(result);
 
     0
 }
 
-// Not sure exactly how to go about ignoring offsets of addressing modes yet...
-// // SHA Indirect Y - Store Accumulator Bitwise AND Index Register X Bitwise AND Memory
-// fn sha_ind_y(cpu: &mut CPU, address: u16) -> usize {
-//     let address = opcode_data.address.unwrap().wrapping_sub(cpu.get_y_reg() as u16); // "ignore" / undo the y offset of the address
-//     let hi = (address >> 8) as u8;
+// SHY - Store Index Register Y Bitwise AND Value
+fn shy(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = (address.wrapping_sub(cpu.get_x_reg() as u16) >> 8) as u8; // undo shift from x offset
 
-//     let result = cpu.get_y_reg() & hi.wrapping_add(1);
+    let result = cpu.get_y_reg() & data.wrapping_add(1);
 
-//     cpu.write(address, result);
+    cpu.write(address, result);
 
-//     0
-// }
+    0
+}
 
-// // SHY - Store Index Register Y Bitwise AND Value
-// fn shy(cpu: &mut CPU, address: u16) -> usize {
-//     let address = opcode_data.address.unwrap().wrapping_sub(cpu.get_x_reg() as u16); // "ignore" / undo the x offset of the address
-//     let hi = (address >> 8) as u8;
+// SHX - Store Index Register X Bitwise AND Value
+fn shx(cpu: &mut Cpu6502, address: u16) -> usize {
+    let data = (address.wrapping_sub(cpu.get_y_reg() as u16) >> 8) as u8; // undo shift from x offset
 
-//     let result = cpu.get_y_reg() & hi.wrapping_add(1);
+    let result = cpu.get_x_reg() & data.wrapping_add(1);
 
-//     cpu.write(address, result);
+    cpu.write(address, result);
 
-//     0
-// }
+    0
+}

@@ -404,17 +404,15 @@ impl Ppu2C02 {
                         self.ctrl.spr_pattern_tbl() as u16
                     };
                     let sprite_pt_addr_lo = if large_sprites {
-                        (sprite_data[1] >> 1) as u16 * 32 // Large sprites have 1/2 the range of addresses
+                        (sprite_data[1] >> 1) as u16 * sprite_height * 2 // Large sprites have 1/2 the range of addresses
                     } else {
-                        sprite_data[1] as u16 * 16
+                        sprite_data[1] as u16 * sprite_height * 2
                     };
                     let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
 
-
-                    // println!("Sprite with pt addr: {}", sprite_pt_addr);
-
-                    let spr_addr_hi = (sprite_pt_addr + sprite_row) as usize;
-                    let spr_addr_lo = (sprite_pt_addr + sprite_row + sprite_height) as usize;
+                    // Flipped lo & hi
+                    let spr_addr_lo = (sprite_pt_addr + sprite_row) as usize;
+                    let spr_addr_hi = (sprite_pt_addr + sprite_row + sprite_height) as usize;
 
                     let sprite_hi_byte = self.chr_rom[spr_addr_hi];
                     let sprite_lo_byte = self.chr_rom[spr_addr_lo];
@@ -425,17 +423,18 @@ impl Ppu2C02 {
                         7 - (screen_pixel_x - sprite_x as usize)
                     };
 
-                    let sprite_lsb = (sprite_hi_byte >> horiz_shift) & 1;
-                    let sprite_msb = (sprite_lo_byte >> horiz_shift) & 1;
+                    // Flipped lsb & msb
+                    let sprite_msb = (sprite_hi_byte >> horiz_shift) & 1;
+                    let sprite_lsb = (sprite_lo_byte >> horiz_shift) & 1;
                     
                     spr_pix = ((sprite_msb << 1) | sprite_lsb) as u16;
                     spr_pal = (0x4 | (sprite_data[2] & 3)) as u16;
                     front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
-
+                    
                     // If the pixel is not transparent
                     if spr_pix != 0 {
                         // If sprite 0 is in secondary OAM, it will always be the 0th
-                        // sprite here, so we can check if we are drawing spite 0 like this 
+                        // sprite here, so we can check if we are drawing spite 0 like this
                         if self.spr_0_in_secondary_oam && sprite_idx == 0 {
                             drawing_spr_0 = true;
                         }
@@ -530,7 +529,7 @@ impl Ppu2C02 {
     ///
     ///  * `address` - 16 bit address used to access data
     pub fn ppu_read(&self, address: u16) -> u8 {
-        match address {
+        match address & 0x3FFF {
             0x0000..=0x1FFF => {
                 let mapped_addr = self.mapper
                     .borrow_mut()
@@ -558,8 +557,6 @@ impl Ppu2C02 {
                 } else {
                     data &= 0x3F;
                 }
-
-                // println!("Reading data 0x{data:02X} from pal mem w/ addr 0x{mapped_addr:02X}");
 
                 data
             },
@@ -656,7 +653,13 @@ impl Ppu2C02 {
             3 => 0xEE, // Can't read OAMADDR
 
             // OAMDATA
-            4 => { self.primary_oam[self.oam_address as usize] },
+            4 => { 
+                if self.oam_address & 3 == 2 {
+                    self.primary_oam[self.oam_address as usize] & 0xE3
+                } else {
+                    self.primary_oam[self.oam_address as usize]
+                }
+            },
 
             // PPUSCROLL
             5 => 0xEE, // Can't read PPUSCROLL
@@ -717,10 +720,13 @@ impl Ppu2C02 {
             2 => {}, // Cannot write PPUSTATUS
 
             // OAMADDR
-            3 => { self.oam_address = data },
+            3 => { self.oam_address = data; },
 
             // OAMDATA
-            4 => { self.primary_oam[self.oam_address as usize] = data },
+            4 => {
+                self.primary_oam[self.oam_address as usize] = data;
+                self.oam_address = self.oam_address.wrapping_add(1);
+            },
 
             // PPUSCROLL
             5 => {
@@ -795,11 +801,15 @@ impl Ppu2C02 {
         };
     }
 
-    pub fn oam_dma_write(&mut self, oam_data: u8, oam_addr: u8) {
-        self.primary_oam[oam_addr as usize] = oam_data.wrapping_add(
-            if oam_addr & 3 == 0 { 1 } else { 0 }
+    pub fn oam_dma_write(&mut self, oam_data: u8, _oam_addr: u8) {
+        // println!("OAM DMA WRITE {:02X} TO ${:02X}", oam_data)
+        self.primary_oam[self.oam_address as usize] = oam_data.wrapping_add(
+            if self.oam_address & 3 == 0 { 1 } else { 0 }
         );
+        self.oam_address = self.oam_address.wrapping_add(1);
     }
+
+ 
 
     /// Increment the coarse x value in the v register. Also handles wrap around
     /// cases when the value of coarse x overflows. For more details, visit

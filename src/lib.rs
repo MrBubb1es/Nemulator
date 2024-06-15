@@ -33,3 +33,11 @@ pub fn run(path: &str) {
     // Run the application
     event_loop.run_app(&mut nes_app).unwrap();
 }
+
+
+// Testing notes: 
+//  Blargg's instr_test_v5:
+//   01 - Passing
+//   02 - Passing
+//   03 - Failing w/ codes 4B, 6B, AB (+ weird visual glitching)
+//   04 - Passing

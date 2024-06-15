@@ -221,19 +221,20 @@ impl Nes {
             self.get_apu_mut().cycle();
 
             if self.get_cpu().dma_in_progress() {
-                // Even CPU cycles are read cycles
-                if self.get_cpu().total_clocks() & 1 == 0 {
-                    self.get_cpu_mut().read_next_oam_data();
-                    self.get_cpu_mut().increment_clock();
-                }
-                // Odd CPU cycles are write cycles
-                else {
-                    let addr = self.get_cpu().get_oam_addr();
-                    let data = self.get_cpu().get_oam_data();
+                // // Even CPU cycles are read cycles
+                // if self.get_cpu().total_clocks() & 1 == 0 {
+                //     self.get_cpu_mut().read_next_oam_data();
+                //     self.get_cpu_mut().increment_clock();
+                // }
+                // // Odd CPU cycles are write cycles
+                // else {
+                //     let addr = self.get_cpu().get_oam_addr();
+                //     let data = self.get_cpu().get_oam_data();
 
-                    self.get_ppu_mut().oam_dma_write(data, addr);
-                    self.get_cpu_mut().increment_clock();
-                }
+                //     self.get_ppu_mut().oam_dma_write(data, addr);
+                //     self.get_cpu_mut().increment_clock();
+                // }
+                self.get_cpu_mut().increment_clock();
             } else {
                 let p1_controller_state = self.p1_controller;
                 let p2_controller_state = self.p2_controller;

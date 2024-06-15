@@ -274,13 +274,13 @@ impl Cpu6502 {
 
             // PPU OAM DMA Register
             0x4014 => {
-                self.oam_address = (data as u16) << 8;
-                self.dma_in_progress = true;
-                // let source_addr = ((data as u16) << 8) as usize;
-                // let oam_dma_source = &self.sys_ram[source_addr..source_addr+256];
-                // self.ppu.as_ref().borrow_mut().full_oam_dma_transfer(oam_dma_source);
+                // self.oam_address = (data as u16) << 8;
                 // self.dma_in_progress = true;
-                // self.cycles_remaining += (513 + self.total_clocks & 1) as usize;
+                let source_addr = ((data as u16) << 8) as usize;
+                let oam_dma_source = &self.sys_ram[source_addr..source_addr+256];
+                self.ppu.as_ref().borrow_mut().full_oam_dma_transfer(oam_dma_source);
+                // self.dma_in_progress = true;
+                self.cycles_remaining += (513 + self.total_clocks & 1) as usize;
             },
 
             0x4015 => {

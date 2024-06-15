@@ -207,7 +207,7 @@ impl Cpu6502 {
             },
             0x2000..=0x3FFF => {
                 // PPU Registers mirrored over 8KiB
-                self.ppu.as_ref().borrow_mut().cpu_read(address & 0x0007)
+                self.ppu.as_ref().borrow_mut().cpu_read(address)
             }
             0x4016 => {
                 // Player 1 controller port
@@ -243,7 +243,7 @@ impl Cpu6502 {
             //         0
             //     }
             // },
-            _ => 0xEE,
+            _ => 0x00,
         }
     }
     /// Write a single byte to the bus at a given address

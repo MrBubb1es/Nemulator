@@ -295,9 +295,9 @@ impl Ppu2C02 {
             let sprite_y = self.primary_oam[sprite_index*4 + 0];
 
             // Always copy first byte (might implement spr overflow bug later, likely not)
-            if sprites_found < 8 {
-                self.secondary_oam[sprites_found*4 + 0] = sprite_y;
-            }
+            // if sprites_found < 8 {
+            //     self.secondary_oam[sprites_found*4 + 0] = sprite_y;
+            // }
 
             if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
                 
@@ -306,6 +306,7 @@ impl Ppu2C02 {
                         self.spr_0_in_secondary_oam = true;
                     }
 
+                    self.secondary_oam[sprites_found*4 + 0] = sprite_y;
                     self.secondary_oam[sprites_found*4 + 1] = self.primary_oam[sprite_index*4 + 1];
                     self.secondary_oam[sprites_found*4 + 2] = self.primary_oam[sprite_index*4 + 2];
                     self.secondary_oam[sprites_found*4 + 3] = self.primary_oam[sprite_index*4 + 3];
@@ -382,7 +383,7 @@ impl Ppu2C02 {
                     
                     // row of the tile we are looking at
                     let sprite_row = if flip_vertical {
-                        (sprite_height - 1) - (self.scanline as u16 - sprite_y as u16)
+                        7 - (self.scanline as u16 - sprite_y as u16)
                     } else {
                         self.scanline as u16 - sprite_y as u16
                     };
@@ -393,17 +394,18 @@ impl Ppu2C02 {
                         self.ctrl.spr_pattern_tbl() as u16
                     };
                     let sprite_pt_addr_lo = if large_sprites {
-                        (sprite_data[1] >> 1) as u16 * 32 // Large sprites have 1/2 the range of addresses
+                        (sprite_data[1] & 0xFE) as u16 * 16
+                        + if (self.scanline - sprite_y as usize) < 8 { 0 } else { 16 }
                     } else {
                         sprite_data[1] as u16 * 16
                     };
                     let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
 
-                    let spr_addr_lo = (sprite_pt_addr + sprite_row) as usize;
-                    let spr_addr_hi = (sprite_pt_addr + sprite_row + sprite_height) as usize;
+                    let spr_addr_lo = sprite_pt_addr + sprite_row;
+                    let spr_addr_hi = sprite_pt_addr + sprite_row + sprite_height;
 
-                    let sprite_hi_byte = self.chr_rom[spr_addr_hi];
-                    let sprite_lo_byte = self.chr_rom[spr_addr_lo];
+                    let sprite_lo_byte = self.ppu_read(spr_addr_lo);
+                    let sprite_hi_byte = self.ppu_read(spr_addr_hi);
 
                     let horiz_shift = if flip_horizontal {
                         screen_pixel_x - sprite_x as usize
@@ -411,9 +413,8 @@ impl Ppu2C02 {
                         7 - (screen_pixel_x - sprite_x as usize)
                     };
 
-                    // Flipped lsb & msb
-                    let sprite_msb = (sprite_hi_byte >> horiz_shift) & 1;
                     let sprite_lsb = (sprite_lo_byte >> horiz_shift) & 1;
+                    let sprite_msb = (sprite_hi_byte >> horiz_shift) & 1;
                     
                     spr_pix = ((sprite_msb << 1) | sprite_lsb) as u16;
                     spr_pal = (0x4 | (sprite_data[2] & 3)) as u16;

@@ -49,7 +49,7 @@ impl Mapper for Mapper3 {
         None
     }
 
-    fn get_ppu_write_addr(&mut self, addr: u16, _data: u8) -> Option<u16> {
+    fn get_ppu_write_addr(&mut self, _addr: u16, _data: u8) -> Option<u16> {
         None
     }
 

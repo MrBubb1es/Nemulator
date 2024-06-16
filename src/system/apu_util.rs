@@ -79,146 +79,11 @@ pub enum NesChannel {
     DMC,
 }
 
-// #[derive(Default)]
-// pub struct PulseChannel {
-//     // Basic channel registers
-//     pub timer: usize,
-
-//     pub freq: f64,
-//     pub enabled: bool,
-//     pub duty_cycle_percent: f64,
-
-//     pub length_counter: usize,
-//     pub counter_enabled: bool,
-
-//     pub constant_volume: bool,
-
-//     // Sweeper registers
-//     pub sweeper_divider: usize,
-//     pub sweeper_divider_period: usize,
-//     pub sweeper_enabled: bool,
-//     pub sweeper_negate: bool,
-//     pub sweeper_shift: usize,
-//     pub sweeper_reload: bool,
-
-//     // Envelope registers
-//     pub envelope_start: bool,
-//     pub envelope_divider: usize,
-//     pub envelope_decay: usize,
-//     pub envelope_volume: usize,
-//     pub envelope_loop: bool,
-// }
-
-// impl PulseChannel {
-//     pub fn sample(&mut self, total_clocks: u64) -> f32 {
-//         let mut sample = 0.0;
-
-//         if self.enabled && self.timer > 8 {
-//             if self.length_counter > 0 || !self.counter_enabled {
-//                 let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
-    
-//                 let remainder = (time * self.freq).fract();
-    
-//                 if remainder < self.duty_cycle_percent {
-//                     sample = 1.0;
-//                 } else {
-//                     sample = 0.0;
-//                 }
-//             }
-//         }
-
-//         // The sample is scaled to be a value in the range [0.0, 15.0]
-//         sample * if self.constant_volume { 
-//             self.envelope_volume as f32
-//         } else {
-//             self.envelope_decay as f32
-//         }
-//     }
-
-//     // https://www.nesdev.org/wiki/APU_Sweep
-//     pub fn sweep_update(&mut self, channel_type: NesChannel) {
-//         if self.sweeper_divider == 0 && self.sweeper_enabled && self.sweeper_shift != 0 {
-//             let change_amount = self.timer >> self.sweeper_shift;
-
-//             let target_period = match channel_type {
-//                 NesChannel::Pulse1 => {
-//                     if self.sweeper_negate {
-//                         ((self.timer as isize) - (change_amount as isize + 1)).max(0) as usize
-//                     } else {
-//                         self.timer + change_amount
-//                     }
-//                 },
-//                 NesChannel::Pulse2 => {
-//                     if self.sweeper_negate {
-//                         ((self.timer as isize) - (change_amount as isize)).max(0) as usize
-//                     } else {
-//                         self.timer + change_amount
-//                     }
-//                 },
-//                 _ => {panic!("Only pulse 1 and pulse 2 channels should be sweeping in the pulse channel struct")}
-//             };
-
-//             if self.timer < 8 || 0x7FF < target_period {
-//                 self.enabled = false;
-//             } else {
-//                 self.set_timer_reload(target_period);
-//             }
-//         }
-
-//         if self.sweeper_divider == 0 || self.sweeper_reload {
-//             self.sweeper_divider = self.sweeper_divider_period;
-//             self.sweeper_reload = false;
-//         } else {
-//             self.sweeper_divider -= 1;
-//         }
-//     }
-
-//     // https://www.nesdev.org/wiki/APU_Envelope
-//     pub fn update_envelope(&mut self) {
-//         if self.envelope_start {
-//             self.envelope_start = false;
-//             self.envelope_decay = 0xF;
-//             self.envelope_divider = self.envelope_volume;
-//         } else {
-//             if self.envelope_divider == 0 {
-//                 self.envelope_divider = self.envelope_volume;
-
-//                 if self.envelope_decay != 0 {
-//                     self.envelope_decay -= 1;
-//                 } else {
-//                     if self.envelope_loop {
-//                         self.envelope_decay = 0xF;
-//                     }
-//                 }
-//             } else {
-//                 self.envelope_divider -= 1;
-//             }
-//         }
-//     }
-
-//     pub fn set_timer_reload(&mut self, val: usize) {
-//         self.timer = val;
-//         self.freq = CPU_FREQ / (16.0 * (val + 1) as f64);
-//     }
-
-//     pub fn set_length_counter(&mut self, data: u8) {
-//         self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
-//     }
-
-//     pub fn update_counter(&mut self) {
-//         if !self.enabled {
-//             self.length_counter = 0;
-//         } else if self.length_counter > 0 && self.counter_enabled {
-//             self.length_counter -= 1;
-//         }
-//     }
-// }
-
 pub struct PulseChannel {
     channel_type: NesChannel,
 
     // Basic channel registers
-    pub timer: usize,
+    pub timer_reload: usize,
 
     pub freq: f64,
     pub enabled: bool,
@@ -251,7 +116,7 @@ impl PulseChannel {
     pub fn new(channel_type: NesChannel) -> Self {
         Self {
             channel_type,
-            timer: 0,
+            timer_reload: 0,
             freq: 0.0,
             enabled: false,
             duty_cycle_percent: 0.0,
@@ -302,27 +167,27 @@ impl PulseChannel {
     }
 
     pub fn sweep_continuous_update(&mut self) {
-        let change_amount = self.timer >> self.sweeper_shift;
+        let change_amount = self.timer_reload >> self.sweeper_shift;
 
         self.target_period = match self.channel_type {
             NesChannel::Pulse1 => {
                 if self.sweeper_negate {
-                    ((self.timer as isize) - (change_amount as isize + 1)).max(0) as usize
+                    ((self.timer_reload as isize) - (change_amount as isize + 1)).max(0) as usize
                 } else {
-                    self.timer + change_amount
+                    self.timer_reload + change_amount
                 }
             },
             NesChannel::Pulse2 => {
                 if self.sweeper_negate {
-                    ((self.timer as isize) - (change_amount as isize)).max(0) as usize
+                    ((self.timer_reload as isize) - (change_amount as isize)).max(0) as usize
                 } else {
-                    self.timer + change_amount
+                    self.timer_reload + change_amount
                 }
             },
             _ => {panic!("Only pulse 1 and pulse 2 channels should be sweeping in the pulse channel struct")}
         };
 
-        if self.timer < 8 || self.target_period > 0x7FF {
+        if self.timer_reload < 8 || self.target_period > 0x7FF {
             self.sweeper_mute = true;
         } else {
             self.sweeper_mute = false;
@@ -369,15 +234,8 @@ impl PulseChannel {
     }
 
     pub fn set_timer_reload(&mut self, val: usize) {
-        self.timer = val;
+        self.timer_reload = val;
         self.freq = CPU_FREQ / (16.0 * (val + 1) as f64);
-
-        match self.channel_type {
-            NesChannel::Pulse1 => {
-                println!("New Timer & Freq: {}, {}", self.timer, self.freq);
-            }
-            _ => {}
-        }
     }
 
     pub fn set_length_counter(&mut self, data: u8) {
@@ -394,35 +252,206 @@ impl PulseChannel {
 }
 
 
-/// This struct encapsulates all 3 registers of the noise channel in the APU.
-#[bitfield(u16)]
-pub struct NoiseRegisters {
-    // First byte
-    // #[bits(2)]
-    // _unused: u8,
-    #[bits(1)]
-    pub loop_disabled: bool,
-    #[bits(1)]
-    pub const_volume: bool,
-    #[bits(4)]
-    pub volume: u8,
 
-    // Second byte
-    #[bits(1)]
-    pub loop_noise: bool,
-    // #[bits(3)]
-    // _unused: u8,
-    #[bits(4)]
-    pub period: u8,
+#[derive(Default)]
+pub struct TriangleChannel {
+    // Basic channel registers
+    // pub timer: usize,
+    pub timer_reload: usize,
+    pub freq: f64,
+    pub enabled: bool,
 
-    // Third byte
-    #[bits(5)]
-    pub counter_load: u8,
-    // #[bits(3)]
-    // _unused: u8,
+    pub length_counter: usize,
+    pub counter_enabled: bool,
 
-    // #[bits(8)]
-    // _unused: u8,
+    pub linear_counter: usize,
+    pub linear_reload: usize,
+    pub linear_loop: bool,
+    pub linear_control: bool,
+}
+
+impl TriangleChannel {
+    // https://www.nesdev.org/wiki/APU_Triangle
+    const SEQUENCER_LOOKUP: [f32; 32] = [
+        15.0, 14.0, 13.0, 12.0, 11.0, 10.0,  9.0,  8.0, 
+         7.0,  6.0,  5.0,  4.0,  3.0,  2.0,  1.0,  0.0,
+         0.0,  1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0, 
+         8.0,  9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+    ];
+
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn sample(&mut self, total_clocks: u64) -> f32 {
+        if self.linear_counter > 0 {
+            if self.length_counter > 0 || !self.counter_enabled {
+                let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
+    
+                let remainder = (time * self.freq).fract();
+
+                let sequencer_idx = (32.0 * remainder) as usize;
+
+                return TriangleChannel::SEQUENCER_LOOKUP[sequencer_idx];
+            }
+        }
+
+        0.0
+    }
+
+    pub fn set_timer_reload(&mut self, val: usize) {
+        self.timer_reload = val;
+        self.freq = CPU_FREQ / (32.0 * (val + 1) as f64);
+    }
+
+    pub fn set_length_counter(&mut self, data: u8) {
+        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
+    }
+
+    pub fn update_length_counter(&mut self) {
+        if !self.enabled {
+            self.length_counter = 0;
+        } else if self.length_counter > 0 && self.counter_enabled {
+            self.length_counter -= 1;
+        }
+    }
+
+    pub fn update_linear_counter(&mut self) {
+        if !self.linear_loop {
+            self.linear_counter = self.linear_reload;
+        } else if self.linear_counter > 0 {
+            self.linear_counter -= 1;
+        }
+
+        if !self.linear_control {
+            self.linear_loop = false;
+        }
+    }
+}
+
+
+
+pub struct NoiseChannel {
+    // Basic channel registers
+    rand_shifter: u16,
+
+    pub period_reload: usize,
+    pub period: usize,
+
+    pub enabled: bool,
+    pub mode: bool,
+
+    pub length_counter: usize,
+    pub counter_enabled: bool,
+
+    pub constant_volume: bool,
+
+    // Envelope registers
+    pub envelope_start: bool,
+    pub envelope_divider: usize,
+    pub envelope_decay: usize,
+    pub envelope_volume: usize,
+    pub envelope_loop: bool,
+}
+
+impl NoiseChannel {
+    const PERIOD_LOOKUP: [usize; 16] = [
+        4, 8, 16, 32, 64, 96, 128, 160, 202,
+        254, 380, 508, 762, 1016, 2034, 4068
+    ];
+
+    pub fn new() -> Self {
+        Self {
+            rand_shifter: 1,
+            period_reload: 0,
+            period: 0,
+            enabled: false,
+            mode: false,
+            length_counter: 0,
+            counter_enabled: false,
+            constant_volume: false,
+            envelope_start: false,
+            envelope_divider: 0,
+            envelope_decay: 0,
+            envelope_volume: 0,
+            envelope_loop: false,
+        }
+    }
+
+    pub fn sample(&mut self) -> f32 {
+        if self.length_counter > 0 || !self.counter_enabled {
+            if self.rand_shifter & 1 == 0 {
+                // The sample is in the range [0.0, 15.0]
+                if self.constant_volume {
+                    return self.envelope_volume as f32;
+                } else {
+                    return self.envelope_decay as f32;
+                }
+            }
+        }
+
+        0.0
+    }
+
+    // https://www.nesdev.org/wiki/APU_Envelope
+    pub fn update_envelope(&mut self) {
+        if self.envelope_start {
+            self.envelope_start = false;
+            self.envelope_decay = 0xF;
+            self.envelope_divider = self.envelope_volume;
+        } else {
+            if self.envelope_divider == 0 {
+                self.envelope_divider = self.envelope_volume;
+
+                if self.envelope_decay != 0 {
+                    self.envelope_decay -= 1;
+                } else {
+                    if self.envelope_loop {
+                        self.envelope_decay = 0xF;
+                    }
+                }
+            } else {
+                self.envelope_divider -= 1;
+            }
+        }
+    }
+
+    fn update_shifter(&mut self) {
+        let first_bit = self.rand_shifter & 1;
+        let second_bit = (self.rand_shifter >> if self.mode { 6 } else { 1 }) & 1;
+
+        let new_bit = first_bit ^ second_bit;
+
+        self.rand_shifter >>= 1;
+        self.rand_shifter |= new_bit << 14;
+    }
+
+    pub fn update_period(&mut self) {
+        if self.period == 0 {
+            self.period = self.period_reload;
+
+            self.update_shifter();
+        } else {
+            self.period -= 1;
+        }
+    }
+
+    pub fn set_length_counter(&mut self, data: u8) {
+        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
+    }
+
+    pub fn set_period(&mut self, data: u8) {
+        self.period_reload = NoiseChannel::PERIOD_LOOKUP[data as usize];
+        self.period = self.period_reload;
+    }
+
+    pub fn update_counter(&mut self) {
+        if !self.enabled {
+            self.length_counter = 0;
+        } else if self.length_counter > 0 && self.counter_enabled {
+            self.length_counter -= 1;
+        }
+    }
 }
 
 /// This struct encapsulates all of the DMC registers in the APU.

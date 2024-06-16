@@ -53,6 +53,8 @@ pub struct Cpu6502 {
 
     // Flag used to keep track of when the PPU triggers an NMI
     nmi_flag: bool,
+    // Flag used to keep track of when the APU triggers an IRQ
+    irq_flag: bool,
 
     // Memory accessable only by the CPU
     sys_ram: [u8; SYS_RAM_SIZE],
@@ -102,6 +104,7 @@ impl Cpu6502 {
             status: CpuStatus::from_bits(0x20), // start w/ unused flag on cuz why not ig (fixes nesdev tests)
 
             nmi_flag: false,
+            irq_flag: false,
 
             sys_ram: [0; SYS_RAM_SIZE],
             prg_rom: prg_rom,
@@ -152,6 +155,13 @@ impl Cpu6502 {
             if self.nmi_flag {
                 self.nmi();
                 self.nmi_flag = false;
+
+                return false;
+            }
+
+            if self.irq_flag {
+                self.irq();
+                self.irq_flag = false;
 
                 return false;
             }
@@ -557,6 +567,10 @@ impl Cpu6502 {
         self.nmi_flag = true;
     }
 
+    pub fn trigger_apu_irq(&mut self) {
+        self.irq_flag = true;
+    }
+
     pub fn increment_clock(&mut self) {
         self.total_clocks += 1;
     }
@@ -627,34 +641,6 @@ impl Cpu6502 {
     pub fn print_state(&self) {
         println!("CPU State:");
         println!("{}", self.state_str());
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-    // use std::fs;
-    // use std::io::Read;
-
-    // use super::CPU;
-
-    #[test]
-    // Test program that multiplies 3 and 10 and stores the result in Accumulator
-    fn test_multiply() {
-        // let test_file = "prg_tests/cpu_tests/test_multiply.bin";
-        // let test_bus = Bus::new();
-        // let mut test_cpu = CPU::new(&test_bus);
-
-        // load_raw_mem_to_cpu(&test_cpu, &test_file);
-
-        // // Just make sure the program loaded correctly
-        // // (only checking a couple bytes, one at the start and one near the end)
-        // // assert_eq!(test_cpu.read(0x0000), 0xA9);
-        // // assert_eq!(test_cpu.read(0x0010), 0x00);
-
-        // // test_cpu.reset();
-
-        // crate::run_debug(&mut test_cpu, &test_bus);
     }
 }
 

@@ -252,6 +252,11 @@ impl Nes {
             self.get_ppu_mut().set_cpu_nmi_flag(false);
         }
 
+        if self.get_apu().trigger_irq() {
+            self.get_cpu_mut().trigger_apu_irq();
+            self.get_apu_mut().set_trigger_irq(false);
+        }
+
         self.clocks += 1;
 
         cpu_cycled

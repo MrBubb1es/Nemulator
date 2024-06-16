@@ -2,21 +2,22 @@ use std::time::Instant;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use crate::app::draw::chars::S;
+
 use super::apu_util::{
-    ApuControl, ApuStatus, DmcRegisters, NoiseRegisters, 
-    PulseChannel, PulseRegisters, TriangleRegisters
+    ApuControl, ApuStatus, DmcRegisters, NesChannel, NoiseRegisters, PulseChannel
 };
 
 pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
+pub const CPU_FREQ: f64 = 1_789_773f64; // For NTSC systems
 pub const CPU_CYCLE_PERIOD: f64 = 1.0 / CPU_FREQ;
 
 const SAMPLE_PERIOD: f64 = 1.0 / NES_AUDIO_FREQUENCY as f64;
-const CPU_FREQ: f64 = 1_789_773f64; // For NTSC systems
 const SAMPLE_BATCH_SIZE: usize = 2048;
 // The number of clocks in each denomination of a frame (in CPU clocks)
 const QUARTER_FRAME_CLOCKS: usize = 3729;
 const HALF_FRAME_CLOCKS: usize = 7457;
-const THREE_QUARTER_FRAME_CLOCKS: usize = 7457;
+const THREE_QUARTER_FRAME_CLOCKS: usize = 11185;
 const WHOLE_FRAME_CLOCKS: usize = 14916;
 
 pub struct Apu2A03 {
@@ -27,12 +28,12 @@ pub struct Apu2A03 {
     frame_clocks: usize,
     clocks_since_sampled: usize,
 
-    triangle_regs: TriangleRegisters,
     noise_regs: NoiseRegisters,
     dmc_regs: DmcRegisters,
 
     pulse1_channel: PulseChannel,
     pulse2_channel: PulseChannel,
+    // triangle_channel: TriangleChannel,
 
     control: ApuControl,
     status: ApuStatus,
@@ -46,6 +47,9 @@ pub struct Apu2A03 {
     last_output: Instant,
     avg_rates: Vec<f64>,
     batches_sent: usize,
+
+    irq_request_flag: bool,
+    trigger_irq: bool,
 }
 
 impl Apu2A03 {
@@ -58,12 +62,12 @@ impl Apu2A03 {
             frame_clocks: 0,
             clocks_since_sampled: 0,
 
-            triangle_regs: TriangleRegisters::default(),
             noise_regs: NoiseRegisters::default(),
             dmc_regs: DmcRegisters::default(),
 
-            pulse1_channel: PulseChannel::default(),
-            pulse2_channel: PulseChannel::default(),
+            pulse1_channel: PulseChannel::new(NesChannel::Pulse1),
+            pulse2_channel: PulseChannel::new(NesChannel::Pulse2),
+            // triangle_channel: TriangleChannel::default(),
 
             control: ApuControl::default(),
             status: ApuStatus::default(),
@@ -77,6 +81,9 @@ impl Apu2A03 {
             last_output: Instant::now(),
             avg_rates: Vec::new(),
             batches_sent: 0,
+
+            irq_request_flag: false,
+            trigger_irq: false,
         }
     }
 
@@ -91,10 +98,10 @@ impl Apu2A03 {
             || self.frame_clocks == WHOLE_FRAME_CLOCKS {
             
             self.frame_update();
-        }
-
-        if self.frame_clocks == WHOLE_FRAME_CLOCKS {
-            self.frame_clocks = 0;
+        
+            if self.frame_clocks == WHOLE_FRAME_CLOCKS {
+                self.frame_clocks = 0;
+            }
         }
 
         let time_since_sampled = self.clocks_since_sampled as f64 * CPU_CYCLE_PERIOD;
@@ -109,13 +116,15 @@ impl Apu2A03 {
     }
 
     pub fn cpu_write(&mut self, address: u16, data: u8) {
+        println!("CPU -> APU Write: ${:04X} = {:02X}", address, data);
+
         match address {
             // Pulse 1 Registers
             0x4000 => {
                 let new_duty_cycle = (data >> 6) & 3;
                 let new_enable = (data & 0x20) == 0;
                 let new_const_volume = (data & 0x10) != 0;
-                let new_volume = data & 0x0F;
+                let new_volume = (data & 0x0F) as usize;
 
                 self.pulse1_channel.counter_enabled = new_enable;
                 self.pulse1_channel.duty_cycle_percent = match new_duty_cycle {
@@ -125,29 +134,40 @@ impl Apu2A03 {
                     3 => 0.75,
                     _ => { unreachable!("Holy wack unlyrical lyrics, Batman!"); }
                 };
+                self.pulse1_channel.constant_volume = new_const_volume;
+                self.pulse1_channel.envelope_volume = new_volume;
+                self.pulse1_channel.envelope_start = true;
+            }
 
-                // self.pulse1_regs.set_duty_cycle(new_duty_cycle);
-                // self.pulse1_regs.set_disable(new_disable);
-                // self.pulse1_regs.set_const_volume(new_const_volume);
-                // self.pulse1_regs.set_envelope_volume(new_volume);
+            // Pulse 1 Sweeper
+            0x4001 => {
+                let new_enable = (data & 0x80) != 0;
+                let new_period = ((data >> 4) & 7) as usize;
+                let new_negate = (data & 0x08) != 0;
+                let new_shift = (data & 7) as usize;
+
+                self.pulse1_channel.sweeper_enabled = new_enable;
+                self.pulse1_channel.sweeper_divider_period = new_period;
+                self.pulse1_channel.sweeper_negate = new_negate;
+                self.pulse1_channel.sweeper_shift = new_shift;
+                self.pulse1_channel.sweeper_reload = true;
             }
 
             // Pulse 1 Timer Low
             0x4002 => {
-                self.pulse1_channel.timer &= 0x700;
-                self.pulse1_channel.timer |= data as usize;
-
-                self.update_pulse1_freq();
+                self.pulse1_channel.set_timer_reload(
+                    (self.pulse1_channel.timer & 0x700) | data as usize
+                );
             }
 
             // Pulse 1 Timer High & Length Counter
             0x4003 => {
-                self.pulse1_channel.timer &= 0xFF;
-                self.pulse1_channel.timer |= ((data & 7) as usize) << 8;
+                self.pulse1_channel.set_timer_reload(
+                    (self.pulse1_channel.timer & 0xFF) | (((data & 7) as usize) << 8)
+                );
 
                 self.pulse1_channel.set_length_counter(data >> 3);
-
-                self.update_pulse1_freq();
+                self.pulse1_channel.envelope_start = true;
             }
 
             // Pulse 2 Registers
@@ -155,7 +175,7 @@ impl Apu2A03 {
                 let new_duty_cycle = (data >> 6) & 3;
                 let new_enable = (data & 0x20) == 0;
                 let new_const_volume = (data & 0x10) != 0;
-                let new_volume = data & 0x0F;
+                let new_volume = (data & 0x0F) as usize;
 
                 self.pulse2_channel.counter_enabled = new_enable;
                 self.pulse2_channel.duty_cycle_percent = match new_duty_cycle {
@@ -165,35 +185,49 @@ impl Apu2A03 {
                     3 => 0.75,
                     _ => { unreachable!("Holy wack unlyrical lyrics, Batman!"); }
                 };
+                self.pulse2_channel.constant_volume = new_const_volume;
+                self.pulse2_channel.envelope_volume = new_volume;
+                self.pulse2_channel.envelope_start = true;
+            }
 
-                // println!("Writing to Pulse 2, Enabled: {}", self.pulse2_channel.enabled);
+            // Pulse 2 Sweeper
+            0x4005 => {
+                let new_enable = (data & 0x80) != 0;
+                let new_period = ((data >> 4) & 7) as usize;
+                let new_negate = (data & 0x08) != 0;
+                let new_shift = (data & 7) as usize;
 
-                // self.pulse1_regs.set_duty_cycle(new_duty_cycle);
-                // self.pulse1_regs.set_disable(new_disable);
-                // self.pulse1_regs.set_const_volume(new_const_volume);
-                // self.pulse1_regs.set_envelope_volume(new_volume);
+                self.pulse2_channel.sweeper_enabled = new_enable;
+                self.pulse2_channel.sweeper_divider_period = new_period;    
+                self.pulse2_channel.sweeper_negate = new_negate;
+                self.pulse2_channel.sweeper_shift = new_shift;
+                self.pulse2_channel.sweeper_reload = true;
             }
 
             // Pulse 2 Timer Low
             0x4006 => {
-                self.pulse2_channel.timer &= 0x700;
-                self.pulse2_channel.timer |= data as usize;
-
-                self.update_pulse1_freq();
+                self.pulse2_channel.set_timer_reload(
+                    (self.pulse2_channel.timer & 0x700) | data as usize
+                );
             }
 
             // Pulse 2 Timer High & Length Counter
             0x4007 => {
-                self.pulse2_channel.timer &= 0xFF;
-                self.pulse2_channel.timer |= ((data & 7) as usize) << 8;
+                self.pulse2_channel.set_timer_reload(
+                    (self.pulse2_channel.timer & 0xFF) | (((data & 7) as usize) << 8)
+                );
 
                 self.pulse2_channel.set_length_counter(data >> 3);
-
-                self.update_pulse2_freq();
+                self.pulse2_channel.envelope_start = true;
             }
 
+            // Noise Channel Length counter
+            0x400F => {
+                self.pulse1_channel.envelope_start = true;
+                self.pulse2_channel.envelope_start = true;
+            }
 
-
+            // Channel enable register
             0x4015 => {
                 let pulse1_enabled = (data & 0x01) != 0;
                 let pulse2_enabled = (data & 0x02) != 0;
@@ -202,18 +236,52 @@ impl Apu2A03 {
                 self.pulse2_channel.enabled = pulse2_enabled;
             }
 
+            // Frame update mode & frame interrupt register
+            0x4017 => {
+                let new_mode1 = data & 0x80 != 0;
+                let new_irq_flag = data & 0x40 == 0;
+
+                self.frame_update_mode1 = new_mode1;
+                self.frame_update_counter = 0;
+                if new_mode1 {
+                    self.frame_update()
+                }
+                self.irq_request_flag = new_irq_flag;
+            }
+
             _ => {}
         }
     }
 
     fn generate_sample(&mut self) -> f32 {
-
         let pulse1_sample = self.pulse1_channel.sample(self.clocks);
         let pulse2_sample = self.pulse2_channel.sample(self.clocks);
 
-        let amplitude = 0.25;
+        // There are a lot of magic numbers in this calculation. They are pulled 
+        // from the nesdev wiki formulas on this page:
+        // https://www.nesdev.org/wiki/APU_Mixer
+        // The magic numbers here are different because the formulas have been
+        // rearranged to minimize division operations. Essensially the main trick
+        // is to take a fraction like 1 / (1/a + 100) and rearrange it to the form
+        // a / (1 + 100a). This trick works on both the pulse_out and tnd_out
+        // formulas, and result in the following equations.
+        const ABRA: f32 = 1.0 / 8227.0;
+        const KADABRA: f32 = 1.0 / 12241.0;
+        const ALAKAZAM: f32 = 1.0 / 22638.0;
 
-        let sample = (pulse1_sample + pulse2_sample) * amplitude;
+        const BIPPITY: f32 = 95.88;
+        const BOPPITY: f32 = 159.79;
+        const BOO: f32 = 8128.0;
+
+        let pulse_sum = pulse1_sample + pulse2_sample;
+        let pulse_out = (BIPPITY * pulse_sum) / (BOO + 100.0 * pulse_sum);
+
+        let tnd_out = 0.0;
+
+        let output = pulse_out + tnd_out;
+
+        // Output is on a scale from 0.0 to 1.0, so we put it from -1 to 1
+        let sample = output * 1.95 - 1.0;
 
         sample
     }
@@ -225,18 +293,6 @@ impl Apu2A03 {
             self.sample_queue.lock().unwrap()
                 .extend(self.sample_batch.drain(..));
 
-            // let batch_avg_sample_rate = 2048.0 / self.last_output.elapsed().as_secs_f64();
-
-            // println!("Avg. {} samples / sec", batch_avg_sample_rate);
-
-            // self.avg_rates.push(batch_avg_sample_rate);
-
-            // let total_avg = self.avg_rates.iter().sum::<f64>() / self.batches_sent as f64;
-
-            // if self.batches_sent % 100 == 0 {
-            //     println!("Running Average Sample Rate: {} ==================", total_avg);
-            // }
-
             self.last_output = Instant::now();
             self.batches_sent += 1;
         }
@@ -246,30 +302,26 @@ impl Apu2A03 {
         self.sample_queue.lock().unwrap().len()
     }
 
-    fn update_pulse1_freq(&mut self) {
-        let t = self.pulse1_channel.timer;
-
-        let frequency = CPU_FREQ / (16.0 * (t + 1) as f64);
-
-        self.pulse1_channel.freq = frequency;
-    }
-
-    fn update_pulse2_freq(&mut self) {
-        let t = self.pulse2_channel.timer;
-
-        let frequency = CPU_FREQ / (16.0 * (t + 1) as f64);
-
-        self.pulse2_channel.freq = frequency;
-    }
-
     fn frame_update(&mut self) {
         if self.frame_update_mode1 {
             match self.frame_update_counter {
-                0 => {},
-                1 => { self.update_length_counters() },
-                2 => {},
+                0 => {
+                    self.update_envelopes();
+                },
+                1 => {
+                    self.update_envelopes();
+                    self.update_length_counters();
+                    self.update_sweepers();
+                },
+                2 => {
+                    self.update_envelopes();
+                },
                 3 => {},
-                4 => { self.update_length_counters() },
+                4 => {
+                    self.update_envelopes();
+                    self.update_length_counters();
+                    self.update_sweepers();
+                },
                 _ => {},
             }
 
@@ -277,10 +329,24 @@ impl Apu2A03 {
         } 
         else {
             match self.frame_update_counter {
-                0 => {},
-                1 => { self.update_length_counters() },
-                2 => {},
-                3 => { self.update_length_counters() },
+                0 => {
+                    self.update_envelopes();
+                },
+                1 => {
+                    self.update_envelopes();
+                    self.update_length_counters();
+                    self.update_sweepers();
+                },
+                2 => {
+                    self.update_envelopes();
+                },
+                3 => {
+                    self.update_envelopes();
+                    self.update_length_counters();
+                    self.update_sweepers();
+
+                    self.trigger_irq = self.irq_request_flag;
+                },
                 _ => {},
             }
 
@@ -291,5 +357,23 @@ impl Apu2A03 {
     fn update_length_counters(&mut self) {
         self.pulse1_channel.update_counter();
         self.pulse2_channel.update_counter();
+    }
+
+    fn update_sweepers(&mut self) {
+        self.pulse1_channel.sweep_frame_update();
+        self.pulse2_channel.sweep_frame_update();
+    }
+
+    fn update_envelopes(&mut self) {
+        self.pulse1_channel.update_envelope();
+        self.pulse2_channel.update_envelope();
+    }
+
+    pub fn trigger_irq(&self) -> bool {
+        self.trigger_irq
+    }
+
+    pub fn set_trigger_irq(&mut self, val: bool) {
+        self.trigger_irq = val;
     }
 }

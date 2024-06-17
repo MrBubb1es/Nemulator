@@ -893,9 +893,11 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &Nes) {
     let pgtbl2 = nes.get_pgtbl2();
 
     if nes.large_sprites() {
+        println!("Using 8x16 Sprites");
         draw_nes_pagetable_8x16(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, 546, 392);
         draw_nes_pagetable_8x16(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, 690, 392);
     } else {
+        println!("Using 8x8 Sprites");
         draw_nes_pagetable_8x8(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, 546, 392);
         draw_nes_pagetable_8x8(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, 690, 392);
     }

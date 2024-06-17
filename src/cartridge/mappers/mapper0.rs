@@ -17,10 +17,13 @@ pub struct Mapper0 {
 impl Mapper for Mapper0 {
     fn init(&mut self, cart: Cartridge) {
         self.nt_mirror_type = if cart.header.hardwired_nametable {
+            println!("Horizontal Mirroring");
             NametableMirror::Horizontal
         } else {
+            println!("Vertical Mirroring");
             NametableMirror::Vertical
         };
+
 
         self.num_prg_banks = cart.prg_rom_banks();
         self.num_chr_banks = cart.chr_rom_banks();

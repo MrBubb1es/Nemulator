@@ -386,9 +386,18 @@ impl Ppu2C02 {
                         y_diff
                     };
 
-                    let pt_select = self.ctrl.spr_pattern_tbl() as u16;
+                    let pt_select = if large_sprites {
+                        (sprite_data[1] & 1) as u16
+                    } else { 
+                        self.ctrl.spr_pattern_tbl() as u16
+                    };
+                    let spr_pt_select_lo = if large_sprites {
+                        (sprite_data[1] & 0xFE) as u16
+                    } else {
+                        sprite_data[1] as u16
+                    };
                     let sprite_pt_addr_lo = (
-                        (sprite_data[1] & 0xFE) as u16 +
+                        spr_pt_select_lo +
                         if sprite_row < 8 { 0 }
                         else { 1 }
                     ) * 16;

@@ -2,9 +2,7 @@ use std::{
     borrow::Borrow, cell::{Ref, RefCell, RefMut}, collections::VecDeque, fs, io::Read, rc::Rc, sync::{Arc, Mutex}
 };
 
-use rodio::queue::SourcesQueueInput;
-
-use crate::cartridge::{cartridge::Cartridge, mapper::Mapper};
+use crate::cartridge::{cartridge::Cartridge, mapper::{self, Mapper}};
 
 use super::{
     apu::Apu2A03,
@@ -35,7 +33,6 @@ pub struct Nes {
 
     clocks: u64,
 
-    cart: Option<Cartridge>,
     cart_loaded: bool,
 }
 
@@ -55,7 +52,6 @@ impl Default for Nes {
 
             clocks: 0,
 
-            cart: None,
             cart_loaded: false,
         }
     }
@@ -78,17 +74,15 @@ impl Nes {
         // Parse cartridge from file bytes
         let cart = Cartridge::from_bytes(data.as_slice()).unwrap();
 
-        // let ppu_regs = Rc::new(PpuRegisters::default());
-        let mapper: Rc<RefCell<dyn Mapper>> = cart.get_mapper();
+        let mapper = mapper::mapper_from_cart(cart);
 
-        let apu = Rc::new(RefCell::new(Apu2A03::new(sample_queue)));
+        let apu = Apu2A03::new(sample_queue);
+        let apu = Rc::new(RefCell::new(apu));
 
-        let ppu = Rc::new(RefCell::new(Ppu2C02::new(
-            cart.get_chr_rom(),
-            Rc::clone(&mapper),
-        )));
+        let ppu = Ppu2C02::new(Rc::clone(&mapper));
+        let ppu = Rc::new(RefCell::new(ppu));
+
         let cpu = Cpu6502::new(
-            cart.get_prg_rom(), 
             Rc::clone(&ppu), 
             Rc::clone(&apu),
             Rc::clone(&mapper));
@@ -98,7 +92,6 @@ impl Nes {
         self.ppu = Some(ppu);
         self.mapper = Some(mapper);
 
-        self.cart = Some(cart);
         self.cart_loaded = true;
     }
 
@@ -107,16 +100,7 @@ impl Nes {
         self.cpu = None;
         self.ppu = None;
         self.mapper = None;
-
-        self.cart = None;
         self.cart_loaded = false;
-    }
-
-    /// Reset the CPU
-    pub fn reset_cpu(&mut self) {
-        if self.cart_loaded {
-            self.cpu.as_mut().unwrap().reset();
-        }
     }
 
     /// Manually set the state of the CPU
@@ -211,8 +195,12 @@ impl Nes {
     // might cycle (CPU cycles every 3 PPU cycles). Returns a bool reporting
     // whether the CPU was cycled.
     pub fn cycle(&mut self) -> bool {
-        self.ppu.as_ref().unwrap().borrow_mut().cycle(self.screen_buf1.as_mut_slice());
-        // self.get_ppu_mut().cycle(self.screen_buf1.as_mut_slice());
+        self.ppu
+            .as_ref()
+            .unwrap()
+            .as_ref()
+            .borrow_mut()
+            .cycle(self.screen_buf1.as_mut_slice());
 
         let mut cpu_cycled = false;
 
@@ -220,7 +208,7 @@ impl Nes {
             // APU cycles with CPU clock
             self.get_apu_mut().cycle();
 
-            if self.get_cpu().dma_in_progress() {
+            // if self.get_cpu().dma_in_progress() {
                 // // Even CPU cycles are read cycles
                 // if self.get_cpu().total_clocks() & 1 == 0 {
                 //     self.get_cpu_mut().read_next_oam_data();
@@ -234,8 +222,8 @@ impl Nes {
                 //     self.get_ppu_mut().oam_dma_write(data, addr);
                 //     self.get_cpu_mut().increment_clock();
                 // }
-                self.get_cpu_mut().increment_clock();
-            } else {
+            //     self.get_cpu_mut().increment_clock();
+            // } else {
                 let p1_controller_state = self.p1_controller;
                 let p2_controller_state = self.p2_controller;
 
@@ -243,9 +231,9 @@ impl Nes {
                     .get_cpu_mut()
                     .cycle(p1_controller_state, p2_controller_state);
             }
-        } else {
-            cpu_cycled = false;
-        }
+        // } else {
+        //     cpu_cycled = false;
+        // }
 
         if self.get_ppu().cpu_nmi_flag() {
             self.cpu.as_mut().unwrap().trigger_ppu_nmi();

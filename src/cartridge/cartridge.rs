@@ -78,14 +78,18 @@ pub struct Header {
 
 /// Representation of a standard NES Cartridge.
 pub struct Cartridge {
-    _format: CartFormat,
-
-    _header: Header,
+    pub header: Header,
+    
+    format: CartFormat,
 
     // trainer_area: Option<[u8; 512]>,
+    prg_rom_banks: usize,
     prg_rom: Vec<u8>,
+
+    chr_rom_banks: usize,
     chr_rom: Vec<u8>,
-    _misc_rom: Vec<u8>,
+
+    misc_rom: Vec<u8>,
 }
 
 impl Cartridge {
@@ -183,8 +187,6 @@ impl Cartridge {
             vec![0; PRG_ROM_BANK_SIZE] // If no prg rom allocated by program, give cpu 1 bank so it doesn't freak out
         };
 
-
-
         let chr_rom_start = prg_rom_end;
         let chr_rom_banks = Cartridge::rom_size(header.chr_rom_size);
         let chr_rom_end = chr_rom_start + chr_rom_banks * CHR_ROM_BANK_SIZE;
@@ -202,12 +204,16 @@ impl Cartridge {
         println!("Misc ROM Size: {}", misc_rom.len());
 
         Ok(Cartridge {
-            _format: format,
-            _header: header,
+            format,
+            header,
             // trainer_area: None,
+            prg_rom_banks,
             prg_rom,
+
+            chr_rom_banks,
             chr_rom,
-            _misc_rom: misc_rom,
+
+            misc_rom,
         })
     }
 
@@ -228,13 +234,15 @@ impl Cartridge {
         self.prg_rom.clone()
     }
 
+    pub fn prg_rom_banks(&self) -> usize {
+        self.prg_rom_banks
+    }
+
     pub fn get_chr_rom(&self) -> Vec<u8> {
         self.chr_rom.clone()
     }
 
-    pub fn get_mapper(&self) -> Rc<RefCell<dyn Mapper>> {
-        println!("Loading cart with mapper {}", self._header.mapper_num);
-
-        mapper::get_mapper(&self._header)
+    pub fn chr_rom_banks(&self) -> usize {
+        self.chr_rom_banks
     }
 }

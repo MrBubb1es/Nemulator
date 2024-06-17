@@ -454,69 +454,80 @@ impl NoiseChannel {
     }
 }
 
-/// This struct encapsulates all of the DMC registers in the APU.
-#[bitfield(u32)]
-pub struct DmcRegisters {
-    // First byte
-    #[bits(1)]
-    pub irq_enabled: bool,
-    #[bits(1)]
-    pub loop_enabled: bool,
-    #[bits(2)]
-    _unused: u8,
-    #[bits(4)]
-    pub freq_idx: u8,
 
-    // Second byte
-    #[bits(1)]
-    _unused: bool,
-    #[bits(7)]
-    pub direct_load: u8,
 
-    // Third byte
-    #[bits(8)]
-    pub sample_addr: u8,
+#[derive(Default)]
+pub struct DmcChannel {
+    // Basic channel registers
+    pub timer: usize,
+    pub timer_reload: usize,
+    pub enabled: bool,
 
-    // Fourth byte
-    #[bits(8)]
-    pub sample_length: u8,
+    pub length_counter: usize,
+    pub counter_enabled: bool,
+
+    pub bytes_remaining: usize,
+    pub sample_len: usize,
+    pub sample_addr: u16,
+
+    pub bits_remaining: usize,
+    pub dmc_shifter: u8,
+    pub silenced: bool,
+
+    pub output: u8,
 }
 
-#[bitfield(u8)]
-pub struct ApuControl {
-    #[bits(3)]
-    _unused: u8,
-    #[bits(1)]
-    pub dmc_enabled: bool,
-    #[bits(1)]
-    pub noise_counter_enabled: bool,
-    #[bits(1)]
-    pub triangle_counter_enabled: bool,
-    #[bits(1)]
-    pub pulse2_counter_enabled: bool,
-    #[bits(1)]
-    pub pulse1_counter_enabled: bool,
+impl DmcChannel {
+    const RATE_LOOKUP: [usize; 16] = [
+        428, 380, 340, 320, 286, 254, 226, 214, 
+        190, 160, 142, 128, 106,  84,  72,  54
+    ];
+
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn sample(&mut self) -> f32 {
+        self.output as f32
+    }
+
+    pub fn set_length_counter(&mut self, data: u8) {
+        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
+    }
+
+    pub fn set_timer_reload(&mut self, data: u8) {
+        self.timer_reload = DmcChannel::RATE_LOOKUP[data as usize];
+        self.timer = self.timer_reload;
+    } 
+
+    pub fn update_timer(&mut self) -> bool {
+        let mut need_new_sample_byte = false;
+
+        if self.timer == 0 {
+            if self.dmc_shifter & 1 == 0 {
+                self.output = self.output.wrapping_sub(1);
+            } else {
+                self.output = self.output.wrapping_add(1);
+            }
+
+            self.dmc_shifter >>= 1;
+            self.bits_remaining -= 1;
+
+            if self.bits_remaining == 0 {
+                need_new_sample_byte = true;
+            }
+        } else {
+            self.timer -= 1;
+        }
+
+        need_new_sample_byte
+    }
+
+    pub fn update_length_counter(&mut self) {
+        if !self.enabled {
+            self.length_counter = 0;
+        } else if self.length_counter > 0 && self.counter_enabled {
+            self.length_counter -= 1;
+        }
+    }
 }
-
-#[bitfield(u8)]
-pub struct ApuStatus {
-    #[bits(1)]
-    pub dmc_interrupt: bool,
-    #[bits(1)]
-    pub frame_interrupt: bool,
-    #[bits(1)]
-    _unused: bool,
-    #[bits(1)]
-    pub dmc_active: bool,
-    #[bits(1)]
-    pub noise_counter_status: bool,
-    #[bits(1)]
-    pub triangle_counter_status: bool,
-    #[bits(1)]
-    pub pulse2_counter_status: bool,
-    #[bits(1)]
-    pub pulse1_counter_status: bool,
-}
-
-
-

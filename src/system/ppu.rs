@@ -41,7 +41,6 @@ pub struct Ppu2C02 {
     palette_mem: [u8; PALETTE_MEM_SIZE],
     primary_oam: [u8; PRIMARY_OAM_SIZE],
     secondary_oam: [u8; SECONDARY_OAM_SIZE],
-    chr_rom: Vec<u8>,
 
     // Flag to keep track of if sprite 0 made it into secondary OAM during the last sprite evaluation phase
     spr_0_in_secondary_oam: bool,
@@ -88,7 +87,7 @@ impl Ppu2C02 {
     ///                 and CPU to access the PPU registers, as the CPU needs to
     ///                 read and write to some of them.
     ///  * `mapper` - Pointer the the mapper being used by the cartridge.
-    pub fn new(chr_rom: Vec<u8>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+    pub fn new(mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         let mut ppu = Ppu2C02 {
             dot: 0,
             scanline: 0,
@@ -111,7 +110,6 @@ impl Ppu2C02 {
             palette_mem: [0; PALETTE_MEM_SIZE],
             primary_oam: [0; PRIMARY_OAM_SIZE],
             secondary_oam: [0; SECONDARY_OAM_SIZE],
-            chr_rom: chr_rom,
 
             spr_0_in_secondary_oam: false,
 
@@ -518,20 +516,17 @@ impl Ppu2C02 {
     ///
     ///  * `address` - 16 bit address used to access data
     pub fn ppu_read(&self, address: u16) -> u8 {
-        if let Some(mapped_addr) = self.mapper.borrow_mut().get_ppu_read_addr(address) {
-            return self.chr_rom[mapped_addr as usize];
+        if let Some(data) = self.mapper.borrow_mut().ppu_cart_read(address) {
+            return data;
         }
 
         match address & 0x3FFF {
             0x0000..=0x1FFF => {
-                self.chr_rom[address as usize]
+                0x00 // Mapper should take care of this address range
             },
             0x2000..=0x3EFF => {
                 let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = match self.mapper.borrow().get_nt_mirror_type() {
-                    NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
-                    NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
-                };
+                let mirrored_addr2 = self.get_nt_mirrored_address(mirrored_addr1);
                 self.vram[mirrored_addr2 as usize]
             },
             0x3F00..=0x3FFF => {
@@ -563,22 +558,18 @@ impl Ppu2C02 {
     ///  * `address` - 16 bit address used to access data
     ///  * `data` - Single byte of data to write
     pub fn ppu_write(&mut self, address: u16, data: u8) {
-        if let Some(mapped_addr) = self.mapper.borrow_mut().get_ppu_write_addr(address, data) {
-            self.chr_rom[mapped_addr as usize] = data;
+        if self.mapper.borrow_mut().ppu_cart_write(address, data) {
             return;
         }
         
         // println!("Writing to ppu w/ addr 0x{address:02X} and data: 0x{data:02X}");
         match address & 0x3FFF {
             0x0000..=0x1FFF => {       
-                self.chr_rom[address as usize] = data;
+                // Mapper should take care of this address range
             },
             0x2000..=0x3EFF => {
                 let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = match self.mapper.borrow().get_nt_mirror_type() {
-                    NametableMirror::Horizontal => { mirrored_addr1 & 0x07FF },
-                    NametableMirror::Vertical => { (mirrored_addr1 & 0x03FF) | (if mirrored_addr1 > 0x2800 { 0x400 } else { 0 }) }
-                };
+                let mirrored_addr2 = self.get_nt_mirrored_address(mirrored_addr1);
                 self.vram[mirrored_addr2 as usize] = data;
             },
             0x3F00..=0x3FFF => {
@@ -955,6 +946,15 @@ impl Ppu2C02 {
         }
         
         true
+    }
+
+    fn get_nt_mirrored_address(&self, address: u16) -> u16 {
+        match self.mapper.borrow().get_nt_mirror_type() {
+            NametableMirror::Horizontal => { address & 0x07FF },
+            NametableMirror::Vertical => { (address & 0x03FF) | (if address > 0x2800 { 0x400 } else { 0 }) }
+            NametableMirror::SingleScreenLower => { address & 0x03FF },
+            NametableMirror::SingleScreenUpper => { (address & 0x03FF) + 0x0400 },
+        }
     }
 }
 

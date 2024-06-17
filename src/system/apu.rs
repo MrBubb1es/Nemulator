@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::app::draw::chars::S;
 
 use super::apu_util::{
-    ApuControl, ApuStatus, DmcRegisters, NesChannel, NoiseChannel, PulseChannel, TriangleChannel
+    NesChannel, NoiseChannel, PulseChannel, TriangleChannel
 };
 
 pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
@@ -28,15 +28,10 @@ pub struct Apu2A03 {
     frame_clocks: usize,
     clocks_since_sampled: usize,
 
-    dmc_regs: DmcRegisters,
-
     pulse1_channel: PulseChannel,
     pulse2_channel: PulseChannel,
     triangle_channel: TriangleChannel,
     noise_channel: NoiseChannel,
-
-    control: ApuControl,
-    status: ApuStatus,
 
     frame_sequence: bool,
     disable_frame_interrupt: bool,
@@ -62,15 +57,10 @@ impl Apu2A03 {
             frame_clocks: 0,
             clocks_since_sampled: 0,
 
-            dmc_regs: DmcRegisters::default(),
-
             pulse1_channel: PulseChannel::new(NesChannel::Pulse1),
             pulse2_channel: PulseChannel::new(NesChannel::Pulse2),
             triangle_channel: TriangleChannel::default(),
             noise_channel: NoiseChannel::new(),
-
-            control: ApuControl::default(),
-            status: ApuStatus::default(),
 
             frame_sequence: false,
             disable_frame_interrupt: false,

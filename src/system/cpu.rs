@@ -58,7 +58,6 @@ pub struct Cpu6502 {
 
     // Memory accessable only by the CPU
     sys_ram: [u8; SYS_RAM_SIZE],
-    prg_rom: Vec<u8>,
 
     // Last polled states of each controller
     polled_p1_controller: NesController,
@@ -89,8 +88,7 @@ pub struct Cpu6502 {
 
 impl Cpu6502 {
     /// Make a new CPU with access to given program memory and PPU Registers and a given mapper
-    pub fn new(prg_rom: Vec<u8>, 
-            ppu: Rc<RefCell<Ppu2C02>>, 
+    pub fn new(ppu: Rc<RefCell<Ppu2C02>>, 
             apu: Rc<RefCell<Apu2A03>>, 
             mapper: Rc<RefCell<dyn Mapper>>
         ) -> Self {
@@ -107,7 +105,6 @@ impl Cpu6502 {
             irq_flag: false,
 
             sys_ram: [0; SYS_RAM_SIZE],
-            prg_rom: prg_rom,
 
             polled_p1_controller: NesController::default(),
             polled_p2_controller: NesController::default(),
@@ -206,8 +203,8 @@ impl Cpu6502 {
 
     /// Read a single byte from a given address off the bus
     pub fn read(&self, address: u16) -> u8 {
-        if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
-            return self.prg_rom[mapped_addr as usize];
+        if let Some(data) = self.mapper.borrow_mut().cpu_cart_read(address) {
+            return data;
         }
 
         match address {
@@ -258,8 +255,7 @@ impl Cpu6502 {
     }
     /// Write a single byte to the bus at a given address
     pub fn write(&mut self, address: u16, data: u8) {
-        if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_write_addr(address, data) {
-            self.prg_rom[mapped_addr as usize] = data;
+        if self.mapper.borrow_mut().cpu_cart_write(address, data) {
             return;
         }
 

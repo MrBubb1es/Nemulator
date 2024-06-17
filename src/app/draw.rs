@@ -892,8 +892,14 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &Nes) {
     let pgtbl1 = nes.get_pgtbl1();
     let pgtbl2 = nes.get_pgtbl2();
 
-    draw_nes_pagetable(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, 546, 392);
-    draw_nes_pagetable(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, 690, 392);
+    if nes.large_sprites() {
+        draw_nes_pagetable_8x16(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, 546, 392);
+        draw_nes_pagetable_8x16(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, 690, 392);
+    } else {
+        draw_nes_pagetable_8x8(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, 546, 392);
+        draw_nes_pagetable_8x8(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, 690, 392);
+    }
+
     
     // CPU INFO DECOR
     draw_box(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, 536, 34, 331, 110, 2, palette, Some("CPU Info"));
@@ -924,7 +930,7 @@ pub fn draw_nes_screen(frame: &mut [u8], frame_width: usize, frame_height: usize
     }
 }
 
-pub fn draw_nes_pagetable(frame: &mut [u8], frame_width: usize, frame_height: usize, 
+pub fn draw_nes_pagetable_8x8(frame: &mut [u8], frame_width: usize, frame_height: usize, 
                         pagetable: Box<[u8; 0x1000]>, x: usize, y: usize) {
     
     const GREYSCALE: [Color; 4] = [
@@ -940,6 +946,44 @@ pub fn draw_nes_pagetable(frame: &mut [u8], frame_width: usize, frame_height: us
     for spr_y in 0..PGTBL_WIDTH {
         for spr_x in 0..PGTBL_WIDTH {
             let spr_idx = spr_y * PGTBL_WIDTH + spr_x;
+            let sprite_bytes = &pagetable[spr_idx*PGTBL_WIDTH..(spr_idx+1)*PGTBL_WIDTH];
+
+            for r in 0..8 {
+                let lsb_byte = sprite_bytes[r];
+                let msb_byte = sprite_bytes[r + 8];
+
+                for c in 0..8 {
+                    let col_idx = (((msb_byte >> (7 - c)) & 1) << 1) | ((lsb_byte >> (7 - c)) & 1);
+                    let col = GREYSCALE[col_idx as usize];
+
+                    let pixel_x = x + spr_x*SPRITE_WIDTH + c;
+                    let pixel_y = y + spr_y*SPRITE_WIDTH + r;
+
+                    dot(frame, frame_width, frame_height, pixel_x, pixel_y, 1, col);
+                }
+            }
+        }
+    }
+}
+
+pub fn draw_nes_pagetable_8x16(frame: &mut [u8], frame_width: usize, frame_height: usize, 
+                        pagetable: Box<[u8; 0x1000]>, x: usize, y: usize) {
+
+    const GREYSCALE: [Color; 4] = [
+        Color{r: 0x40, g: 0x40, b: 0x40},
+        Color{r: 0x80, g: 0x80, b: 0x80},
+        Color{r: 0xC0, g: 0xC0, b: 0xC0},
+        Color{r: 0xF0, g: 0xF0, b: 0xF0},
+    ];
+
+    const SPRITE_WIDTH: usize = 8; // Num pixels per side of sprite
+    const PGTBL_WIDTH: usize = 16; // Num sprites per side of pagetable
+
+    for spr_y in 0..PGTBL_WIDTH {
+        for spr_x in 0..PGTBL_WIDTH {
+            let spr_idx = (spr_x * 2 + spr_y % 2) + (spr_y / 2) * PGTBL_WIDTH;
+
+            // let spr_idx = spr_y * PGTBL_WIDTH + spr_x;
             let sprite_bytes = &pagetable[spr_idx*PGTBL_WIDTH..(spr_idx+1)*PGTBL_WIDTH];
 
             for r in 0..8 {

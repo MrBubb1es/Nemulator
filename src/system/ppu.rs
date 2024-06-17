@@ -67,8 +67,8 @@ pub struct Ppu2C02 {
     bg_tile_attrib_lo: u16,
 
     /// Pagetable 1 & 2 memory (for debugging purposes)
-    pub pgtbl1: Box<[u8; 0x1000]>,
-    pub pgtbl2: Box<[u8; 0x1000]>,
+    pgtbl1: Box<[u8; 0x1000]>,
+    pgtbl2: Box<[u8; 0x1000]>,
 
     // flag set when the ppu finishes rendering a frame
     frame_finished: bool,
@@ -139,7 +139,6 @@ impl Ppu2C02 {
             ppu.pgtbl1[i as usize] = ppu.ppu_read(i);
             ppu.pgtbl2[i as usize] = ppu.ppu_read(i | 0x1000);
         }
-
 
         // for addr in 0x2000..=0x3EFF {
         //     ppu.write(addr, addr as u8);
@@ -381,30 +380,22 @@ impl Ppu2C02 {
                     
                     let y_diff = self.scanline as u16 - sprite_y as u16;
 
-                    // row of the tile we are looking at
                     let sprite_row = if flip_vertical {
-                        // for double high sprites, we look at them 1 tile at a time,
-                        // so this is the row of either the 1st or 2nd tile
-                        7 - (y_diff & 0x7)
+                        (sprite_height - 1) - y_diff
                     } else {
                         y_diff
                     };
 
-                    let pt_select = if large_sprites {
-                        (sprite_data[1] & 1) as u16
-                    } else {
-                        self.ctrl.spr_pattern_tbl() as u16
-                    };
-                    let sprite_pt_addr_lo = if large_sprites {
-                        (sprite_data[1] & 0xFE + if y_diff < 8 { 0 } else { 1 }) as u16 * 16
-                        + if (self.scanline - sprite_y as usize) < 8 { 0 } else { 16 }
-                    } else {
-                        sprite_data[1] as u16 * 16
-                    };
+                    let pt_select = self.ctrl.spr_pattern_tbl() as u16;
+                    let sprite_pt_addr_lo = (
+                        (sprite_data[1] & 0xFE) as u16 +
+                        if sprite_row < 8 { 0 }
+                        else { 1 }
+                    ) * 16;
                     let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
 
-                    let spr_addr_lo = sprite_pt_addr + sprite_row;
-                    let spr_addr_hi = sprite_pt_addr + sprite_row + sprite_height;
+                    let spr_addr_lo = sprite_pt_addr + (sprite_row & 7);
+                    let spr_addr_hi = sprite_pt_addr + (sprite_row & 7) + 8;
 
                     let sprite_lo_byte = self.ppu_read(spr_addr_lo);
                     let sprite_hi_byte = self.ppu_read(spr_addr_hi);
@@ -421,7 +412,7 @@ impl Ppu2C02 {
                     spr_pix = ((sprite_msb << 1) | sprite_lsb) as u16;
                     spr_pal = (0x4 | (sprite_data[2] & 3)) as u16;
                     front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
-                    
+
                     // If the pixel is not transparent
                     if spr_pix != 0 {
                         // If sprite 0 is in secondary OAM, it will always be the 0th
@@ -432,6 +423,58 @@ impl Ppu2C02 {
 
                         break; // We've found the highest priority sprite, so stop looking
                     }
+
+                //     // row of the tile we are looking at
+                    // let sprite_row = if flip_vertical {
+                    //     // for double high sprites, we look at them 1 tile at a time,
+                    //     // so this is the row of either the 1st or 2nd tile
+                    //     (sprite_height - 1) - y_diff
+                    // } else {
+                    //     y_diff
+                    // };
+
+                //     let pt_select = if large_sprites {
+                //         (sprite_data[1] & 1) as u16
+                //     } else {
+                //         self.ctrl.spr_pattern_tbl() as u16
+                //     };
+                //     let sprite_pt_addr_lo = if large_sprites {
+                //         (sprite_data[1] & 0xFE + if y_diff < 8 { 0 } else { 1 }) as u16 * 16
+                //         + if (self.scanline - sprite_y as usize) < 8 { 0 } else { 16 }
+                //     } else {
+                //         sprite_data[1] as u16 * 16
+                //     };
+                //     let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
+
+                //     let spr_addr_lo = sprite_pt_addr + sprite_row;
+                //     let spr_addr_hi = sprite_pt_addr + sprite_row + 8;
+
+                //     let sprite_lo_byte = self.ppu_read(spr_addr_lo);
+                //     let sprite_hi_byte = self.ppu_read(spr_addr_hi);
+
+                //     let horiz_shift = if flip_horizontal {
+                //         screen_pixel_x - sprite_x as usize
+                //     } else {
+                //         7 - (screen_pixel_x - sprite_x as usize)
+                //     };
+
+                //     let sprite_lsb = (sprite_lo_byte >> horiz_shift) & 1;
+                //     let sprite_msb = (sprite_hi_byte >> horiz_shift) & 1;
+                    
+                //     spr_pix = ((sprite_msb << 1) | sprite_lsb) as u16;
+                //     spr_pal = (0x4 | (sprite_data[2] & 3)) as u16;
+                //     front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
+                    
+                //     // If the pixel is not transparent
+                //     if spr_pix != 0 {
+                //         // If sprite 0 is in secondary OAM, it will always be the 0th
+                //         // sprite here, so we can check if we are drawing spite 0 like this
+                //         if self.spr_0_in_secondary_oam && sprite_idx == 0 {
+                //             drawing_spr_0 = true;
+                //         }
+
+                //         break; // We've found the highest priority sprite, so stop looking
+                    // }
                 }
             }
         }
@@ -696,7 +739,7 @@ impl Ppu2C02 {
                 self.set_ctrl(data);
                 self.t_reg.set_nt_select((data & 3) as usize);
 
-                println!("Large Sprites: {}", self.ctrl.spr_size() == 1);
+                // println!("Large Sprites: {}", self.ctrl.spr_size() == 1);
             },
 
             // PPUMASK
@@ -1069,5 +1112,27 @@ impl Ppu2C02 {
     /// Set the value of the t register
     pub fn set_t_reg(&mut self, val: u16) {
         self.t_reg = val.into();
+    }
+
+    pub fn using_large_sprites(&self) -> bool {
+        self.ctrl.spr_size() == 1
+    }
+
+    pub fn get_pgtbl1(&mut self) -> Box<[u8; 0x1000]> {
+        // Read pagetable memories into arrays for debug view
+        for i in 0..0x1000 {
+            self.pgtbl1[i as usize] = self.ppu_read(i);
+        }
+
+        self.pgtbl1.clone()
+    }
+
+    pub fn get_pgtbl2(&mut self) -> Box<[u8; 0x1000]> {
+        // Read pagetable memories into arrays for debug view
+        for i in 0..0x1000 {
+            self.pgtbl2[i as usize] = self.ppu_read(i + 0x1000);
+        }
+
+        self.pgtbl2.clone()
     }
 }

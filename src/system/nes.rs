@@ -272,7 +272,7 @@ impl Nes {
 
     pub fn get_pgtbl1(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.as_ref().borrow().pgtbl1.clone()
+            ppu.as_ref().borrow_mut().get_pgtbl1()
         } else {
             Box::new([0; 0x1000])
         }
@@ -280,7 +280,7 @@ impl Nes {
 
     pub fn get_pgtbl2(&self) -> Box<[u8; 0x1000]> {
         if let Some(ppu) = &self.ppu {
-            ppu.as_ref().borrow().pgtbl2.clone() // fix this later i too tired
+            ppu.as_ref().borrow_mut().get_pgtbl2()
         } else {
             Box::new([0; 0x1000])
         }
@@ -332,5 +332,9 @@ impl Nes {
 
     pub fn audio_samples_queued(&self) -> usize {
         self.get_apu().audio_samples_queued()
+    }
+
+    pub fn large_sprites(&self) -> bool {
+        self.get_ppu().using_large_sprites()
     }
 }

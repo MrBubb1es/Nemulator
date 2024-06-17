@@ -379,11 +379,15 @@ impl Ppu2C02 {
                     let flip_horizontal = sprite_data[2] & 0x40 != 0;
                     let flip_vertical = sprite_data[2] & 0x80 != 0;
                     
+                    let y_diff = self.scanline as u16 - sprite_y as u16;
+
                     // row of the tile we are looking at
                     let sprite_row = if flip_vertical {
-                        7 - (self.scanline as u16 - sprite_y as u16)
+                        // for double high sprites, we look at them 1 tile at a time,
+                        // so this is the row of either the 1st or 2nd tile
+                        7 - (y_diff & 0x7)
                     } else {
-                        self.scanline as u16 - sprite_y as u16
+                        y_diff
                     };
 
                     let pt_select = if large_sprites {
@@ -392,7 +396,7 @@ impl Ppu2C02 {
                         self.ctrl.spr_pattern_tbl() as u16
                     };
                     let sprite_pt_addr_lo = if large_sprites {
-                        (sprite_data[1] & 0xFE) as u16 * 16
+                        (sprite_data[1] & 0xFE + if y_diff < 8 { 0 } else { 1 }) as u16 * 16
                         + if (self.scanline - sprite_y as usize) < 8 { 0 } else { 16 }
                     } else {
                         sprite_data[1] as u16 * 16
@@ -564,7 +568,7 @@ impl Ppu2C02 {
         
         // println!("Writing to ppu w/ addr 0x{address:02X} and data: 0x{data:02X}");
         match address & 0x3FFF {
-            0x0000..=0x1FFF => {       
+            0x0000..=0x1FFF => {
                 // Mapper should take care of this address range
             },
             0x2000..=0x3EFF => {
@@ -691,6 +695,8 @@ impl Ppu2C02 {
                 //    <used elsewhere> <- d: ABCDEF..
                 self.set_ctrl(data);
                 self.t_reg.set_nt_select((data & 3) as usize);
+
+                println!("Large Sprites: {}", self.ctrl.spr_size() == 1);
             },
 
             // PPUMASK

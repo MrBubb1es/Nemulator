@@ -1,5 +1,5 @@
 use std::{
-    borrow::Borrow, cell::{Ref, RefCell, RefMut}, collections::VecDeque, fs, io::Read, rc::Rc, sync::{Arc, Mutex}
+    borrow::{Borrow, BorrowMut}, cell::{Ref, RefCell, RefMut}, collections::VecDeque, fs, io::Read, rc::Rc, sync::{Arc, Mutex}
 };
 
 use crate::cartridge::{cartridge::Cartridge, mapper::{self, Mapper}};
@@ -177,6 +177,10 @@ impl Nes {
         self.apu.as_ref().unwrap().as_ref().borrow_mut()
     }
 
+    pub fn get_mapper_mut(&mut self) -> RefMut<dyn Mapper> {
+        self.mapper.as_ref().unwrap().as_ref().borrow_mut()
+    }
+
     /// Get the number of CPU cLocks
     pub fn get_cpu_clks(&self) -> u64 {
         if let Some(cpu) = self.cpu.borrow() {
@@ -189,6 +193,7 @@ impl Nes {
     pub fn reset(&mut self) {
         self.get_cpu_mut().reset();
         self.get_ppu_mut().reset();
+        self.get_mapper_mut().reset();
     }
 
     // Cycles the system through one system clock. The PPU will cycle, the CPU

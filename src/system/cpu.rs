@@ -178,7 +178,7 @@ impl Cpu6502 {
     
             // Increment pc before instruction execution
             self.pc += instr.bytes as u16;
-    
+            
             // execute - run the instruction, updating memory and processor status
             //           as defined by the instruction
             let execute_cycles = (instr.func)(self, opcode_data);

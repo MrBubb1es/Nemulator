@@ -2,7 +2,7 @@ use crate::cartridge::{mapper::NametableMirror, Cartridge, Header, Mapper};
 
 #[derive(Default)]
 pub struct Mapper3 {
-    bank_select: u8,
+    chr_bank_select: usize,
 
     nt_mirror_type: NametableMirror,
     num_prg_banks: usize,
@@ -44,9 +44,9 @@ impl Mapper for Mapper3 {
 
     fn ppu_cart_read(&mut self, addr: u16) -> Option<u8> {
         if addr <= 0x1FFF {
-            let mapped_addr = ((self.bank_select as u16) * 0x2000) + addr;
+            let mapped_addr = (self.chr_bank_select * 0x2000) + addr as usize;
 
-            return Some( self.chr_rom[mapped_addr as usize] );
+            return Some( self.chr_rom[mapped_addr] );
         }
 
         None
@@ -54,7 +54,7 @@ impl Mapper for Mapper3 {
 
     fn cpu_cart_write(&mut self, addr: u16, data: u8) -> bool {
         if 0x8000 <= addr {
-            self.bank_select = data & 3;
+            self.chr_bank_select = (data & 3) as usize;
         }
 
         false
@@ -66,5 +66,9 @@ impl Mapper for Mapper3 {
 
     fn get_nt_mirror_type(&self) -> NametableMirror {
         self.nt_mirror_type
+    }
+
+    fn reset(&mut self) {
+        self.chr_bank_select = 0;
     }
 }

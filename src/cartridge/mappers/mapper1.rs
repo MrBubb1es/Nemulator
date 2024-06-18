@@ -186,6 +186,8 @@ impl Mapper1 {
                         3 => NametableMirror::Horizontal,
                         _ => {unreachable!("Things are wrong :O")},
                     };
+
+                    println!("{:?}", self.nt_mirror_type);
                 }
 
                 // CHR ROM Select Low OR Full

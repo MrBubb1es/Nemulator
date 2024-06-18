@@ -2,3 +2,4 @@
 target/
 games/
 .vscode/
+prg_tests/

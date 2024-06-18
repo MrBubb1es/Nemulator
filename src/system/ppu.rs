@@ -281,7 +281,8 @@ impl Ppu2C02 {
             //     self.secondary_oam[sprites_found*4 + 0] = sprite_y;
             // }
 
-            if (sprite_y as usize <= next_scanline) && (next_scanline < (sprite_y as usize + sprite_height as usize)) {
+            if (sprite_y as usize <= next_scanline) && 
+               (next_scanline < (sprite_y as usize + sprite_height as usize)) {
                 
                 if sprites_found < 8 {
                     if sprite_index == 0 {
@@ -356,7 +357,7 @@ impl Ppu2C02 {
                     if sprite_y == 0 { break; }
 
                     let too_far_left = screen_pixel_x < sprite_x as usize;
-                    let too_far_right = sprite_x as usize + SPRITE_WIDTH as usize <= screen_pixel_x;
+                    let too_far_right = (sprite_x as usize + SPRITE_WIDTH as usize) <= screen_pixel_x;
                     // If sprite x does not intersect with this pixel, skip this sprite
                     if too_far_left || too_far_right { continue; }
 
@@ -417,58 +418,6 @@ impl Ppu2C02 {
 
                         break; // We've found the highest priority sprite, so stop looking
                     }
-
-                //     // row of the tile we are looking at
-                    // let sprite_row = if flip_vertical {
-                    //     // for double high sprites, we look at them 1 tile at a time,
-                    //     // so this is the row of either the 1st or 2nd tile
-                    //     (sprite_height - 1) - y_diff
-                    // } else {
-                    //     y_diff
-                    // };
-
-                //     let pt_select = if large_sprites {
-                //         (sprite_data[1] & 1) as u16
-                //     } else {
-                //         self.ctrl.spr_pattern_tbl() as u16
-                //     };
-                //     let sprite_pt_addr_lo = if large_sprites {
-                //         (sprite_data[1] & 0xFE + if y_diff < 8 { 0 } else { 1 }) as u16 * 16
-                //         + if (self.scanline - sprite_y as usize) < 8 { 0 } else { 16 }
-                //     } else {
-                //         sprite_data[1] as u16 * 16
-                //     };
-                //     let sprite_pt_addr = (pt_select << 12) | sprite_pt_addr_lo;
-
-                //     let spr_addr_lo = sprite_pt_addr + sprite_row;
-                //     let spr_addr_hi = sprite_pt_addr + sprite_row + 8;
-
-                //     let sprite_lo_byte = self.ppu_read(spr_addr_lo);
-                //     let sprite_hi_byte = self.ppu_read(spr_addr_hi);
-
-                //     let horiz_shift = if flip_horizontal {
-                //         screen_pixel_x - sprite_x as usize
-                //     } else {
-                //         7 - (screen_pixel_x - sprite_x as usize)
-                //     };
-
-                //     let sprite_lsb = (sprite_lo_byte >> horiz_shift) & 1;
-                //     let sprite_msb = (sprite_hi_byte >> horiz_shift) & 1;
-                    
-                //     spr_pix = ((sprite_msb << 1) | sprite_lsb) as u16;
-                //     spr_pal = (0x4 | (sprite_data[2] & 3)) as u16;
-                //     front_priority = sprite_data[2] & 0x20 == 0; // true if in front of bg
-                    
-                //     // If the pixel is not transparent
-                //     if spr_pix != 0 {
-                //         // If sprite 0 is in secondary OAM, it will always be the 0th
-                //         // sprite here, so we can check if we are drawing spite 0 like this
-                //         if self.spr_0_in_secondary_oam && sprite_idx == 0 {
-                //             drawing_spr_0 = true;
-                //         }
-
-                //         break; // We've found the highest priority sprite, so stop looking
-                    // }
                 }
             }
         }
@@ -828,12 +777,12 @@ impl Ppu2C02 {
         };
     }
 
-    pub fn oam_dma_write(&mut self, oam_data: u8, addr: u8) {
-        let oam_addr = self.oam_address.wrapping_add(addr);
-        self.primary_oam[oam_addr as usize] = oam_data.wrapping_add(
-            if oam_addr & 3 == 0 { 1 } else { 0 }
-        );
-    }
+    // pub fn oam_dma_write(&mut self, oam_data: u8, addr: u8) {
+    //     let oam_addr = self.oam_address.wrapping_add(addr);
+    //     self.primary_oam[oam_addr as usize] = oam_data.wrapping_add(
+    //         if oam_addr & 3 == 0 { 1 } else { 0 }
+    //     );
+    // }
 
     pub fn full_oam_dma_transfer(&mut self, source: &[u8]) {
         // Copy a page of CPU memory into the PPUs Primary OAM

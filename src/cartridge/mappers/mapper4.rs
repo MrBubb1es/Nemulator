@@ -150,7 +150,7 @@ impl Mapper for Mapper4 {
                 }
                 // Bank Data
                 else {
-                    let reg_idx = (self.bank_select & 0x07) as usize; // bro had an & 3 kill meee
+                    let reg_idx = (self.bank_select & 0x07) as usize;
 
                     if reg_idx == 0 || reg_idx == 1 {
                         self.registers[reg_idx] = data & 0xFE;

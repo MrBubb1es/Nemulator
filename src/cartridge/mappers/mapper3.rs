@@ -14,9 +14,9 @@ pub struct Mapper3 {
 impl Mapper for Mapper3 {
     fn init(&mut self, cart: Cartridge) {
         self.nt_mirror_type = if cart.header.hardwired_nametable {
-            NametableMirror::Horizontal
-        } else {
             NametableMirror::Vertical
+        } else {
+            NametableMirror::Horizontal
         };
 
         self.num_prg_banks = cart.prg_rom_banks();

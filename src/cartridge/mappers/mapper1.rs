@@ -1,6 +1,6 @@
 use crate::cartridge::{mapper::NametableMirror, Cartridge, Mapper};
 
-const PRG_RAM_SIZE: usize = 0x8000;
+const PRG_RAM_SIZE: usize = 0x2000;
 
 #[derive(Default)]
 pub struct Mapper1 {

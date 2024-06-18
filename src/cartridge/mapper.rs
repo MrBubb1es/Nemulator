@@ -2,18 +2,19 @@ use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::{default, rc::Rc};
 
-use crate::cartridge::mappers::Mapper2;
+use crate::cartridge::mappers::{Mapper2, Mapper4};
 
 use super::mappers::{Mapper0, Mapper1, Mapper3};
 use super::{cartridge::Header, Cartridge};
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum NametableMirror {
     #[default]
     Vertical,
     Horizontal,
     SingleScreenLower,
     SingleScreenUpper,
+    FourScreen,
 }
 
 /*
@@ -88,6 +89,15 @@ pub trait Mapper {
     fn get_nt_mirror_type(&self) -> NametableMirror;
     /// Resets the mapper to a known state. This happens whenever the NES system is reset.
     fn reset(&mut self) {}
+    /// This function is called every time the PPU completes a scanline. Not all
+    /// mappers are sensitive to scanline completions, so the default implementation
+    /// is to do nothing at all.
+    fn scanline_finished(&mut self) {}
+    /// Checks if the mapper is currently requesting an IRQ for the CPU. Not all
+    /// mappers have this capability, but MMC3 (mapper 4) does.
+    fn irq_requested(&self) -> bool { false }
+    /// Called when the CPU handles a mapper IRQ
+    fn irq_handled(&mut self) {}
 }
 
 pub fn mapper_from_cart(cart: Cartridge) -> Rc<RefCell<dyn Mapper>> {
@@ -98,6 +108,7 @@ pub fn mapper_from_cart(cart: Cartridge) -> Rc<RefCell<dyn Mapper>> {
         1 => Rc::new(RefCell::new(Mapper1::default())),
         2 => Rc::new(RefCell::new(Mapper2::default())),
         3 => Rc::new(RefCell::new(Mapper3::default())),
+        4 => Rc::new(RefCell::new(Mapper4::default())),
         _ => panic!("unimplemented mapper number {}", cart.header.mapper_num),
     };
 

@@ -232,6 +232,11 @@ impl Nes {
                 let p1_controller_state = self.p1_controller;
                 let p2_controller_state = self.p2_controller;
 
+                if self.get_mapper_mut().irq_requested() {
+                    self.get_cpu_mut().irq();
+                    self.get_mapper_mut().irq_handled();
+                }
+
                 cpu_cycled = self
                     .get_cpu_mut()
                     .cycle(p1_controller_state, p2_controller_state);

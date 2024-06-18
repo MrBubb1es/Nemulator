@@ -205,22 +205,7 @@ impl Ppu2C02 {
             self.draw_dot(frame);
         }
 
-        self.dot += 1;
-        if self.dot > 340 {
-            self.dot = 0;
-
-            self.scanline += 1;
-            if self.scanline > 261 {
-                self.scanline = 0;
-                self.frame_finished = true;
-
-                if self.odd_frame && self.rendering_enabled() {
-                    self.dot = 1; // Skip one cycle on odd frames if rendering
-                }
-
-                self.odd_frame = !self.odd_frame;
-            }
-        }
+        self.finish_dot();
     }
     
     /// Helper function to handle the memory accesses/internal register changes
@@ -1012,6 +997,30 @@ impl Ppu2C02 {
             NametableMirror::Vertical => { address & 0x07FF }
             NametableMirror::SingleScreenLower => { address & 0x03FF },
             NametableMirror::SingleScreenUpper => { (address & 0x03FF) + 0x400 },
+            _ => 0,
+        }
+    }
+
+    fn finish_dot(&mut self) {
+        self.dot += 1;
+        if self.dot > 340 {
+            self.dot = 0;
+
+            if self.rendering_enabled() && self.scanline < 240 {
+                self.mapper.borrow_mut().scanline_finished();
+            }
+
+            self.scanline += 1;
+            if self.scanline > 261 {
+                self.scanline = 0;
+                self.frame_finished = true;
+
+                if self.odd_frame && self.rendering_enabled() {
+                    self.dot = 1; // Skip one cycle on odd frames if rendering
+                }
+
+                self.odd_frame = !self.odd_frame;
+            }
         }
     }
 }

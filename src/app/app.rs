@@ -119,6 +119,8 @@ impl ApplicationHandler for NesApp {
 
         self.window.as_ref().unwrap().request_redraw();
 
+        self.paused = true;
+
         self.last_frame = std::time::Instant::now();
     }
 

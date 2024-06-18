@@ -219,6 +219,7 @@ impl Apu2A03 {
 
                 self.triangle_channel.linear_control = new_control;
                 self.triangle_channel.linear_reload = new_reload;
+                self.triangle_channel.counter_enabled = !new_control;
             }
 
             // Triangle Timer Low

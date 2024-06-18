@@ -284,16 +284,16 @@ impl TriangleChannel {
     }
 
     pub fn sample(&mut self, total_clocks: u64) -> f32 {
-        if self.linear_counter > 0 {
-            if self.length_counter > 0 || !self.counter_enabled {
-                let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
-    
-                let remainder = (time * self.freq).fract();
+        if self.linear_counter > 0 && self.timer_reload > 2 &&
+             (self.length_counter > 0 || !self.counter_enabled) {
 
-                let sequencer_idx = (32.0 * remainder) as usize;
+            let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
 
-                return TriangleChannel::SEQUENCER_LOOKUP[sequencer_idx];
-            }
+            let remainder = (time * self.freq).fract();
+
+            let sequencer_idx = (32.0 * remainder) as usize;
+
+            return TriangleChannel::SEQUENCER_LOOKUP[sequencer_idx];
         }
 
         0.0
@@ -309,7 +309,7 @@ impl TriangleChannel {
     }
 
     pub fn update_length_counter(&mut self) {
-        if !self.enabled {
+        if self.enabled {
             self.length_counter = 0;
         } else if self.length_counter > 0 && self.counter_enabled {
             self.length_counter -= 1;

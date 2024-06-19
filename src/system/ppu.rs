@@ -942,7 +942,7 @@ impl Ppu2C02 {
 
     fn get_nt_mirrored_address(&self, address: u16) -> u16 {
         match self.mapper.borrow().get_nt_mirror_type() {
-            NametableMirror::Horizontal => { (address & 0x03FF) | (if address > 0x2800 { 0x400 } else { 0 }) },
+            NametableMirror::Horizontal => { (address & 0x03FF) | (if address >= 0x2800 { 0x400 } else { 0 }) },
             NametableMirror::Vertical => { address & 0x07FF }
             NametableMirror::SingleScreenLower => { address & 0x03FF },
             NametableMirror::SingleScreenUpper => { (address & 0x03FF) + 0x400 },

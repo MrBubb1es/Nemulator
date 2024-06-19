@@ -115,7 +115,7 @@ impl Apu2A03 {
             // Pulse 1 Registers
             0x4000 => {
                 let new_duty_cycle = (data >> 6) & 3;
-                let new_halt = (data & 0x20) != 0;
+                let new_halt = (data & 0x20) != 0; // Also envelope's loop flag
                 let new_const_volume = (data & 0x10) != 0;
                 let new_volume = (data & 0x0F) as usize;
 
@@ -135,21 +135,21 @@ impl Apu2A03 {
             // Pulse 1 Sweeper
             0x4001 => {
                 let new_enable = (data & 0x80) != 0;
-                let new_period = ((data >> 4) & 7) as usize;
+                let new_reload_val = ((data >> 4) & 7) as usize;
                 let new_negate = (data & 0x08) != 0;
                 let new_shift = (data & 7) as usize;
 
-                self.pulse1_channel.sweeper_enabled = new_enable;
-                self.pulse1_channel.sweeper_divider_period = new_period;
-                self.pulse1_channel.sweeper_negate = new_negate;
-                self.pulse1_channel.sweeper_shift = new_shift;
-                self.pulse1_channel.sweeper_reload = true;
+                self.pulse1_channel.set_sweep_enable(new_enable);
+                self.pulse1_channel.set_sweep_period(new_reload_val);
+                self.pulse1_channel.set_sweep_negate_flag(new_negate);
+                self.pulse1_channel.set_sweep_shift(new_shift);
+                self.pulse1_channel.set_sweep_reload_flag(true);
             }
 
             // Pulse 1 Timer Low
             0x4002 => {
                 self.pulse1_channel.set_timer_reload(
-                    (self.pulse1_channel.timer_reload & 0x700) | data as usize
+                    (self.pulse1_channel.timer_reload() & 0x700) | data as usize
                 );
 
                 self.pulse1_channel.envelope.set_start_flag(true);
@@ -159,7 +159,7 @@ impl Apu2A03 {
             0x4003 => {
                 let new_counter_load = (data >> 3) as usize;
                 let new_timer_hi = (data & 0x7) as usize;
-                let timer_lo = self.pulse1_channel.timer_reload & 0xFF;
+                let timer_lo = self.pulse1_channel.timer_reload() & 0xFF;
                 let new_timer = (new_timer_hi << 8) | timer_lo;
 
                 self.pulse1_channel.length_counter.set_counter(new_counter_load);
@@ -190,21 +190,21 @@ impl Apu2A03 {
             // Pulse 2 Sweeper
             0x4005 => {
                 let new_enable = (data & 0x80) != 0;
-                let new_period = ((data >> 4) & 7) as usize;
+                let new_reload_val = ((data >> 4) & 7) as usize;
                 let new_negate = (data & 0x08) != 0;
                 let new_shift = (data & 7) as usize;
 
-                self.pulse2_channel.sweeper_enabled = new_enable;
-                self.pulse2_channel.sweeper_divider_period = new_period;    
-                self.pulse2_channel.sweeper_negate = new_negate;
-                self.pulse2_channel.sweeper_shift = new_shift;
-                self.pulse2_channel.sweeper_reload = true;
+                self.pulse2_channel.set_sweep_enable(new_enable);
+                self.pulse2_channel.set_sweep_period(new_reload_val);
+                self.pulse2_channel.set_sweep_negate_flag(new_negate);
+                self.pulse2_channel.set_sweep_shift(new_shift);
+                self.pulse2_channel.set_sweep_reload_flag(true);
             }
 
             // Pulse 2 Timer Low
             0x4006 => {
                 self.pulse2_channel.set_timer_reload(
-                    (self.pulse2_channel.timer_reload & 0x700) | data as usize
+                    (self.pulse2_channel.timer_reload() & 0x700) | data as usize
                 );
 
                 self.pulse2_channel.envelope.set_start_flag(true);
@@ -214,7 +214,7 @@ impl Apu2A03 {
             0x4007 => {
                 let new_counter_load = (data >> 3) as usize;
                 let new_timer_hi = (data & 0x7) as usize;
-                let timer_lo = self.pulse2_channel.timer_reload & 0xFF;
+                let timer_lo = self.pulse2_channel.timer_reload() & 0xFF;
                 let new_timer = (new_timer_hi << 8) | timer_lo;
 
                 self.pulse2_channel.length_counter.set_counter(new_counter_load);
@@ -227,7 +227,6 @@ impl Apu2A03 {
                 let new_control = (data & 0x80) != 0;
                 let new_reload = (data & 0x7F) as usize;
 
-                // 
                 self.triangle_channel.length_counter.set_halted(new_control);
                 self.triangle_channel.linear_counter.set_control_flag(new_control);
                 self.triangle_channel.linear_counter.set_reload_value(new_reload);
@@ -343,7 +342,7 @@ impl Apu2A03 {
         let pulse_sum = pulse1_sample + pulse2_sample;
         let pulse_out = (BIPPITY * pulse_sum) / (BOO + 100.0 * pulse_sum);
 
-        let magic_sample = ABRA * triangle_sample;// + KADABRA * noise_sample + ALAKAZAM * dmc_sample;
+        let magic_sample = ABRA * triangle_sample + KADABRA * noise_sample;// + ALAKAZAM * dmc_sample;
 
         let tnd_out = BOPPITY * magic_sample / (1.0 + 100.0 * magic_sample);
 
@@ -439,12 +438,12 @@ impl Apu2A03 {
         self.pulse1_channel.update_length_counter();
         self.pulse2_channel.update_length_counter();
         self.triangle_channel.update_length_counter();
-        // self.noise_channel.update_length_counter();
+        self.noise_channel.update_length_counter();
     }
 
     fn update_sweepers(&mut self) {
-        self.pulse1_channel.sweep_frame_update();
-        self.pulse2_channel.sweep_frame_update();
+        self.pulse1_channel.update_sweep();
+        self.pulse2_channel.update_sweep();
     }
 
     fn update_envelopes(&mut self) {

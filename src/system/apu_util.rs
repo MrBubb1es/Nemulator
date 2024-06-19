@@ -60,8 +60,9 @@ impl NesAudioStream {
     }
 }
 
-
+#[derive(Default)]
 pub enum NesChannel {
+    #[default]
     Pulse1,
     Pulse2,
     Triangle,
@@ -92,11 +93,13 @@ impl LengthCounter {
     pub fn update_count(&mut self) {
         if !self.channel_enabled {
             self.counter = 0;
-        } else if !self.halted { 
-            if self.counter > 0 {
-                self.counter -= 1;
-            } else {
-                self.silence_channel = true;
+        } else {
+            if !self.halted { 
+                if self.counter > 0 {
+                    self.counter -= 1;
+                } else {
+                    self.silence_channel = true;
+                }
             }
         }
     }
@@ -112,7 +115,7 @@ impl LengthCounter {
         self.halted = val;
     }
 
-    pub fn silence_channel(&self) -> bool {
+    pub fn is_silencing_channel(&self) -> bool {
         self.silence_channel
     }
 }
@@ -141,14 +144,14 @@ impl LinearCounter {
     }
 
     pub fn set_reload_value(&mut self, val: usize) {
-        self.counter = val;
+        self.reload_value = val;
     }
 
     pub fn set_reload_flag(&mut self, val: bool) {
-        self.control = val;
+        self.reload_flag = val;
     }
 
-    pub fn silence_channel(&self) -> bool {
+    pub fn is_silencing_channel(&self) -> bool {
         self.counter == 0
     }
 
@@ -216,29 +219,26 @@ impl VolumeEnvelope {
     }
 }
 
-pub struct Sweeper {
-    
-}
 
+#[derive(Default)]
 pub struct PulseChannel {
     channel_type: NesChannel,
 
     // Basic channel registers
-    pub timer_reload: usize,
+    timer_reload: usize,
 
+    enabled: bool,
     pub freq: f64,
-    pub enabled: bool,
     pub duty_cycle_percent: f64,
 
     // Sweeper registers
-    pub sweeper_divider: usize,
-    pub sweeper_divider_period: usize,
-    pub sweeper_enabled: bool,
-    pub sweeper_negate: bool,
-    pub sweeper_shift: usize,
-    pub sweeper_reload: bool,
-    target_period: usize,
-    sweeper_mute: bool,
+    sweep_enabled: bool,
+    sweep_negate: bool,
+    sweep_divider: usize,
+    sweep_reload_flag: bool,
+    sweep_reload_value: usize,
+    sweep_shift: usize,
+    sweep_target_period: usize,
 
     pub length_counter: LengthCounter,
     pub envelope: VolumeEnvelope
@@ -248,30 +248,17 @@ impl PulseChannel {
     pub fn new(channel_type: NesChannel) -> Self {
         Self {
             channel_type,
-            timer_reload: 0,
-            freq: 0.0,
-            enabled: false,
-            duty_cycle_percent: 0.0,
-            sweeper_divider: 0,
-            sweeper_divider_period: 0,
-            sweeper_enabled: false,
-            sweeper_negate: false,
-            sweeper_shift: 0,
-            sweeper_reload: false,
-            target_period: 0,
-            sweeper_mute: false,
-            length_counter: LengthCounter::default(),
-            envelope: VolumeEnvelope::default(),
+            ..Default::default()
         }
     }
 
     pub fn sample(&mut self, total_clocks: u64) -> f32 {
         let mut sample = 0.0;
 
-        self.sweep_continuous_update();
+        if self.enabled {
+            if !self.length_counter.is_silencing_channel() &&
+               !self.sweep_is_muting_channel() {
 
-        if self.enabled && !self.sweeper_mute {
-            if !self.length_counter.silence_channel() {
                 let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
     
                 let remainder = (time * self.freq).fract();
@@ -288,58 +275,60 @@ impl PulseChannel {
         sample * self.envelope.output() as f32
     }
 
-    pub fn sweep_continuous_update(&mut self) {
-        let change_amount = self.timer_reload >> self.sweeper_shift;
+    // https://www.nesdev.org/wiki/APU_Sweep
+    pub fn update_sweep(&mut self) {
+        if self.sweep_divider == 0 && self.sweep_enabled && self.sweep_shift > 0 {
+            if !self.sweep_is_muting_channel() {
+                self.set_timer_reload(self.sweep_target_period);
+            }
+        }
 
-        self.target_period = match self.channel_type {
-            NesChannel::Pulse1 => {
-                if self.sweeper_negate {
-                    ((self.timer_reload as isize) - (change_amount as isize + 1)).max(0) as usize
-                } else {
-                    self.timer_reload + change_amount
-                }
-            },
-            NesChannel::Pulse2 => {
-                if self.sweeper_negate {
-                    ((self.timer_reload as isize) - (change_amount as isize)).max(0) as usize
-                } else {
-                    self.timer_reload + change_amount
-                }
-            },
-            _ => {panic!("Only pulse 1 and pulse 2 channels should be sweeping in the pulse channel struct")}
-        };
-
-        if self.timer_reload < 8 || self.target_period > 0x7FF {
-            self.sweeper_mute = true;
+        if self.sweep_divider == 0 || self.sweep_reload_flag {
+            self.sweep_divider = self.sweep_reload_value;
+            self.sweep_reload_flag = false;
         } else {
-            self.sweeper_mute = false;
+            self.sweep_divider -= 1;
         }
     }
 
-    // https://www.nesdev.org/wiki/APU_Sweep
-    pub fn sweep_frame_update(&mut self) {
-        self.sweep_continuous_update();
+    fn update_target_period(&mut self) {
+        let mut delta = (self.timer_reload as isize) >> self.sweep_shift;
 
-        if self.sweeper_divider == 0 && self.sweeper_enabled && self.sweeper_shift != 0 && !self.sweeper_mute {
-            self.set_timer_reload(self.target_period);
-        } else {
-            if self.sweeper_divider == 0 || self.sweeper_reload {
-                self.sweeper_divider = self.sweeper_divider_period;
-                self.sweeper_reload = false;
-            } else {
-                self.sweeper_divider -= 1;
+        if self.sweep_negate {
+            // Pulse channels 1 and 2 handle negation differently
+            match self.channel_type {
+                NesChannel::Pulse1 => {
+                    delta = -delta - 1;
+                }
+
+                NesChannel::Pulse2 => {
+                    delta = -delta;
+                }
+
+                _ => { unreachable!("Only Pulse 1 & Pulse 2 should have a sweep unit"); }
             }
         }
+
+        self.sweep_target_period = (self.timer_reload as isize + delta).max(0) as usize;
     }
 
     pub fn update_length_counter(&mut self) {
         self.length_counter.update_count()
     }
 
+    fn sweep_is_muting_channel(&self) -> bool {
+        self.sweep_target_period > 0x7FF || self.timer_reload < 8
+    }
+
+    pub fn timer_reload(&self) -> usize {
+        self.timer_reload
+    }
 
     pub fn set_timer_reload(&mut self, val: usize) {
         self.timer_reload = val;
         self.freq = CPU_FREQ / (16.0 * (val + 1) as f64);
+
+        self.update_target_period();
     }
 
     pub fn set_enable(&mut self, val: bool) {
@@ -347,14 +336,33 @@ impl PulseChannel {
 
         self.length_counter.channel_enabled = val;
     }
+
+    pub fn set_sweep_enable(&mut self, val: bool) {
+        self.sweep_enabled = val;
+    }
+
+    pub fn set_sweep_period(&mut self, val: usize) {
+        self.sweep_reload_value = val;
+    }
+
+    pub fn set_sweep_shift(&mut self, val: usize) {
+        self.sweep_shift = val;
+    }
+
+    pub fn set_sweep_negate_flag(&mut self, val: bool) {
+        self.sweep_negate = val;
+    }
+
+    pub fn set_sweep_reload_flag(&mut self, val: bool) {
+        self.sweep_reload_flag = val;
+    }
+
 }
 
 
 
 #[derive(Default)]
 pub struct TriangleChannel {
-    // Basic channel registers
-    // pub timer: usize,
     pub timer_reload: usize,
     pub freq: f64,
     pub enabled: bool,
@@ -386,8 +394,8 @@ impl TriangleChannel {
             return 0.0;
         }
 
-        if !self.linear_counter.silence_channel() && 
-           !self.length_counter.silence_channel() {
+        if !self.linear_counter.is_silencing_channel() && 
+           !self.length_counter.is_silencing_channel() {
 
             let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
 
@@ -395,7 +403,7 @@ impl TriangleChannel {
 
             let sequencer_idx = (32.0 * remainder) as usize;
 
-            return TriangleChannel::SEQUENCER_LOOKUP[sequencer_idx];
+            return Self::SEQUENCER_LOOKUP[sequencer_idx];
         }
 
         0.0
@@ -458,7 +466,7 @@ impl NoiseChannel {
     pub fn sample(&mut self) -> f32 {
         let mut sample = 0.0;
 
-        if !self.length_counter.silence_channel() {
+        if !self.length_counter.is_silencing_channel() {
             if self.rand_shifter & 1 == 0 {
                 // The sample is in the range [0.0, 15.0]
                 // Just outputs the envelope volume or 0
@@ -477,6 +485,10 @@ impl NoiseChannel {
 
         self.rand_shifter >>= 1;
         self.rand_shifter |= new_bit << 14;
+    }
+
+    pub fn update_length_counter(&mut self) {
+        self.length_counter.update_count();
     }
 
     pub fn update_period(&mut self) {

@@ -5,16 +5,6 @@ use rodio::Source;
 
 use super::apu::{CPU_CYCLE_PERIOD, CPU_FREQ, NES_AUDIO_FREQUENCY};
 
-/// https://www.nesdev.org/wiki/APU_Length_Counter#Table_structure
-/// Lookup table for the lengths of the notes given a 5 bit number
-const PULSE_COUNTER_LOOKUP: [usize; 32] = [
-    10, 254, 20, 2, 40, 4, 80, 6, 
-    160, 8, 60, 10, 14, 12, 26, 14,
-    12, 16, 24, 18, 48, 20, 96, 22,
-    192, 24, 72, 26, 16, 28, 32, 30
-];
-
-
 #[derive(Debug, Default, Clone)]
 pub struct NesAudioStream {
     // Using an arc mutex vecdeque allows us to directly queue up samples within
@@ -79,6 +69,157 @@ pub enum NesChannel {
     DMC,
 }
 
+
+#[derive(Default)]
+pub struct LengthCounter {
+    halted: bool,
+    counter: usize,
+
+    channel_enabled: bool,
+    silence_channel: bool,
+}
+
+impl LengthCounter {
+    /// https://www.nesdev.org/wiki/APU_Length_Counter#Table_structure
+    /// Lookup table for the lengths of the notes given a 5 bit number
+    const LENGTH_LOOKUP: [usize; 32] = [
+        10, 254, 20, 2, 40, 4, 80, 6, 
+        160, 8, 60, 10, 14, 12, 26, 14,
+        12, 16, 24, 18, 48, 20, 96, 22,
+        192, 24, 72, 26, 16, 28, 32, 30
+    ];
+
+    pub fn update_count(&mut self) {
+        if !self.channel_enabled {
+            self.counter = 0;
+        } else if !self.halted { 
+            if self.counter > 0 {
+                self.counter -= 1;
+            } else {
+                self.silence_channel = true;
+            }
+        }
+    }
+
+    pub fn set_counter(&mut self, val: usize) {
+        if self.channel_enabled {
+            self.counter = Self::LENGTH_LOOKUP[val];
+            self.silence_channel = false;
+        }
+    }
+
+    pub fn set_halted(&mut self, val: bool) {
+        self.halted = val;
+    }
+
+    pub fn silence_channel(&self) -> bool {
+        self.silence_channel
+    }
+}
+
+#[derive(Default)]
+pub struct LinearCounter {
+    control: bool,
+    reload_flag: bool,
+    reload_value: usize,
+    counter: usize,
+}
+
+impl LinearCounter {
+    pub fn update_count(&mut self) {
+        if self.reload_flag {
+            self.counter = self.reload_value;
+        } else {
+            if self.counter > 0 {
+                self.counter -= 1;
+            }
+        }
+
+        if !self.control {
+            self.reload_flag = false;
+        }
+    }
+
+    pub fn set_reload_value(&mut self, val: usize) {
+        self.counter = val;
+    }
+
+    pub fn set_reload_flag(&mut self, val: bool) {
+        self.control = val;
+    }
+
+    pub fn silence_channel(&self) -> bool {
+        self.counter == 0
+    }
+
+    pub fn set_control_flag(&mut self, val: bool) {
+        self.control = val;
+    }
+}
+
+#[derive(Default)]
+pub struct VolumeEnvelope {
+    start: bool,
+    const_volume: bool,
+    divider: usize,
+    decay: usize,
+    volume: usize, // Volume/Period
+    loop_flag: bool,
+}
+
+// https://www.nesdev.org/wiki/APU_Envelope
+impl VolumeEnvelope {
+    pub fn update_output(&mut self) {
+        if self.start {
+            self.decay = 15;
+            self.start = false;
+            self.divider = self.volume;
+        } else {
+            if self.divider == 0 {
+                self.divider = self.volume;
+                
+                if self.decay == 0 {
+                    if self.loop_flag {
+                        self.decay = 15;
+                    }
+                } else {
+                    self.decay -= 1;
+                }
+            } else {
+                self.divider -= 1;
+            }
+        }
+    }
+
+    pub fn output(&self) -> usize {
+        if self.const_volume {
+            self.volume
+        } else {
+            self.decay
+        }
+    }
+
+    pub fn set_start_flag(&mut self, val: bool) {
+        self.start = val;
+    }
+
+    pub fn set_const_volume(&mut self, val: bool) {
+        self.const_volume = val;
+    }
+
+    pub fn set_volume(&mut self, val: usize) {
+        self.volume = val;
+    }
+
+    pub fn set_loop_flag(&mut self, val: bool) {
+        self.loop_flag = val;
+    }
+}
+
+pub struct Sweeper {
+    
+}
+
 pub struct PulseChannel {
     channel_type: NesChannel,
 
@@ -88,11 +229,6 @@ pub struct PulseChannel {
     pub freq: f64,
     pub enabled: bool,
     pub duty_cycle_percent: f64,
-
-    pub length_counter: usize,
-    pub counter_enabled: bool,
-
-    pub constant_volume: bool,
 
     // Sweeper registers
     pub sweeper_divider: usize,
@@ -104,12 +240,8 @@ pub struct PulseChannel {
     target_period: usize,
     sweeper_mute: bool,
 
-    // Envelope registers
-    pub envelope_start: bool,
-    pub envelope_divider: usize,
-    pub envelope_decay: usize,
-    pub envelope_volume: usize,
-    pub envelope_loop: bool,
+    pub length_counter: LengthCounter,
+    pub envelope: VolumeEnvelope
 }
 
 impl PulseChannel {
@@ -120,9 +252,6 @@ impl PulseChannel {
             freq: 0.0,
             enabled: false,
             duty_cycle_percent: 0.0,
-            length_counter: 0,
-            counter_enabled: false,
-            constant_volume: false,
             sweeper_divider: 0,
             sweeper_divider_period: 0,
             sweeper_enabled: false,
@@ -131,11 +260,8 @@ impl PulseChannel {
             sweeper_reload: false,
             target_period: 0,
             sweeper_mute: false,
-            envelope_start: false,
-            envelope_divider: 0,
-            envelope_decay: 0,
-            envelope_volume: 0,
-            envelope_loop: false,
+            length_counter: LengthCounter::default(),
+            envelope: VolumeEnvelope::default(),
         }
     }
 
@@ -145,7 +271,7 @@ impl PulseChannel {
         self.sweep_continuous_update();
 
         if self.enabled && !self.sweeper_mute {
-            if self.length_counter > 0 || !self.counter_enabled {
+            if !self.length_counter.silence_channel() {
                 let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
     
                 let remainder = (time * self.freq).fract();
@@ -158,12 +284,8 @@ impl PulseChannel {
             }
         }
 
-        // The sample is scaled to be a value in the range [0.0, 15.0]
-        sample * if self.constant_volume {
-            self.envelope_volume as f32
-        } else {
-            self.envelope_decay as f32
-        }
+        // The sample is scaled by the envelope to be a value in the range [0.0, 15.0]
+        sample * self.envelope.output() as f32
     }
 
     pub fn sweep_continuous_update(&mut self) {
@@ -210,44 +332,20 @@ impl PulseChannel {
         }
     }
 
-    // https://www.nesdev.org/wiki/APU_Envelope
-    pub fn update_envelope(&mut self) {
-        if self.envelope_start {
-            self.envelope_start = false;
-            self.envelope_decay = 0xF;
-            self.envelope_divider = self.envelope_volume;
-        } else {
-            if self.envelope_divider == 0 {
-                self.envelope_divider = self.envelope_volume;
-
-                if self.envelope_decay != 0 {
-                    self.envelope_decay -= 1;
-                } else {
-                    if self.envelope_loop {
-                        self.envelope_decay = 0xF;
-                    }
-                }
-            } else {
-                self.envelope_divider -= 1;
-            }
-        }
+    pub fn update_length_counter(&mut self) {
+        self.length_counter.update_count()
     }
+
 
     pub fn set_timer_reload(&mut self, val: usize) {
         self.timer_reload = val;
         self.freq = CPU_FREQ / (16.0 * (val + 1) as f64);
     }
 
-    pub fn set_length_counter(&mut self, data: u8) {
-        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
-    }
+    pub fn set_enable(&mut self, val: bool) {
+        self.enabled = val;
 
-    pub fn update_counter(&mut self) {
-        if !self.enabled {
-            self.length_counter = 0;
-        } else if self.length_counter > 0 && self.counter_enabled {
-            self.length_counter -= 1;
-        }
+        self.length_counter.channel_enabled = val;
     }
 }
 
@@ -261,13 +359,8 @@ pub struct TriangleChannel {
     pub freq: f64,
     pub enabled: bool,
 
-    pub length_counter: usize,
-    pub counter_enabled: bool,
-
-    pub linear_counter: usize,
-    pub linear_reload: usize,
-    pub linear_loop: bool,
-    pub linear_control: bool,
+    pub length_counter: LengthCounter,
+    pub linear_counter: LinearCounter,
 }
 
 impl TriangleChannel {
@@ -284,8 +377,17 @@ impl TriangleChannel {
     }
 
     pub fn sample(&mut self, total_clocks: u64) -> f32 {
-        if self.linear_counter > 0 && self.timer_reload > 2 &&
-             (self.length_counter > 0 || !self.counter_enabled) {
+        // This is not how the NES works, but some games set the triangle timer
+        // to 0 to "silence" the channel. This doesn't actually silence it, however,
+        // and instead an extremely high frequency wave is produced. At the cost
+        // of accuracy, we eliminate these frequencies for the sake of the player's 
+        // eardrums :)
+        if self.timer_reload <= 2 || !self.enabled {
+            return 0.0;
+        }
+
+        if !self.linear_counter.silence_channel() && 
+           !self.length_counter.silence_channel() {
 
             let time = total_clocks as f64 * CPU_CYCLE_PERIOD;
 
@@ -299,33 +401,23 @@ impl TriangleChannel {
         0.0
     }
 
+    pub fn update_linear_counter(&mut self) {
+        self.linear_counter.update_count();
+    }
+
+    pub fn update_length_counter(&mut self) {
+        self.length_counter.update_count();
+    }
+
     pub fn set_timer_reload(&mut self, val: usize) {
         self.timer_reload = val;
         self.freq = CPU_FREQ / (32.0 * (val + 1) as f64);
     }
 
-    pub fn set_length_counter(&mut self, data: u8) {
-        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
-    }
+    pub fn set_enable(&mut self, val: bool) {
+        self.enabled = val;
 
-    pub fn update_length_counter(&mut self) {
-        if self.enabled {
-            self.length_counter = 0;
-        } else if self.length_counter > 0 && self.counter_enabled {
-            self.length_counter -= 1;
-        }
-    }
-
-    pub fn update_linear_counter(&mut self) {
-        if !self.linear_loop {
-            self.linear_counter = self.linear_reload;
-        } else if self.linear_counter > 0 {
-            self.linear_counter -= 1;
-        }
-
-        if !self.linear_control {
-            self.linear_loop = false;
-        }
+        self.length_counter.channel_enabled = val;
     }
 }
 
@@ -341,17 +433,8 @@ pub struct NoiseChannel {
     pub enabled: bool,
     pub mode: bool,
 
-    pub length_counter: usize,
-    pub counter_enabled: bool,
-
-    pub constant_volume: bool,
-
-    // Envelope registers
-    pub envelope_start: bool,
-    pub envelope_divider: usize,
-    pub envelope_decay: usize,
-    pub envelope_volume: usize,
-    pub envelope_loop: bool,
+    pub length_counter: LengthCounter,
+    pub envelope: VolumeEnvelope,
 }
 
 impl NoiseChannel {
@@ -367,53 +450,23 @@ impl NoiseChannel {
             period: 0,
             enabled: false,
             mode: false,
-            length_counter: 0,
-            counter_enabled: false,
-            constant_volume: false,
-            envelope_start: false,
-            envelope_divider: 0,
-            envelope_decay: 0,
-            envelope_volume: 0,
-            envelope_loop: false,
+            length_counter: LengthCounter::default(),
+            envelope: VolumeEnvelope::default(),
         }
     }
 
     pub fn sample(&mut self) -> f32 {
-        if self.length_counter > 0 || !self.counter_enabled {
+        let mut sample = 0.0;
+
+        if !self.length_counter.silence_channel() {
             if self.rand_shifter & 1 == 0 {
                 // The sample is in the range [0.0, 15.0]
-                if self.constant_volume {
-                    return self.envelope_volume as f32;
-                } else {
-                    return self.envelope_decay as f32;
-                }
+                // Just outputs the envelope volume or 0
+                sample = self.envelope.output() as f32;
             }
         }
 
-        0.0
-    }
-
-    // https://www.nesdev.org/wiki/APU_Envelope
-    pub fn update_envelope(&mut self) {
-        if self.envelope_start {
-            self.envelope_start = false;
-            self.envelope_decay = 0xF;
-            self.envelope_divider = self.envelope_volume;
-        } else {
-            if self.envelope_divider == 0 {
-                self.envelope_divider = self.envelope_volume;
-
-                if self.envelope_decay != 0 {
-                    self.envelope_decay -= 1;
-                } else {
-                    if self.envelope_loop {
-                        self.envelope_decay = 0xF;
-                    }
-                }
-            } else {
-                self.envelope_divider -= 1;
-            }
-        }
+        sample
     }
 
     fn update_shifter(&mut self) {
@@ -436,21 +489,15 @@ impl NoiseChannel {
         }
     }
 
-    pub fn set_length_counter(&mut self, data: u8) {
-        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
-    }
-
     pub fn set_period(&mut self, data: u8) {
-        self.period_reload = NoiseChannel::PERIOD_LOOKUP[data as usize];
+        self.period_reload = Self::PERIOD_LOOKUP[data as usize];
         self.period = self.period_reload;
     }
 
-    pub fn update_counter(&mut self) {
-        if !self.enabled {
-            self.length_counter = 0;
-        } else if self.length_counter > 0 && self.counter_enabled {
-            self.length_counter -= 1;
-        }
+    pub fn set_enable(&mut self, val: bool) {
+        self.enabled = val;
+
+        self.length_counter.channel_enabled = val;
     }
 }
 
@@ -463,8 +510,7 @@ pub struct DmcChannel {
     pub timer_reload: usize,
     pub enabled: bool,
 
-    pub length_counter: usize,
-    pub counter_enabled: bool,
+    pub length_counter: LengthCounter,
 
     pub bytes_remaining: usize,
     pub sample_len: usize,
@@ -489,10 +535,6 @@ impl DmcChannel {
 
     pub fn sample(&mut self) -> f32 {
         self.output as f32
-    }
-
-    pub fn set_length_counter(&mut self, data: u8) {
-        self.length_counter = PULSE_COUNTER_LOOKUP[data as usize];
     }
 
     pub fn set_timer_reload(&mut self, data: u8) {
@@ -521,13 +563,5 @@ impl DmcChannel {
         }
 
         need_new_sample_byte
-    }
-
-    pub fn update_length_counter(&mut self) {
-        if !self.enabled {
-            self.length_counter = 0;
-        } else if self.length_counter > 0 && self.counter_enabled {
-            self.length_counter -= 1;
-        }
     }
 }

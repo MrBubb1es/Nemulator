@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::app::draw::chars::S;
 
 use super::apu_util::{
-    NesChannel, NoiseChannel, PulseChannel, TriangleChannel
+    DmcChannel, NesChannel, NoiseChannel, PulseChannel, TriangleChannel
 };
 
 pub const NES_AUDIO_FREQUENCY: u32 = 44100; // 44.1 KiHz
@@ -32,6 +32,7 @@ pub struct Apu2A03 {
     pulse2_channel: PulseChannel,
     triangle_channel: TriangleChannel,
     noise_channel: NoiseChannel,
+    dmc_channel: DmcChannel,
 
     frame_sequence: bool,
     disable_frame_interrupt: bool,
@@ -61,6 +62,7 @@ impl Apu2A03 {
             pulse2_channel: PulseChannel::new(NesChannel::Pulse2),
             triangle_channel: TriangleChannel::default(),
             noise_channel: NoiseChannel::new(),
+            dmc_channel: DmcChannel::new(),
 
             frame_sequence: false,
             disable_frame_interrupt: false,
@@ -113,11 +115,10 @@ impl Apu2A03 {
             // Pulse 1 Registers
             0x4000 => {
                 let new_duty_cycle = (data >> 6) & 3;
-                let new_enable = (data & 0x20) == 0;
+                let new_halt = (data & 0x20) != 0;
                 let new_const_volume = (data & 0x10) != 0;
                 let new_volume = (data & 0x0F) as usize;
 
-                self.pulse1_channel.counter_enabled = new_enable;
                 self.pulse1_channel.duty_cycle_percent = match new_duty_cycle {
                     0 => 0.125,
                     1 => 0.25,
@@ -125,9 +126,10 @@ impl Apu2A03 {
                     3 => 0.75,
                     _ => { unreachable!("Holy wack unlyrical lyrics, Batman!"); }
                 };
-                self.pulse1_channel.constant_volume = new_const_volume;
-                self.pulse1_channel.envelope_volume = new_volume;
-                self.pulse1_channel.envelope_start = true;
+                self.pulse1_channel.length_counter.set_halted(new_halt);
+                self.pulse1_channel.envelope.set_loop_flag(new_halt);
+                self.pulse1_channel.envelope.set_const_volume(new_const_volume);
+                self.pulse1_channel.envelope.set_volume(new_volume);
             }
 
             // Pulse 1 Sweeper
@@ -149,26 +151,29 @@ impl Apu2A03 {
                 self.pulse1_channel.set_timer_reload(
                     (self.pulse1_channel.timer_reload & 0x700) | data as usize
                 );
+
+                self.pulse1_channel.envelope.set_start_flag(true);
             }
 
             // Pulse 1 Timer High & Length Counter
             0x4003 => {
-                self.pulse1_channel.set_timer_reload(
-                    (self.pulse1_channel.timer_reload & 0xFF) | (((data & 7) as usize) << 8)
-                );
+                let new_counter_load = (data >> 3) as usize;
+                let new_timer_hi = (data & 0x7) as usize;
+                let timer_lo = self.pulse1_channel.timer_reload & 0xFF;
+                let new_timer = (new_timer_hi << 8) | timer_lo;
 
-                self.pulse1_channel.set_length_counter(data >> 3);
-                self.pulse1_channel.envelope_start = true;
+                self.pulse1_channel.length_counter.set_counter(new_counter_load);
+                self.pulse1_channel.set_timer_reload(new_timer);
+                self.pulse1_channel.envelope.set_start_flag(true);
             }
 
             // Pulse 2 Registers
             0x4004 => {
                 let new_duty_cycle = (data >> 6) & 3;
-                let new_enable = (data & 0x20) == 0;
+                let new_halt = (data & 0x20) != 0;
                 let new_const_volume = (data & 0x10) != 0;
                 let new_volume = (data & 0x0F) as usize;
 
-                self.pulse2_channel.counter_enabled = new_enable;
                 self.pulse2_channel.duty_cycle_percent = match new_duty_cycle {
                     0 => 0.125,
                     1 => 0.25,
@@ -176,9 +181,10 @@ impl Apu2A03 {
                     3 => 0.75,
                     _ => { unreachable!("Holy wack unlyrical lyrics, Batman!"); }
                 };
-                self.pulse2_channel.constant_volume = new_const_volume;
-                self.pulse2_channel.envelope_volume = new_volume;
-                self.pulse2_channel.envelope_start = true;
+                self.pulse2_channel.length_counter.set_halted(new_halt);
+                self.pulse2_channel.envelope.set_loop_flag(new_halt);
+                self.pulse2_channel.envelope.set_const_volume(new_const_volume);
+                self.pulse2_channel.envelope.set_volume(new_volume);
             }
 
             // Pulse 2 Sweeper
@@ -200,16 +206,20 @@ impl Apu2A03 {
                 self.pulse2_channel.set_timer_reload(
                     (self.pulse2_channel.timer_reload & 0x700) | data as usize
                 );
+
+                self.pulse2_channel.envelope.set_start_flag(true);
             }
 
             // Pulse 2 Timer High & Length Counter
             0x4007 => {
-                self.pulse2_channel.set_timer_reload(
-                    (self.pulse2_channel.timer_reload & 0xFF) | (((data & 7) as usize) << 8)
-                );
+                let new_counter_load = (data >> 3) as usize;
+                let new_timer_hi = (data & 0x7) as usize;
+                let timer_lo = self.pulse2_channel.timer_reload & 0xFF;
+                let new_timer = (new_timer_hi << 8) | timer_lo;
 
-                self.pulse2_channel.set_length_counter(data >> 3);
-                self.pulse2_channel.envelope_start = true;
+                self.pulse2_channel.length_counter.set_counter(new_counter_load);
+                self.pulse2_channel.set_timer_reload(new_timer);
+                self.pulse2_channel.envelope.set_start_flag(true);
             }
 
             // Triangle Linear counter
@@ -217,9 +227,10 @@ impl Apu2A03 {
                 let new_control = (data & 0x80) != 0;
                 let new_reload = (data & 0x7F) as usize;
 
-                self.triangle_channel.linear_control = new_control;
-                self.triangle_channel.linear_reload = new_reload;
-                // self.triangle_channel.counter_enabled = new_control;
+                // 
+                self.triangle_channel.length_counter.set_halted(new_control);
+                self.triangle_channel.linear_counter.set_control_flag(new_control);
+                self.triangle_channel.linear_counter.set_reload_value(new_reload);
             }
 
             // Triangle Timer Low
@@ -231,26 +242,28 @@ impl Apu2A03 {
 
             // Triangle Length counter & Timer High
             0x400B => {
-                self.triangle_channel.set_timer_reload(
-                    (self.triangle_channel.timer_reload & 0xFF) | (((data & 7) as usize) << 8)
-                );
+                let new_timer_hi = (data & 0x7) as usize;
+                let timer_lo = self.triangle_channel.timer_reload & 0xFF;
+                let new_timer = (new_timer_hi << 8) | timer_lo;
+                
+                self.triangle_channel.set_timer_reload(new_timer);
 
-                self.triangle_channel.set_length_counter(data >> 3);
-                self.triangle_channel.linear_loop = true;
+                self.triangle_channel.length_counter.set_counter((data >> 3) as usize);
+                self.triangle_channel.linear_counter.set_reload_flag(true);
             }
 
             // Noise Length Counter & Volume Envelope
             0x400C => {
-                let new_enable = (data & 0x20) == 0;
+                let new_halt = (data & 0x20) != 0;
                 let new_const_volume = (data & 0x10) != 0;
                 let new_volume = (data & 0x0F) as usize;
 
                 // new_enable is also envelope_loop, idk if it needs to be flipped or no
 
-                self.noise_channel.envelope_loop = !new_enable;
-                self.noise_channel.counter_enabled = new_enable;
-                self.noise_channel.constant_volume = new_const_volume;
-                self.noise_channel.envelope_volume = new_volume;
+                self.noise_channel.length_counter.set_halted(new_halt);
+                self.noise_channel.envelope.set_loop_flag(new_halt);
+                self.noise_channel.envelope.set_const_volume(new_const_volume);
+                self.noise_channel.envelope.set_volume(new_volume);
             }
 
             // Noise Channel Mode & Period
@@ -264,13 +277,14 @@ impl Apu2A03 {
 
             // Noise Channel Length counter
             0x400F => {
-                let new_counter = (data >> 3) as usize;
+                let new_counter_load = (data >> 3) as usize;
 
-                self.noise_channel.length_counter = new_counter;
+                self.noise_channel.length_counter.set_counter(new_counter_load);
+                self.noise_channel.envelope.set_start_flag(true);
+            }
 
-                self.pulse1_channel.envelope_start = true;
-                self.pulse2_channel.envelope_start = true;
-                self.noise_channel.envelope_start = true;
+            0x4011 => {
+                self.dmc_channel.output = data & 0x7F;
             }
 
             // Channel enable register
@@ -280,10 +294,10 @@ impl Apu2A03 {
                 let triangle_enabled = (data & 0x04) != 0;
                 let noise_enabled = (data & 0x08) != 0;
 
-                self.pulse1_channel.enabled = pulse1_enabled;
-                self.pulse2_channel.enabled = pulse2_enabled;
-                self.triangle_channel.enabled = triangle_enabled;
-                self.noise_channel.enabled = noise_enabled;
+                self.pulse1_channel.set_enable(pulse1_enabled);
+                self.pulse2_channel.set_enable(pulse2_enabled);
+                self.triangle_channel.set_enable(triangle_enabled);
+                self.noise_channel.set_enable(noise_enabled);
             }
 
             // Frame update mode & frame interrupt register
@@ -308,6 +322,7 @@ impl Apu2A03 {
         let pulse2_sample = self.pulse2_channel.sample(self.clocks);
         let triangle_sample = self.triangle_channel.sample(self.clocks);
         let noise_sample = self.noise_channel.sample();
+        let dmc_sample = self.dmc_channel.sample();
 
         // There are a lot of magic numbers in this calculation. They are pulled 
         // from the nesdev wiki formulas on this page:
@@ -328,7 +343,7 @@ impl Apu2A03 {
         let pulse_sum = pulse1_sample + pulse2_sample;
         let pulse_out = (BIPPITY * pulse_sum) / (BOO + 100.0 * pulse_sum);
 
-        let magic_sample = ABRA * triangle_sample + KADABRA * noise_sample;
+        let magic_sample = ABRA * triangle_sample;// + KADABRA * noise_sample + ALAKAZAM * dmc_sample;
 
         let tnd_out = BOPPITY * magic_sample / (1.0 + 100.0 * magic_sample);
 
@@ -421,10 +436,10 @@ impl Apu2A03 {
     }
 
     fn update_length_counters(&mut self) {
-        self.pulse1_channel.update_counter();
-        self.pulse2_channel.update_counter();
+        self.pulse1_channel.update_length_counter();
+        self.pulse2_channel.update_length_counter();
         self.triangle_channel.update_length_counter();
-        self.noise_channel.update_counter();
+        // self.noise_channel.update_length_counter();
     }
 
     fn update_sweepers(&mut self) {
@@ -433,9 +448,9 @@ impl Apu2A03 {
     }
 
     fn update_envelopes(&mut self) {
-        self.pulse1_channel.update_envelope();
-        self.pulse2_channel.update_envelope();
-        self.noise_channel.update_envelope()
+        self.pulse1_channel.envelope.update_output();
+        self.pulse2_channel.envelope.update_output();
+        self.noise_channel.envelope.update_output()
     }
 
     pub fn trigger_irq(&self) -> bool {

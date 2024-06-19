@@ -856,10 +856,6 @@ impl Ppu2C02 {
     /// Fetches the next byte of background tile nametable ids and stores it in
     /// an internal buffer.
     fn load_nt_buffer(&mut self) {
-        if self.scanline == 120 && self.dot > 200 {
-            println!("DOT {}: Reading next tile data from NT ${:04X}", self.dot, 0x2000 | (self.v_val() & 0x0FFF));
-        }
-
         self.bg_next_tile_nt_addr = self.ppu_read(0x2000 | (self.v_val() & 0x0FFF));
     }
     /// Fetches the next byte of background tile attributes and stores it in

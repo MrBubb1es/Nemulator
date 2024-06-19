@@ -231,10 +231,6 @@ impl Ppu2C02 {
                     0 => { 
                         self.load_shift_regs();
                         self.load_nt_buffer();
-
-                        // if self.sprites_found != 0 {
-                        //     dbg!(self.scanline, self.sprites_found);
-                        // }
                     },
                     2 => { self.load_attrib_buffer(); },
                     4 => { self.load_bg_lsb_buffer(); },
@@ -250,10 +246,12 @@ impl Ppu2C02 {
             },
             257 => {
                 self.update_shift_regs();
-                self.load_nt_buffer(); // fixed: wasn't loading nt buffer here
+                self.load_shift_regs();
+                self.load_nt_buffer();
                 self.load_shift_regs();
                 self.transfer_x_data();
             },
+
             338 | 340 => {
                 self.load_nt_buffer();
             },
@@ -327,7 +325,8 @@ impl Ppu2C02 {
         let screen_pixel_x = self.dot - 1;
 
         // Get Background Pixel Data
-        if self.mask.draw_bg() == 1 {
+        if self.mask.draw_bg() == 1 && (self.mask.draw_bg_left() == 1 || 
+                                        screen_pixel_x >= 8) { // THANK YOU REDDIT GRANDMASTERS https://www.reddit.com/r/programming/comments/5y64b9/why_do_some_nes_game_exhibit_artifacts_at_the/
             let bg_pix_hi = (self.bg_tile_nt_hi >> (15 - self.fine_x)) & 1;
             let bg_pix_lo = (self.bg_tile_nt_lo >> (15 - self.fine_x)) & 1;
 
@@ -340,7 +339,8 @@ impl Ppu2C02 {
 
         
         // Get Foreground/Sprite Pixel Data (on scanlines > 0)
-        if self.scanline > 0 && self.mask.draw_sprites() == 1 {
+        if self.scanline > 0 && self.mask.draw_sprites() == 1 &&
+           (self.mask.draw_spr_left() == 1 || screen_pixel_x >= 8) {
             // Most of the time the number of sprites we found should be 0, 
             // so check for this right away.
             if self.sprites_found > 0 {
@@ -519,9 +519,8 @@ impl Ppu2C02 {
                 0x00 // Mapper should take care of this address range
             },
             0x2000..=0x3EFF => {
-                let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = self.get_nt_mirrored_address(mirrored_addr1);
-                self.vram[mirrored_addr2 as usize]
+                let mirrored_addr = self.get_nt_mirrored_address(address);
+                self.vram[mirrored_addr as usize]
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = address & 0x1F;
@@ -562,9 +561,8 @@ impl Ppu2C02 {
                 // Mapper should take care of this address range
             },
             0x2000..=0x3EFF => {
-                let mirrored_addr1 = address & 0x2FFF; // mirror $3XXX addresses to $2XXX addresses
-                let mirrored_addr2 = self.get_nt_mirrored_address(mirrored_addr1);
-                self.vram[mirrored_addr2 as usize] = data;
+                let mirrored_addr = self.get_nt_mirrored_address(address);
+                self.vram[mirrored_addr as usize] = data;
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = address & 0x1F;
@@ -804,17 +802,13 @@ impl Ppu2C02 {
     /// https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
     fn inc_coarse_x(&mut self) {
         if self.rendering_enabled() {
-            let mut v = self.v_val();
-
             // This occurs when the coarse_x is crossing into the next nametable
-            if (v & 0x001F) == 0x1F { // if coarse x would wrap on add
-                v &= !0x001F;  // coarse X = 0 (wrap)
-                v ^= 0x0400;   // switch horizontal nametable
+            if self.v_reg.coarse_x() == 0x1F { // if coarse x would wrap on add
+                self.v_reg.set_coarse_x(0);
+                self.v_reg.set_nt_x(if self.v_reg.nt_x() == 0 { 1 } else { 0 });
             } else {
-                v += 1;  // increment coarse X
+                self.v_reg.set_coarse_x(self.v_reg.coarse_x() + 1);
             }
-
-            self.set_v_reg(v);
         }
     }
 
@@ -823,25 +817,20 @@ impl Ppu2C02 {
     /// https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
     fn inc_coarse_y(&mut self) {
         if self.rendering_enabled() {
-            let mut v = self.v_val();
-
-            if (v & 0x7000) != 0x7000 {
-                v += 0x1000;
+            if self.v_reg.fine_y() != 7 {
+                self.v_reg.set_fine_y(self.v_reg.fine_y() + 1);
             } else {
-                v &= !0x7000;
-                let mut y = (v & 0x03E0) >> 5;
-                if y == 0x1D {
-                    y = 0;
-                    v ^= 0x0800;
-                } else if y == 0x1F {
-                    y = 0;
-                } else {
-                    y += 1;
-                }
-                v = (v & !0x03E0) | (y << 5);
-            }
+                self.v_reg.set_fine_y(0);
 
-            self.set_v_reg(v);
+                if self.v_reg.coarse_y() == 0x1D {
+                    self.v_reg.set_coarse_y(0);
+                    self.v_reg.set_nt_y(if self.v_reg.nt_y() == 0 { 1 } else { 0 })
+                } else if self.v_reg.coarse_y() == 0x1F {
+                    self.v_reg.set_coarse_y(0);
+                } else {
+                    self.v_reg.set_coarse_y(self.v_reg.coarse_y() + 1);
+                }
+            }
         }
     }
 
@@ -867,6 +856,10 @@ impl Ppu2C02 {
     /// Fetches the next byte of background tile nametable ids and stores it in
     /// an internal buffer.
     fn load_nt_buffer(&mut self) {
+        if self.scanline == 120 && self.dot > 200 {
+            println!("DOT {}: Reading next tile data from NT ${:04X}", self.dot, 0x2000 | (self.v_val() & 0x0FFF));
+        }
+
         self.bg_next_tile_nt_addr = self.ppu_read(0x2000 | (self.v_val() & 0x0FFF));
     }
     /// Fetches the next byte of background tile attributes and stores it in
@@ -874,7 +867,7 @@ impl Ppu2C02 {
     fn load_attrib_buffer(&mut self) {
         // Read byte containing 4 tile attribute values from mem
         self.bg_next_tile_attrib = self.ppu_read(0x23C0 
-                                            | ((self.v_reg.nt_select() as u16) << 10)  // fixed: was nt_y << 11 (ignored nt_x)
+                                            | ((self.v_reg.nt_select() as u16) << 10)
                                             | (((self.v_reg.coarse_y() as u16) >> 2) << 3) 
                                             | ((self.v_reg.coarse_x() as u16) >> 2));
 
@@ -898,8 +891,8 @@ impl Ppu2C02 {
 
         self.bg_next_tile_lsb = self.ppu_read(
             ((bg_ptrn as u16) << 12) // 0x0000 or 0x1000
-            | ((self.bg_next_tile_nt_addr as u16) << 4)
-            | (fine_y as u16 + 0));
+            + ((self.bg_next_tile_nt_addr as u16) << 4)
+            + (fine_y as u16 + 0));
     }
     /// Fetches the next high byte of background tile pixel data and stores it
     /// in an internal buffer.
@@ -909,8 +902,8 @@ impl Ppu2C02 {
 
         self.bg_next_tile_msb = self.ppu_read(
             ((bg_ptrn as u16) << 12) // 0x0000 or 0x1000
-            | ((self.bg_next_tile_nt_addr as u16) << 4)
-            | (fine_y as u16 + 8)); // fixed: was setting tile_lsb instead of tile_msb
+            + ((self.bg_next_tile_nt_addr as u16) << 4)
+            + (fine_y as u16 + 8)); // fixed: was setting tile_lsb instead of tile_msb
     }
 
     /// Trigger a NMI within the CPU
@@ -946,7 +939,7 @@ impl Ppu2C02 {
 
     fn get_nt_mirrored_address(&self, address: u16) -> u16 {
         match self.mapper.borrow().get_nt_mirror_type() {
-            NametableMirror::Horizontal => { (address & 0x03FF) | (if address >= 0x2800 { 0x400 } else { 0 }) },
+            NametableMirror::Horizontal => { (address & 0x03FF) + (if address >= 0x2800 { 0x400 } else { 0 }) },
             NametableMirror::Vertical => { address & 0x07FF }
             NametableMirror::SingleScreenLower => { address & 0x03FF },
             NametableMirror::SingleScreenUpper => { (address & 0x03FF) + 0x400 },

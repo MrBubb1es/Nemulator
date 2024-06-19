@@ -173,7 +173,7 @@ impl Mapper for Mapper4 {
                             NametableMirror::Vertical
                         } else {
                             NametableMirror::Horizontal
-                        }
+                        };
                     }
                 }
                 // Prg Rom Protect

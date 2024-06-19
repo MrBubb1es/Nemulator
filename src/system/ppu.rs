@@ -201,6 +201,10 @@ impl Ppu2C02 {
             _ => {},
         }
 
+        if self.scanline < 240 && self.dot == 260 && self.rendering_enabled() {
+            self.mapper.borrow_mut().scanline_finished();
+        }
+
         if self.scanline < 240 && 0 < self.dot && self.dot <= 256 {
             self.draw_dot(frame);
         }
@@ -954,10 +958,6 @@ impl Ppu2C02 {
         self.dot += 1;
         if self.dot > 340 {
             self.dot = 0;
-
-            if self.rendering_enabled() && self.scanline < 240 {
-                self.mapper.borrow_mut().scanline_finished();
-            }
 
             self.scanline += 1;
             if self.scanline > 261 {

@@ -97,17 +97,16 @@ impl LengthCounter {
             if !self.halted { 
                 if self.counter > 0 {
                     self.counter -= 1;
-                } else {
-                    self.silence_channel = true;
                 }
             }
         }
+
+        self.silence_channel = self.is_zero();
     }
 
     pub fn set_counter(&mut self, val: usize) {
         if self.channel_enabled {
             self.counter = Self::LENGTH_LOOKUP[val];
-            self.silence_channel = false;
         }
     }
 
@@ -117,6 +116,10 @@ impl LengthCounter {
 
     pub fn is_silencing_channel(&self) -> bool {
         self.silence_channel
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.counter == 0
     }
 }
 
@@ -222,7 +225,7 @@ impl VolumeEnvelope {
 
 #[derive(Default)]
 pub struct PulseChannel {
-    channel_type: NesChannel,
+    sweep_negate_offset: isize,
 
     // Basic channel registers
     timer_reload: usize,
@@ -241,13 +244,20 @@ pub struct PulseChannel {
     sweep_target_period: usize,
 
     pub length_counter: LengthCounter,
-    pub envelope: VolumeEnvelope
+    pub envelope: VolumeEnvelope,
 }
 
 impl PulseChannel {
     pub fn new(channel_type: NesChannel) -> Self {
+        // Pulse channels 1 and 2 handle negation differently
+        let sweep_negate_offset = match channel_type {
+            NesChannel::Pulse1 => -1,
+            NesChannel::Pulse2 =>  0,
+            _ => { unreachable!("Only Pulse 1 & Pulse 2 should have a sweep unit"); }
+        };
+
         Self {
-            channel_type,
+            sweep_negate_offset,
             ..Default::default()
         }
     }
@@ -291,29 +301,26 @@ impl PulseChannel {
         }
     }
 
-    fn update_target_period(&mut self) {
+    pub fn update_target_period(&mut self) {
         let mut delta = (self.timer_reload as isize) >> self.sweep_shift;
 
         if self.sweep_negate {
-            // Pulse channels 1 and 2 handle negation differently
-            match self.channel_type {
-                NesChannel::Pulse1 => {
-                    delta = -delta - 1;
-                }
-
-                NesChannel::Pulse2 => {
-                    delta = -delta;
-                }
-
-                _ => { unreachable!("Only Pulse 1 & Pulse 2 should have a sweep unit"); }
-            }
+            delta = -delta + self.sweep_negate_offset;
         }
 
         self.sweep_target_period = (self.timer_reload as isize + delta).max(0) as usize;
     }
 
     pub fn update_length_counter(&mut self) {
-        self.length_counter.update_count()
+        self.length_counter.update_count();
+    }
+
+    pub fn update_envelope(&mut self) {
+        self.envelope.update_output();
+
+        if self.sweep_negate_offset == -1 {
+            println!("Pulse 1: Divider = {}, Decay = {}", self.envelope.divider, self.envelope.decay);
+        }
     }
 
     fn sweep_is_muting_channel(&self) -> bool {
@@ -335,6 +342,9 @@ impl PulseChannel {
         self.enabled = val;
 
         self.length_counter.channel_enabled = val;
+        if !self.enabled {
+            self.length_counter.counter = 0;
+        }
     }
 
     pub fn set_sweep_enable(&mut self, val: bool) {
@@ -358,7 +368,6 @@ impl PulseChannel {
     }
 
 }
-
 
 
 #[derive(Default)]
@@ -491,6 +500,10 @@ impl NoiseChannel {
         self.length_counter.update_count();
     }
 
+    pub fn update_envelope(&mut self) {
+        self.envelope.update_output();
+    }
+
     pub fn update_period(&mut self) {
         if self.period == 0 {
             self.period = self.period_reload;
@@ -543,6 +556,10 @@ impl DmcChannel {
 
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn set_enable(&mut self, val: bool) {
+        self.enabled = val;
     }
 
     pub fn sample(&mut self) -> f32 {

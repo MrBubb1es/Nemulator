@@ -110,6 +110,25 @@ impl Apu2A03 {
         }
     }
 
+    pub fn cpu_read(&mut self, address: u16) -> u8 {
+        match address {
+            0x4015 => {
+                // DMC interrupt (I), frame interrupt (F), DMC active (D), length counter > 0 (N/T/2/1) 
+                let d = if self.dmc_channel.enabled { 1 } else { 0 };
+                let n = if self.pulse1_channel.length_counter.is_zero() { 0 } else { 1 };
+                let t = if self.pulse1_channel.length_counter.is_zero() { 0 } else { 1 };
+                let p1 = if self.pulse1_channel.length_counter.is_zero() { 0 } else { 1 };
+                let p2 = if self.pulse1_channel.length_counter.is_zero() { 0 } else { 1 };
+
+                let data = (d << 4) | (n << 3) | (t << 2) | (p2 << 1) | (p1 << 0);
+
+                data as u8
+            },
+
+            _ => 0
+        }
+    }
+
     pub fn cpu_write(&mut self, address: u16, data: u8) {
         match address {
             // Pulse 1 Registers
@@ -130,6 +149,7 @@ impl Apu2A03 {
                 self.pulse1_channel.envelope.set_loop_flag(new_halt);
                 self.pulse1_channel.envelope.set_const_volume(new_const_volume);
                 self.pulse1_channel.envelope.set_volume(new_volume);
+                self.pulse1_channel.envelope.set_start_flag(true);
             }
 
             // Pulse 1 Sweeper
@@ -144,6 +164,7 @@ impl Apu2A03 {
                 self.pulse1_channel.set_sweep_negate_flag(new_negate);
                 self.pulse1_channel.set_sweep_shift(new_shift);
                 self.pulse1_channel.set_sweep_reload_flag(true);
+                self.pulse1_channel.update_target_period();
             }
 
             // Pulse 1 Timer Low
@@ -185,6 +206,7 @@ impl Apu2A03 {
                 self.pulse2_channel.envelope.set_loop_flag(new_halt);
                 self.pulse2_channel.envelope.set_const_volume(new_const_volume);
                 self.pulse2_channel.envelope.set_volume(new_volume);
+                self.pulse2_channel.envelope.set_start_flag(true);
             }
 
             // Pulse 2 Sweeper
@@ -199,6 +221,7 @@ impl Apu2A03 {
                 self.pulse2_channel.set_sweep_negate_flag(new_negate);
                 self.pulse2_channel.set_sweep_shift(new_shift);
                 self.pulse2_channel.set_sweep_reload_flag(true);
+                self.pulse2_channel.update_target_period();
             }
 
             // Pulse 2 Timer Low
@@ -292,11 +315,13 @@ impl Apu2A03 {
                 let pulse2_enabled = (data & 0x02) != 0;
                 let triangle_enabled = (data & 0x04) != 0;
                 let noise_enabled = (data & 0x08) != 0;
+                let dmc_enabled = (data & 0x10) != 0;
 
                 self.pulse1_channel.set_enable(pulse1_enabled);
                 self.pulse2_channel.set_enable(pulse2_enabled);
                 self.triangle_channel.set_enable(triangle_enabled);
                 self.noise_channel.set_enable(noise_enabled);
+                self.dmc_channel.set_enable(dmc_enabled);
             }
 
             // Frame update mode & frame interrupt register
@@ -447,9 +472,9 @@ impl Apu2A03 {
     }
 
     fn update_envelopes(&mut self) {
-        self.pulse1_channel.envelope.update_output();
-        self.pulse2_channel.envelope.update_output();
-        self.noise_channel.envelope.update_output()
+        self.pulse1_channel.update_envelope();
+        self.pulse2_channel.update_envelope();
+        self.noise_channel.update_envelope();
     }
 
     pub fn trigger_irq(&self) -> bool {

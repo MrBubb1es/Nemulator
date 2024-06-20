@@ -4,7 +4,8 @@ use std::time::Instant;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use crate::app::draw::chars::S;
+use biquad::{Biquad, Coefficients, DirectForm1, ToHertz, Type};
+
 use crate::cartridge::Mapper;
 
 use super::apu_util::{
@@ -23,6 +24,14 @@ const HALF_FRAME_CLOCKS: usize = 7457;
 const THREE_QUARTER_FRAME_CLOCKS: usize = 11185;
 const WHOLE_FRAME_CLOCKS: usize = 14916;
 
+// Cutoff frequencies of the filters given in Hz
+const HIGH_PASS1_CUTOFF_FREQ: f32 = 60.0;
+const HIGH_PASS2_CUTOFF_FREQ: f32 = 440.0;
+const LOW_PASS_CUTOFF_FREQ: f32 = 14000.0;
+
+// Quality factor ( 1/sqrt(2) is customary )
+const Q_VAL: f32 = 0.7071067811865475244008443622;
+
 pub struct Apu2A03 {
     sample_queue: Arc<Mutex<VecDeque<f32>>>,
     sample_batch: Vec<f32>,
@@ -39,6 +48,10 @@ pub struct Apu2A03 {
     noise_channel: NoiseChannel,
     dmc_channel: DmcChannel,
 
+    high_pass1: DirectForm1<f32>,
+    high_pass2: DirectForm1<f32>,
+    low_pass: DirectForm1<f32>,
+
     frame_sequence: bool,
     disable_frame_interrupt: bool,
 
@@ -46,7 +59,6 @@ pub struct Apu2A03 {
     frame_update_mode1: bool,
 
     last_output: Instant,
-    avg_rates: Vec<f64>,
     batches_sent: usize,
 
     irq_request_flag: bool,
@@ -98,7 +110,29 @@ impl Apu2A03 {
         2.018208722101196103415676764, 2.024936084508200090427062353, 2.031663446915204077438447943, 2.038390809322208064449833532,
     ];
 
+
     pub fn new(sample_queue: Arc<Mutex<VecDeque<f32>>>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
+        let high_pass1_coeffs: Coefficients<f32> = Coefficients::<f32>::from_params(
+            Type::HighPass,
+            NES_AUDIO_FREQUENCY.hz(),
+            HIGH_PASS1_CUTOFF_FREQ.hz(),
+            Q_VAL,
+        ).unwrap();
+    
+        let high_pass2_coeffs: Coefficients<f32> = Coefficients::<f32>::from_params(
+            Type::HighPass,
+            NES_AUDIO_FREQUENCY.hz(),
+            HIGH_PASS2_CUTOFF_FREQ.hz(),
+            Q_VAL,
+        ).unwrap();
+    
+        let low_pass_coeffs: Coefficients<f32> = Coefficients::<f32>::from_params(
+            Type::LowPass,
+            NES_AUDIO_FREQUENCY.hz(),
+            LOW_PASS_CUTOFF_FREQ.hz(),
+            Q_VAL,
+        ).unwrap();
+
         Self {
             sample_queue,
             sample_batch: Vec::with_capacity(SAMPLE_BATCH_SIZE),
@@ -115,6 +149,10 @@ impl Apu2A03 {
             noise_channel: NoiseChannel::new(),
             dmc_channel: DmcChannel::new(),
 
+            high_pass1: DirectForm1::<f32>::new(high_pass1_coeffs),
+            high_pass2: DirectForm1::<f32>::new(high_pass2_coeffs),
+            low_pass: DirectForm1::<f32>::new(low_pass_coeffs),
+
             frame_sequence: false,
             disable_frame_interrupt: false,
 
@@ -122,7 +160,6 @@ impl Apu2A03 {
             frame_update_mode1: false,
 
             last_output: Instant::now(),
-            avg_rates: Vec::new(),
             batches_sent: 0,
 
             irq_request_flag: false,
@@ -446,10 +483,11 @@ impl Apu2A03 {
         let pulse_out = Self::PULSE_LOOKUP[pulse_idx];
         let tnd_out = Self::TND_LOOKUP[tnd_idx];
 
-        let output = pulse_out + tnd_out;
+        let sample = pulse_out + tnd_out;
 
-        // Output is on a scale from 0.0 to 1.0, so we put it from -1 to 1
-        let sample = output * 1.95 - 1.0;
+        self.high_pass1.run(sample);
+        self.high_pass2.run(sample);
+        self.low_pass.run(sample);
 
         sample
     }

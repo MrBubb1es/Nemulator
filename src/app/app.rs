@@ -1,10 +1,9 @@
 use gilrs::Gilrs;
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
-use rodio::queue::SourcesQueueInput;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, KeyEvent, Modifiers, WindowEvent};
+use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::keyboard::{Key, KeyCode, NamedKey, PhysicalKey};
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 use winit::{application::ApplicationHandler, window::WindowId};
 use std::collections::VecDeque;
@@ -141,15 +140,19 @@ impl ApplicationHandler for NesApp {
                 self.handle_keyboard_input(event);
             }
 
+            WindowEvent::Resized(new_size) => {
+                if let Some(buf) = self.pixel_buf.as_mut() {
+                    let _ = buf.resize_surface(new_size.width, new_size.height);
+                }
+            }
+
             WindowEvent::RedrawRequested => {
                 if !self.limit_fps || 
                     self.last_frame.elapsed().as_micros() > MICROS_PER_FRAME || 
                     self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
 
-                    //self.nes.audio_samples_queued() < MIN_SAMPLES_THRESH {
                     self.last_frame = std::time::Instant::now();
                     
-                    // Draw.
                     if let Some(buf) = self.pixel_buf.as_mut() {
                         let frame = buf.frame_mut();
     

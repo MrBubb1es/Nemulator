@@ -1,6 +1,5 @@
-use std::{collections::{vec_deque, VecDeque}, ops::{Neg, Rem}, sync::{Arc, Mutex}, time::Duration};
+use std::{collections::VecDeque, sync::{Arc, Mutex}, time::Duration};
 
-use bitfield_struct::bitfield;
 use rodio::Source;
 
 use super::apu::{CPU_CYCLE_PERIOD, CPU_FREQ, NES_AUDIO_FREQUENCY};
@@ -104,9 +103,16 @@ impl LengthCounter {
         self.silence_channel = self.is_zero();
     }
 
-    pub fn set_counter(&mut self, val: usize) {
+    pub fn set_channel_enabled(&mut self, val: bool) {
+        self.channel_enabled = val;
+        if !self.channel_enabled {
+            self.counter = 0;
+        }
+    }
+
+    pub fn set_counter(&mut self, data: usize) {
         if self.channel_enabled {
-            self.counter = Self::LENGTH_LOOKUP[val];
+            self.counter = Self::LENGTH_LOOKUP[data];
         }
     }
 
@@ -146,8 +152,8 @@ impl LinearCounter {
         }
     }
 
-    pub fn set_reload_value(&mut self, val: usize) {
-        self.reload_value = val;
+    pub fn set_reload_value(&mut self, data: usize) {
+        self.reload_value = data;
     }
 
     pub fn set_reload_flag(&mut self, val: bool) {
@@ -213,8 +219,8 @@ impl VolumeEnvelope {
         self.const_volume = val;
     }
 
-    pub fn set_volume(&mut self, val: usize) {
-        self.volume = val;
+    pub fn set_volume(&mut self, data: usize) {
+        self.volume = data;
     }
 
     pub fn set_loop_flag(&mut self, val: bool) {
@@ -305,7 +311,7 @@ impl PulseChannel {
         let mut delta = (self.timer_reload as isize) >> self.sweep_shift;
 
         if self.sweep_negate {
-            delta = -delta + self.sweep_negate_offset;
+            delta = -delta - self.sweep_negate_offset;
         }
 
         self.sweep_target_period = (self.timer_reload as isize + delta).max(0) as usize;
@@ -317,10 +323,6 @@ impl PulseChannel {
 
     pub fn update_envelope(&mut self) {
         self.envelope.update_output();
-
-        if self.sweep_negate_offset == -1 {
-            println!("Pulse 1: Divider = {}, Decay = {}", self.envelope.divider, self.envelope.decay);
-        }
     }
 
     fn sweep_is_muting_channel(&self) -> bool {
@@ -331,32 +333,28 @@ impl PulseChannel {
         self.timer_reload
     }
 
-    pub fn set_timer_reload(&mut self, val: usize) {
-        self.timer_reload = val;
-        self.freq = CPU_FREQ / (16.0 * (val + 1) as f64);
+    pub fn set_timer_reload(&mut self, data: usize) {
+        self.timer_reload = data;
+        self.freq = CPU_FREQ / (16.0 * (data + 1) as f64);
 
         self.update_target_period();
     }
 
     pub fn set_enable(&mut self, val: bool) {
         self.enabled = val;
-
-        self.length_counter.channel_enabled = val;
-        if !self.enabled {
-            self.length_counter.counter = 0;
-        }
+        self.length_counter.set_channel_enabled(val);
     }
 
     pub fn set_sweep_enable(&mut self, val: bool) {
         self.sweep_enabled = val;
     }
 
-    pub fn set_sweep_period(&mut self, val: usize) {
-        self.sweep_reload_value = val;
+    pub fn set_sweep_period(&mut self, data: usize) {
+        self.sweep_reload_value = data;
     }
 
-    pub fn set_sweep_shift(&mut self, val: usize) {
-        self.sweep_shift = val;
+    pub fn set_sweep_shift(&mut self, data: usize) {
+        self.sweep_shift = data;
     }
 
     pub fn set_sweep_negate_flag(&mut self, val: bool) {
@@ -426,18 +424,16 @@ impl TriangleChannel {
         self.length_counter.update_count();
     }
 
-    pub fn set_timer_reload(&mut self, val: usize) {
-        self.timer_reload = val;
-        self.freq = CPU_FREQ / (32.0 * (val + 1) as f64);
+    pub fn set_timer_reload(&mut self, data: usize) {
+        self.timer_reload = data;
+        self.freq = CPU_FREQ / (32.0 * (data + 1) as f64);
     }
 
     pub fn set_enable(&mut self, val: bool) {
         self.enabled = val;
-
-        self.length_counter.channel_enabled = val;
+        self.length_counter.set_channel_enabled(val);
     }
 }
-
 
 
 pub struct NoiseChannel {
@@ -521,31 +517,35 @@ impl NoiseChannel {
 
     pub fn set_enable(&mut self, val: bool) {
         self.enabled = val;
-
-        self.length_counter.channel_enabled = val;
+        self.length_counter.set_channel_enabled(val);
     }
 }
 
 
-
 #[derive(Default)]
 pub struct DmcChannel {
-    // Basic channel registers
-    pub timer: usize,
-    pub timer_reload: usize,
-    pub enabled: bool,
+    divider: usize,
+    divider_reload_value: usize,
+    enabled: bool,
+    loop_flag: bool,
 
-    pub length_counter: LengthCounter,
+    irq_enabled: bool,
+    irq_requested: bool,
 
-    pub bytes_remaining: usize,
-    pub sample_len: usize,
-    pub sample_addr: u16,
+    // 1 byte buffer
+    next_byte: u8,
+    need_next_byte: bool,
 
-    pub bits_remaining: usize,
-    pub dmc_shifter: u8,
-    pub silenced: bool,
+    bytes_remaining: usize,
+    sample_len: usize,
+    sample_start_addr: u16,
+    current_addr: u16,
 
-    pub output: u8,
+    bits_remaining: usize,
+    dmc_shifter: u8,
+    silenced: bool,
+
+    output: u8,
 }
 
 impl DmcChannel {
@@ -555,42 +555,130 @@ impl DmcChannel {
     ];
 
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn set_enable(&mut self, val: bool) {
-        self.enabled = val;
+        Self {
+            sample_start_addr: 0xC000,
+            current_addr: 0xC000,
+            ..Default::default()
+        }
     }
 
     pub fn sample(&mut self) -> f32 {
         self.output as f32
     }
 
-    pub fn set_timer_reload(&mut self, data: u8) {
-        self.timer_reload = DmcChannel::RATE_LOOKUP[data as usize];
-        self.timer = self.timer_reload;
-    } 
+    pub fn update_timer(&mut self, next_clip_byte: Option<u8>) {
+        if self.need_next_byte && self.bytes_remaining > 0 {
+            self.next_byte = next_clip_byte.unwrap();
+            self.need_next_byte = false;
 
-    pub fn update_timer(&mut self) -> bool {
-        let mut need_new_sample_byte = false;
+            self.current_addr = self.current_addr.checked_add(1).unwrap_or(0x8000); // Address wraps to $8000 (start of cart rom)
+        
+            self.bytes_remaining -= 1;
 
-        if self.timer == 0 {
-            if self.dmc_shifter & 1 == 0 {
-                self.output = self.output.wrapping_sub(1);
-            } else {
-                self.output = self.output.wrapping_add(1);
+            if self.bytes_remaining == 0 {
+                if self.loop_flag {
+                    self.start_sample();
+                } else if self.irq_enabled {
+                    self.irq_requested = true;
+                }
+            }
+        }
+
+        if self.divider == 0 {
+            self.divider = self.divider_reload_value;
+
+            if self.bits_remaining == 0 {
+                self.bits_remaining = 8;
+                // Silence channel if next byte hasn't been loaded
+                self.silenced = self.need_next_byte;
+
+                if !self.need_next_byte {
+                    self.dmc_shifter = self.next_byte;
+                    self.need_next_byte = true;
+                }
+            }
+
+            if !self.silenced {
+                let delta = if self.dmc_shifter & 1 == 0 {
+                    -2
+                } else {
+                    2
+                };
+
+                let new_output = self.output as isize + delta;
+
+                if 0 <= new_output && new_output <= 127 {
+                    self.output = new_output as u8;
+                }
             }
 
             self.dmc_shifter >>= 1;
             self.bits_remaining -= 1;
+        } else {
+            self.divider -= 1;
+        }
+    }
 
-            if self.bits_remaining == 0 {
-                need_new_sample_byte = true;
+    fn start_sample(&mut self) {
+        self.current_addr = self.sample_start_addr;
+        self.bytes_remaining = self.sample_len;
+    }
+
+    pub fn need_next_clip_byte(&self) -> bool {
+        self.need_next_byte
+    }
+
+    pub fn current_sample_addr(&self) -> u16 {
+        self.current_addr
+    }
+
+    pub fn dmc_active(&self) -> bool {
+        self.bytes_remaining > 0
+    }
+
+    pub fn irq_triggered(&self) -> bool {
+        self.irq_requested
+    }
+
+    pub fn set_irq_flag(&mut self, val: bool) {
+        self.irq_requested = val;
+    }
+
+    pub fn set_enable(&mut self, val: bool) {
+        self.enabled = val;
+
+        if self.enabled {
+            if self.bytes_remaining == 0 {
+                self.start_sample();
             }
         } else {
-            self.timer -= 1;
+            self.bytes_remaining = 0;
         }
+        
+        self.irq_enabled = false;
+    }
 
-        need_new_sample_byte
+    pub fn set_irq_enable(&mut self, val: bool) {
+        self.irq_enabled = val;
+    }
+
+    pub fn set_loop_flag(&mut self, val: bool) {
+        self.loop_flag = val;
+    }
+
+    pub fn set_reload_value(&mut self, data: usize) {
+        self.divider_reload_value = Self::RATE_LOOKUP[data as usize];
+    }
+
+    pub fn set_output_direct(&mut self, data: u8) {
+        self.output = data;
+    }
+
+    pub fn set_clip_address(&mut self, addr: u16) {
+        self.sample_start_addr = addr;
+    }
+
+    pub fn set_clip_length(&mut self, data: usize) {
+        self.sample_len = data;
     }
 }

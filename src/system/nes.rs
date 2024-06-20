@@ -76,7 +76,7 @@ impl Nes {
 
         let mapper = mapper::mapper_from_cart(cart);
 
-        let apu = Apu2A03::new(sample_queue);
+        let apu = Apu2A03::new(sample_queue, Rc::clone(&mapper));
         let apu = Rc::new(RefCell::new(apu));
 
         let ppu = Ppu2C02::new(Rc::clone(&mapper));
@@ -209,50 +209,18 @@ impl Nes {
 
         let mut cpu_cycled = false;
 
+        self.handle_cpu_interrupts();
+
         if self.clocks % 3 == 0 {
             // APU cycles with CPU clock
             self.get_apu_mut().cycle();
 
-            // if self.get_cpu().dma_in_progress() {
-                // // Even CPU cycles are read cycles
-                // if self.get_cpu().total_clocks() & 1 == 0 {
-                //     self.get_cpu_mut().read_next_oam_data();
-                //     self.get_cpu_mut().increment_clock();
-                // }
-                // // Odd CPU cycles are write cycles
-                // else {
-                //     let addr = self.get_cpu().get_oam_addr();
-                //     let data = self.get_cpu().get_oam_data();
+            let p1_controller_state = self.p1_controller;
+            let p2_controller_state = self.p2_controller;
 
-                //     self.get_ppu_mut().oam_dma_write(data, addr);
-                //     self.get_cpu_mut().increment_clock();
-                // }
-            //     self.get_cpu_mut().increment_clock();
-            // } else {
-                let p1_controller_state = self.p1_controller;
-                let p2_controller_state = self.p2_controller;
-
-                if self.get_mapper_mut().irq_requested() {
-                    self.get_cpu_mut().irq();
-                    self.get_mapper_mut().irq_handled();
-                }
-
-                cpu_cycled = self
-                    .get_cpu_mut()
-                    .cycle(p1_controller_state, p2_controller_state);
-            }
-        // } else {
-        //     cpu_cycled = false;
-        // }
-
-        if self.get_ppu().cpu_nmi_flag() {
-            self.cpu.as_mut().unwrap().trigger_ppu_nmi();
-            self.get_ppu_mut().set_cpu_nmi_flag(false);
-        }
-
-        if self.get_apu().trigger_irq() {
-            self.get_cpu_mut().trigger_apu_irq();
-            self.get_apu_mut().set_trigger_irq(false);
+            cpu_cycled = self
+                .get_cpu_mut()
+                .cycle(p1_controller_state, p2_controller_state);
         }
 
         self.clocks += 1;
@@ -265,6 +233,28 @@ impl Nes {
     pub fn cycle_instr(&mut self) {
         // loop while cycle returns false => loop until cpu cycled
         while !self.cycle() {}
+    }
+
+    fn handle_cpu_interrupts(&mut self) {
+        if self.get_mapper_mut().irq_requested() {
+            self.get_cpu_mut().irq();
+            self.get_mapper_mut().irq_handled();
+        }
+
+        if self.get_ppu().cpu_nmi_flag() {
+            self.cpu.as_mut().unwrap().trigger_ppu_nmi();
+            self.get_ppu_mut().set_cpu_nmi_flag(false);
+        }
+
+        if self.get_apu().trigger_irq() {
+            self.get_cpu_mut().trigger_apu_irq();
+            self.get_apu_mut().set_trigger_irq(false);
+        }
+
+        if self.get_apu().dmc_trigger_irq() {
+            self.get_cpu_mut().trigger_apu_irq();
+            self.get_apu_mut().set_dmc_irq_flag(false);
+        }
     }
 
     pub fn get_cpu_state(&self) -> CpuState {

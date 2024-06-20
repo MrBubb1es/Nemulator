@@ -1,8 +1,11 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::Instant;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 use crate::app::draw::chars::S;
+use crate::cartridge::Mapper;
 
 use super::apu_util::{
     DmcChannel, NesChannel, NoiseChannel, PulseChannel, TriangleChannel
@@ -23,6 +26,8 @@ const WHOLE_FRAME_CLOCKS: usize = 14916;
 pub struct Apu2A03 {
     sample_queue: Arc<Mutex<VecDeque<f32>>>,
     sample_batch: Vec<f32>,
+
+    mapper: Rc<RefCell<dyn Mapper>>,
     
     clocks: u64,
     frame_clocks: usize,
@@ -49,10 +54,12 @@ pub struct Apu2A03 {
 }
 
 impl Apu2A03 {
-    pub fn new(sample_queue: Arc<Mutex<VecDeque<f32>>>) -> Self {
+    pub fn new(sample_queue: Arc<Mutex<VecDeque<f32>>>, mapper: Rc<RefCell<dyn Mapper>>) -> Self {
         Self {
             sample_queue,
             sample_batch: Vec::with_capacity(SAMPLE_BATCH_SIZE),
+
+            mapper,
 
             clocks: 0,
             frame_clocks: 0,
@@ -86,6 +93,22 @@ impl Apu2A03 {
 
         // Noise channel updates period every CPU clock
         self.noise_channel.update_period();
+        // DMC channel updates its timer every CPU clock
+        if self.dmc_channel.need_next_clip_byte() {
+            let addr = self.dmc_channel.current_sample_addr();
+
+            // Audio clips start at $C000, which should always be 
+            // accessing valid cartridge memory.
+            let next_clip_byte = self.mapper.as_ref()
+                                                .borrow_mut()
+                                                .cpu_cart_read(addr)
+                                                .unwrap();
+
+            self.dmc_channel.update_timer(Some(next_clip_byte));
+
+        } else {
+            self.dmc_channel.update_timer(None);
+        }
 
         if self.frame_clocks == QUARTER_FRAME_CLOCKS
             || self.frame_clocks == HALF_FRAME_CLOCKS
@@ -114,7 +137,7 @@ impl Apu2A03 {
         match address {
             0x4015 => {
                 // DMC interrupt (I), frame interrupt (F), DMC active (D), length counter > 0 (N/T/2/1) 
-                let d = if self.dmc_channel.enabled { 1 } else { 0 };
+                let d = if self.dmc_channel.dmc_active() { 1 } else { 0 };
                 let n = if self.pulse1_channel.length_counter.is_zero() { 0 } else { 1 };
                 let t = if self.pulse1_channel.length_counter.is_zero() { 0 } else { 1 };
                 let p1 = if self.pulse1_channel.length_counter.is_zero() { 0 } else { 1 };
@@ -305,8 +328,33 @@ impl Apu2A03 {
                 self.noise_channel.envelope.set_start_flag(true);
             }
 
+            0x4010 => {
+                let new_irq_enable = (data & 0x80) != 0;
+                let new_loop = (data & 0x40) != 0;
+                let new_reload = (data & 0x0F) as usize;
+
+                self.dmc_channel.set_irq_enable(new_irq_enable);
+                self.dmc_channel.set_loop_flag(new_loop);
+                self.dmc_channel.set_reload_value(new_reload);
+            }
+
+            // DMC PCM (Direct Access)
             0x4011 => {
-                self.dmc_channel.output = data & 0x7F;
+                self.dmc_channel.set_output_direct(data & 0x7F);
+            }
+
+            // DMC Sample/Clip Address
+            0x4012 => {
+                let new_clip_address = 0xC000 + (64 * data as u16);
+
+                self.dmc_channel.set_clip_address(new_clip_address)
+            }
+
+            // DMC Sample/Clip Length
+            0x4013 => {
+                let new_clip_length = (16 * data as usize) + 1;
+
+                self.dmc_channel.set_clip_length(new_clip_length);
             }
 
             // Channel enable register
@@ -367,7 +415,7 @@ impl Apu2A03 {
         let pulse_sum = pulse1_sample + pulse2_sample;
         let pulse_out = (BIPPITY * pulse_sum) / (BOO + 100.0 * pulse_sum);
 
-        let magic_sample = ABRA * triangle_sample + KADABRA * noise_sample;// + ALAKAZAM * dmc_sample;
+        let magic_sample = ABRA * triangle_sample + KADABRA * noise_sample + ALAKAZAM * dmc_sample;
 
         let tnd_out = BOPPITY * magic_sample / (1.0 + 100.0 * magic_sample);
 
@@ -481,7 +529,15 @@ impl Apu2A03 {
         self.trigger_irq
     }
 
+    pub fn dmc_trigger_irq(&self) -> bool {
+        self.dmc_channel.irq_triggered()
+    }
+
     pub fn set_trigger_irq(&mut self, val: bool) {
         self.trigger_irq = val;
+    }
+
+    pub fn set_dmc_irq_flag(&mut self, val: bool) {
+        self.dmc_channel.set_irq_flag(val);
     }
 }

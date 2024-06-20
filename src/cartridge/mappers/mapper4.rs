@@ -4,6 +4,15 @@ const PRG_RAM_SIZE: usize = 0x2000;
 const PRG_BANK_SIZE: usize = 0x2000;
 const CHR_BANK_SIZE: usize = 0x400;
 
+// Mapper 4 (AKA MMC3)
+// Just about the most complicated mapper of them all. The PRG and CHR ROMs are
+// split into 4 and 8 banks, respectively. Where each bank is mapped to is controlled
+// by a total of 8 index registers, plus a control register. The details of this
+// mapper are pretty complex, but its really a simple idea at a high level. I
+// suggest the video by javidx9 on NES mappers.
+// Games:
+// - Super Mario Bros 2
+// - Super Mario Bros 3
 #[derive(Default)]
 pub struct Mapper4 {
     irq_counter: usize,

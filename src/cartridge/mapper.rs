@@ -2,7 +2,7 @@ use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::{default, rc::Rc};
 
-use crate::cartridge::mappers::{Mapper2, Mapper4};
+use crate::cartridge::mappers::{Mapper2, Mapper4, Mapper9};
 
 use super::mappers::{Mapper0, Mapper1, Mapper3};
 use super::{cartridge::Header, Cartridge};
@@ -109,6 +109,7 @@ pub fn mapper_from_cart(cart: Cartridge) -> Rc<RefCell<dyn Mapper>> {
         2 => Rc::new(RefCell::new(Mapper2::default())),
         3 => Rc::new(RefCell::new(Mapper3::default())),
         4 => Rc::new(RefCell::new(Mapper4::default())),
+        9 => Rc::new(RefCell::new(Mapper9::default())),
         _ => panic!("unimplemented mapper number {}", cart.header.mapper_num),
     };
 

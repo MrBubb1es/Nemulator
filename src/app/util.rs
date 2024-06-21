@@ -43,10 +43,10 @@ pub struct ControllerSprite {
     b_button: Sprite,
     select: Sprite,
     start: Sprite,
-    up: Sprite,
-    down: Sprite,
-    left: Sprite,
-    right: Sprite,
+    up_arrow: Sprite,
+    down_arrow: Sprite,
+    left_arrow: Sprite,
+    right_arrow: Sprite,
 }
 
 impl ControllerSprite {
@@ -57,10 +57,10 @@ impl ControllerSprite {
             b_button: Sprite::new("src/app/assets/sprites/b_button.png"),
             select: Sprite::new("src/app/assets/sprites/select_button.png"),
             start: Sprite::new("src/app/assets/sprites/start_button.png"),
-            up: Sprite::new("src/app/assets/sprites/up_button.png"),
-            down: Sprite::new("src/app/assets/sprites/down_button.png"),
-            left: Sprite::new("src/app/assets/sprites/left_button.png"),
-            right: Sprite::new("src/app/assets/sprites/right_button.png"),
+            up_arrow: Sprite::new("src/app/assets/sprites/up_arrow.png"),
+            down_arrow: Sprite::new("src/app/assets/sprites/down_arrow.png"),
+            left_arrow: Sprite::new("src/app/assets/sprites/left_arrow.png"),
+            right_arrow: Sprite::new("src/app/assets/sprites/right_arrow.png"),
         }
     }
 
@@ -68,7 +68,35 @@ impl ControllerSprite {
         self.base.draw(frame, frame_width, frame_height, x, y);
         
         if state.a() {
-            self.a_button.draw(frame, frame_width, frame_height, x, y)
+            self.a_button.draw(frame, frame_width, frame_height, x + 156, y + 54)
+        }
+
+        if state.b() {
+            self.b_button.draw(frame, frame_width, frame_height, x + 126, y + 54)
+        }
+
+        if state.up() {
+            self.up_arrow.draw(frame, frame_width, frame_height, x + 30, y + 31)
+        }
+
+        if state.down() {
+            self.down_arrow.draw(frame, frame_width, frame_height, x + 30, y + 61)
+        }
+
+        if state.left() {
+            self.left_arrow.draw(frame, frame_width, frame_height, x + 14, y + 47)
+        }
+
+        if state.right() {
+            self.right_arrow.draw(frame, frame_width, frame_height, x + 46, y + 47)
+        }
+
+        if state.select() {
+            self.select.draw(frame, frame_width, frame_height, x + 78, y + 43)
+        }
+
+        if state.start() {
+            self.start.draw(frame, frame_width, frame_height, x + 100, y + 43)
         }
     }
 }

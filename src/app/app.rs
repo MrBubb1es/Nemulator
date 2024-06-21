@@ -277,14 +277,10 @@ impl ApplicationHandler for NesApp {
                                 draw::draw_game_view(frame, &mut self.nes);
                             } else {
 
-                                if self.pause_menu.mapping_controller && self.frame_count % 60 == 0 {
-                                    let read_state = self.pause_menu.controller_read;
-                                    let current_button = read_state.button();
-                                    let current_val = self.pause_menu.controller_state.read_button(read_state) == 1;
-                
-                                    self.pause_menu
-                                        .controller_state
-                                        .set_button(current_button, !current_val);
+                                if self.pause_menu.mapping_controller && self.frame_count % 32 == 0 {
+                                    self.pause_menu.controller_state = NesController::from_bits(
+                                        !self.pause_menu.controller_state.into_bits()
+                                    );
                                 }
 
                                 draw::draw_menu(frame, &self.pause_menu, self.limit_fps);

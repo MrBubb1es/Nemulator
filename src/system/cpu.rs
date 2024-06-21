@@ -216,6 +216,9 @@ impl Cpu6502 {
                 // PPU Registers mirrored over 8KiB
                 self.ppu.as_ref().borrow_mut().cpu_read(address)
             }
+            0x4015 => {
+                self.apu.as_ref().borrow_mut().cpu_read(address)
+            }
             0x4016 => {
                 // Player 1 controller port
                 let data = self.polled_p1_controller.read_button(self.p1_read_state.get());
@@ -237,19 +240,7 @@ impl Cpu6502 {
                 data
             }
             0x4000..=0x401F => { 0xEE },
-            // 0x4000..=0x401F => {
-            //     // APU or I/O Reads
-            //     println!("APU READ OCCURED");
-            //     0xEE
-            // },
-            // 0x4020..=0xFFFF => {
-            //     // Read to program ROM through mapper
-            //     if let Some(mapped_addr) = self.mapper.borrow_mut().get_cpu_read_addr(address) {
-            //         self.prg_rom[mapped_addr as usize]
-            //     } else {
-            //         0
-            //     }
-            // },
+
             _ => 0x00,
         }
     }
@@ -259,7 +250,6 @@ impl Cpu6502 {
             return;
         }
 
-        // println!("CPU Write to ${address:04X} w/ 0x{data:02X}");
         match address {
             // CPU RAM
             0x0000..=0x1FFF => {
@@ -297,13 +287,12 @@ impl Cpu6502 {
             0x4016 => {
                 self.poll_p1.set(data & 1 == 1);
                 self.p1_read_state.set(ControllerReadState::new());
-            },
-
-            // Player 2 Controller Port & APU Register
-            0x4017 => {
                 self.poll_p2.set(data & 1 == 1);
                 self.p2_read_state.set(ControllerReadState::new());
+            },
 
+            // APU Register
+            0x4017 => {
                 self.apu.as_ref().borrow_mut().cpu_write(address, data);
             },
 
@@ -368,9 +357,6 @@ impl Cpu6502 {
     /// memory (i.e. 0x0100-0x01FF, right after the zero page). Decrements the
     /// sp after the value is pushed.
     pub fn push_to_stack(&mut self, data: u8) {
-        
-        // println!("Pushing 0x{:02X} to stk", data);
-
         let stk_address = 0x0100 | self.sp as u16;
         self.write(stk_address, data);
         self.sp = self.sp.wrapping_sub(1);
@@ -380,8 +366,6 @@ impl Cpu6502 {
         self.sp = self.sp.wrapping_add(1);
         let stk_address = 0x0100 | self.sp as u16;
         let data = self.read(stk_address);
-
-        // println!("Popping 0x{:02X} from stk", data);
 
         data
     }
@@ -632,11 +616,6 @@ impl Cpu6502 {
         text.push_str(&format!("  Last Instr: {}", self.current_instr_str()));
         text.push_str(&format!("  Total Clks: {}", self.total_clocks));
         text
-    }
-
-    pub fn print_state(&self) {
-        println!("CPU State:");
-        println!("{}", self.state_str());
     }
 }
 

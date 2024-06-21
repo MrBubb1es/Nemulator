@@ -50,8 +50,6 @@ impl Mapper for Mapper9 {
         // The PRG ROM is split into 4 8KiB chunks. The highest 3 are fixed to the
         // last 3 banks in the cartridge.
         self.prg_bank_select_hi = self.num_prg_banks * 2 - 3;
-
-        println!("PRG BANK HI: {}", self.prg_bank_select_hi);
     }
 
     fn cpu_cart_read(&mut self, addr: u16) -> Option<u8> {

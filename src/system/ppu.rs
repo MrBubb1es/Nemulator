@@ -555,7 +555,6 @@ impl Ppu2C02 {
             return;
         }
         
-        // println!("Writing to ppu w/ addr 0x{address:02X} and data: 0x{data:02X}");
         match address & 0x3FFF {
             0x0000..=0x1FFF => {
                 // Mapper should take care of this address range
@@ -566,8 +565,6 @@ impl Ppu2C02 {
             },
             0x3F00..=0x3FFF => {
                 let mirrored_addr = address & 0x1F;
-
-                // println!("Writing data 0x{data:02X} to pal mem w/ addr 0x{mirrored_addr:02X}");
 
                 // Dad's idea: Since we are writing much less than we are reading
                 // this data, we can actually mirror it to 2 different addresses
@@ -624,7 +621,6 @@ impl Ppu2C02 {
 
             // OAMDATA
             4 => {
-                // println!("Reading OAM Data from Primary OAM ${:02X}", self.oam_address);
                 if self.oam_address & 3 == 2 {
                     // 3 bits of byte 2 in sprite data are always read back as 0
                     self.primary_oam[self.oam_address as usize] & 0xE3
@@ -674,8 +670,6 @@ impl Ppu2C02 {
     /// written to, and some registers depend on the internal write latch to
     /// determine which byte is being written.
     pub fn cpu_write(&mut self, address: u16, data: u8) {
-        // println!("Writing 0x{data:02X} to PPU Register at addr {address}");
-
         match address & 0x0007 {
             // PPUCTRL
             0 => {
@@ -683,8 +677,6 @@ impl Ppu2C02 {
                 //    <used elsewhere> <- d: ABCDEF..
                 self.set_ctrl(data);
                 self.t_reg.set_nt_select((data & 3) as usize);
-
-                // println!("Large Sprites: {}", self.ctrl.spr_size() == 1);
             },
 
             // PPUMASK
@@ -694,14 +686,12 @@ impl Ppu2C02 {
             2 => {}, // Cannot write PPUSTATUS
 
             // OAMADDR
-            3 => { 
-                // println!("Setting Primary OAM Address to ${:02X}", data);
+            3 => {
                 self.oam_address = data; 
             },
 
             // OAMDATA
             4 => {
-                // println!("Writing {:02X} Primary OAM ${:02X}", data, self.oam_address);
                 self.primary_oam[self.oam_address as usize] = data;
                 self.oam_address = self.oam_address.wrapping_add(1);
             },
@@ -764,8 +754,6 @@ impl Ppu2C02 {
 
             // PPUDATA
             7 => {
-                // println!("Writing 0x{data:02} to PPUDATA");
-
                 self.ppu_write(self.v_val(), data);
 
                 // if self.status().in_vblank() == 1 {

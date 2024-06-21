@@ -1,4 +1,4 @@
-use gilrs::{Gilrs, Mapping};
+use gilrs::{GamepadId, Gilrs, Mapping};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use rodio::Sink;
 use winit::dpi::PhysicalSize;
@@ -15,7 +15,7 @@ use crate::system::controller::{ControllerButton, ControllerReadState, Controlle
 use crate::system::nes::Nes;
 use crate::RuntimeConfig;
 
-use super::util::{ControllerSprite, MenuSound, SliderSprite};
+use super::util::{ControllerMapping, ControllerSprite, MenuSound, SliderSprite};
 use super::draw::{self, draw_paused_menu_bg, GAME_FRAME_HEIGHT, GAME_FRAME_WIDTH};
 
 const MICROS_PER_FRAME: u128 = 1_000_000 / 60;
@@ -87,8 +87,7 @@ pub struct PauseMenu {
     pub mapping_controller: bool,
     pub map_controller1: bool,
     pub map_controller2: bool,
-    pub test_controller1: bool,
-    pub test_controller2: bool,
+    pub player1_map_selected: bool,
     pub controller_state: NesController,
     pub controller_read: ControllerReadState,
     pub controller_sprite: ControllerSprite,
@@ -111,14 +110,13 @@ impl PauseMenu {
             mapping_controller: false,
             map_controller1: false,
             map_controller2: false,
-            test_controller1: false,
-            test_controller2: false,
+            player1_map_selected: true,
             controller_state: NesController::default(),
             controller_read: ControllerReadState::new(),
             controller_sprite: ControllerSprite::new(),
 
             setting_volume: false,
-            volume_percent: 0.50,
+            volume_percent: 0.25,
             slider_sprite: SliderSprite::new(20, 200, 26),
 
             move_sound: MenuSound::new("src/app/assets/sounds/move.wav"),
@@ -149,8 +147,10 @@ pub struct NesApp {
     pause_menu: PauseMenu,
 
     controller_handler: Gilrs,
-    controller1_map: Mapping,
-    controller2_map: Mapping,
+    controller1_map: ControllerMapping,
+    controller2_map: ControllerMapping,
+    p1_controller_id: Option<gilrs::GamepadId>,
+    p2_controller_id: Option<gilrs::GamepadId>,
 
     limit_fps: bool,
     can_debug: bool,
@@ -276,11 +276,19 @@ impl ApplicationHandler for NesApp {
                             if !self.paused {
                                 draw::draw_game_view(frame, &mut self.nes);
                             } else {
-
                                 if self.pause_menu.mapping_controller && self.frame_count % 32 == 0 {
-                                    self.pause_menu.controller_state = NesController::from_bits(
-                                        !self.pause_menu.controller_state.into_bits()
-                                    );
+                                    let new_state = (self.frame_count >> 5) & 1 == 1; // Alternates about every 1/2 second
+
+                                    self.pause_menu.controller_state = match self.pause_menu.controller_read.button() {
+                                        ControllerButton::A => NesController::new().with_a(new_state),
+                                        ControllerButton::B => NesController::new().with_b(new_state),
+                                        ControllerButton::Up => NesController::new().with_up(new_state),
+                                        ControllerButton::Down => NesController::new().with_down(new_state),
+                                        ControllerButton::Left => NesController::new().with_left(new_state),
+                                        ControllerButton::Right => NesController::new().with_right(new_state),
+                                        ControllerButton::Select => NesController::new().with_select(new_state),
+                                        ControllerButton::Start => NesController::new().with_start(new_state),
+                                    };
                                 }
 
                                 draw::draw_menu(frame, &self.pause_menu, self.limit_fps);
@@ -320,8 +328,10 @@ impl NesApp {
             pause_menu: PauseMenu::new(),
 
             controller_handler: Gilrs::new().unwrap(),
-            controller1_map: Mapping::new(),
-            controller2_map: Mapping::new(),
+            controller1_map: ControllerMapping::default(),
+            controller2_map: ControllerMapping::default(),
+            p1_controller_id: None,
+            p2_controller_id: None,
 
             limit_fps: false,
             can_debug: true,
@@ -338,6 +348,28 @@ impl NesApp {
         self.nes.load_cart(&config.cart_path, sample_queue);
         self.limit_fps = config.limit_fps;
         self.can_debug = config.can_debug;
+
+        self.find_gamepads();
+    }
+
+    // Find the first two connected gamepads
+    fn find_gamepads(&mut self) {
+        let mut player1: Option<GamepadId> = None;
+        let mut player2: Option<GamepadId> = None;
+
+        for (_id, gamepad) in self.controller_handler.gamepads() {
+            if gamepad.is_connected() {
+                if player1.is_none() {
+                    player1 = Some(gamepad.id());
+                } else if player2.is_none() {
+                    player2 = Some(gamepad.id());
+                    break;
+                }
+            }
+        }
+
+        self.p1_controller_id = player1;
+        self.p2_controller_id = player2;
     }
 
     pub fn switch_view_mode(&mut self) {
@@ -377,7 +409,7 @@ impl NesApp {
         }
     }
 
-    /// If the input should go to the NES (i.e. it is controller input), then
+    /// If the input should go to the NES, then
     /// this function creates the controller state
     fn handle_nes_input(&mut self, event: KeyEvent) -> bool {
         if event.repeat {
@@ -442,129 +474,110 @@ impl NesApp {
         false
     }
 
+    fn handle_nes_controller_input(&mut self, button: gilrs::Button, val: f32, gamepad_id: GamepadId) {
+        if self.controller_handler.connected_gamepad(gamepad_id).is_some() {
+            
+            let mut button_map = None;
+            let mut player_id = 0;
+
+            if let Some(p1_id) = self.p1_controller_id {
+                if p1_id == gamepad_id {
+                    button_map = Some(&self.controller1_map);
+                    player_id = 0;
+                }
+            }
+
+            if let Some(p2_id) = self.p2_controller_id {
+                if p2_id == gamepad_id {
+                    button_map = Some(&self.controller2_map);
+                    player_id = 1;
+                }
+            }
+
+            if button_map.is_none() {
+                return;
+            }
+            let button_map = button_map.unwrap();
+
+            if let Some(nes_button) = button_map.get_mapped_button(button, val) {
+                let pressed = val.abs() > 0.5;
+
+                let controller_update = ControllerUpdate {
+                    button: nes_button,
+                    player_id,
+                    pressed: pressed,
+                };
+
+                self.nes.update_controllers(controller_update);
+
+                if !pressed {
+                    let extra_update = match nes_button {
+                        ControllerButton::Up => {Some(ControllerUpdate{
+                            button: ControllerButton::Down,
+                            player_id,
+                            pressed: false,
+                        })}
+
+                        ControllerButton::Down => {Some(ControllerUpdate{
+                            button: ControllerButton::Up,
+                            player_id,
+                            pressed: false,
+                        })}
+
+                        ControllerButton::Right => {Some(ControllerUpdate{
+                            button: ControllerButton::Left,
+                            player_id,
+                            pressed: false,
+                        })}
+
+                        ControllerButton::Left => {Some(ControllerUpdate{
+                            button: ControllerButton::Right,
+                            player_id,
+                            pressed: false,
+                        })}
+
+                        _ => { None }
+                    };
+
+                    if let Some(update) = extra_update {
+                        self.nes.update_controllers(update);
+                    }
+                }
+            }
+        }
+    }
+
     fn handle_controller_input(&mut self) {
-        const DPAD_PRESSED_THRESH: f32 = 0.90;
         // Handle controller input
         if let Some(controller_event) = self.controller_handler.next_event() {
 
-            if self.paused && self.pause_menu.mapping_controller {
-                let map = if self.pause_menu.map_controller1 {
-                    &mut self.controller1_map
-                } else {
-                    &mut self.controller2_map
-                };
-
-                Self::add_mapping(map, controller_event);
-
-                self.pause_menu.controller_read = self.pause_menu.controller_read.next();
-                
-                return;
-            }
-
-            let update = match controller_event {
-                // Up / Down input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadUp, val, ..),
-                    ..
-                } => {
-                    let down_pressed = val > DPAD_PRESSED_THRESH;
-                    let up_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Down,
-                        player_id: 0,
-                        pressed: down_pressed,
-                    });
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Up,
-                        player_id: 0,
-                        pressed: up_pressed,
-                    });
+            match controller_event.event {
+                gilrs::EventType::Connected |
+                gilrs::EventType::Disconnected => {
+                    self.find_gamepads();
                 }
 
-                // Left / Right input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::DPadRight, val, ..),
-                    ..
-                } => {
-                    let right_pressed = val > DPAD_PRESSED_THRESH;
-                    let left_pressed = val < (1.0 - DPAD_PRESSED_THRESH);
+                gilrs::EventType::ButtonChanged(button, val, _) => {
+                    // Puts dpad inputs on a range from -1 to 1
+                    let val = match button {
+                        gilrs::Button::DPadUp |
+                        gilrs::Button::DPadDown |
+                        gilrs::Button::DPadLeft |
+                        gilrs::Button::DPadRight => {
+                            2.0 * val - 1.0
+                        }
 
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Right,
-                        player_id: 0,
-                        pressed: right_pressed,
-                    });
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Left,
-                        player_id: 0,
-                        pressed: left_pressed,
-                    });
+                        _ => { val }
+                    };
+
+                    if !self.paused {
+                        self.handle_nes_controller_input(button, val, controller_event.id);
+                    } else {
+                        self.handle_menu_controller_input(button, val, controller_event.id);
+                    }
                 }
 
-                // Start button input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::Start, val, ..),
-                    ..
-                } => {
-                    let start_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Start,
-                        player_id: 0,
-                        pressed: start_pressed,
-                    });
-                }
-
-                // Select button input
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::Select, val, ..),
-                    ..
-                } => {
-                    let select_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::Select,
-                        player_id: 0,
-                        pressed: select_pressed,
-                    });
-                }
-
-                // A button pressed
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::South, val, ..),
-                    ..
-                } => {
-                    let a_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::A,
-                        player_id: 0,
-                        pressed: a_pressed,
-                    });
-                }
-
-                // B button pressed
-                gilrs::Event {
-                    id,
-                    event: gilrs::EventType::ButtonChanged(gilrs::Button::East, val, ..),
-                    ..
-                } => {
-                    let b_pressed = val > 0.50;
-
-                    self.nes.update_controllers(ControllerUpdate {
-                        button: ControllerButton::B,
-                        player_id: 0,
-                        pressed: b_pressed,
-                    });
-                }
-
-                _ => (),
+                _ => {}
             };
         }
     }
@@ -572,19 +585,72 @@ impl NesApp {
     fn handle_menu_input(&mut self, event: KeyEvent, event_loop: &ActiveEventLoop) -> bool {
 
         if self.pause_menu.mapping_controller {
-            if self.pause_menu.map_controller1 {
-                if self.frame_count % 60 == 0 {
-                    let read_state = self.pause_menu.controller_read;
-                    let current_button = read_state.button();
-                    let current_val = self.pause_menu.controller_state.read_button(read_state) == 1;
 
-                    self.pause_menu
-                        .controller_state
-                        .set_button(current_button, !current_val);
+            if !self.pause_menu.map_controller1 && !self.pause_menu.map_controller2 {
+                if event.repeat || event.state == ElementState::Released {
+                    return false;
                 }
 
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::KeyZ) |
+                    PhysicalKey::Code(KeyCode::Enter) => {
+                        self.pause_menu.controller_read = ControllerReadState::new();
+
+                        if self.pause_menu.player1_map_selected {
+                            self.controller1_map = ControllerMapping::default();
+                            self.pause_menu.map_controller1 = true;
+                        } else {
+                            self.controller2_map = ControllerMapping::default();
+                            self.pause_menu.map_controller2 = true;
+                        }
+
+                        self.play_menu_sound(&self.pause_menu.select_sound);
+
+                        true
+                    },
+                    PhysicalKey::Code(KeyCode::KeyX) => {
+                        self.pause_menu.mapping_controller = false;
+
+                        self.play_menu_sound(&self.pause_menu.reject_sound);
+
+                        true
+                    }
+                    PhysicalKey::Code(KeyCode::ArrowUp) |
+                    PhysicalKey::Code(KeyCode::ArrowDown) |
+                    PhysicalKey::Code(KeyCode::ShiftRight) => {
+                        self.pause_menu.player1_map_selected = !self.pause_menu.player1_map_selected;
+
+                        self.play_menu_sound(&self.pause_menu.move_sound);
+    
+                        true
+                    },
+                    PhysicalKey::Code(KeyCode::ArrowLeft) |
+                    PhysicalKey::Code(KeyCode::ArrowRight) => {
+                        self.play_menu_sound(&self.pause_menu.reject_sound);
+    
+                        true
+                    },
+                    
+                    _ => { false }
+                }
+            } else {
+                match event.physical_key {
+                    PhysicalKey::Code(KeyCode::Escape) |
+                    PhysicalKey::Code(KeyCode::KeyX) => {
+                        self.pause_menu.mapping_controller = false;
+                        self.pause_menu.map_controller1 = false;
+                        self.pause_menu.map_controller2 = false;
+
+                        self.pause_menu.controller_read = ControllerReadState::new();
+                        
+                        self.play_menu_sound(&self.pause_menu.reject_sound);
+
+                        true
+                    }
+
+                    _ => { false }
+                }
             }
-            false
         }
         // Using volume slider
         else if self.pause_menu.setting_volume {
@@ -678,6 +744,7 @@ impl NesApp {
 
                         PauseMenuItem::ControllerMap => {
                             self.pause_menu.mapping_controller = true;
+                            self.pause_menu.controller_read = ControllerReadState::new();
 
                             self.play_menu_sound(&self.pause_menu.select_sound);
                         }
@@ -705,6 +772,11 @@ impl NesApp {
 
                     true
                 },
+                PhysicalKey::Code(KeyCode::KeyX) => {
+                    self.unpause();
+
+                    true
+                }
                 PhysicalKey::Code(KeyCode::ArrowUp) => {
                     let cursor_moved = self.pause_menu.selected.go_prev(false);
 
@@ -750,6 +822,57 @@ impl NesApp {
             };
 
             handled
+        }
+    }
+
+    fn handle_menu_controller_input(&mut self, button: gilrs::Button, val: f32, gamepad_id: GamepadId) {
+        if val.abs() < 0.5 || !self.pause_menu.mapping_controller {
+            return;
+        }
+
+        let mut mapped_button = false;
+                
+        if self.pause_menu.map_controller1 {
+            if let Some(p2_id) = self.p2_controller_id {
+                if p2_id == gamepad_id {
+                    self.p2_controller_id = None;
+                }
+            }
+
+            self.p1_controller_id = Some(gamepad_id);
+
+            self.controller1_map.set_button_mapping(
+                self.pause_menu.controller_read.button(),
+                button,
+                val,
+            );
+            mapped_button = true;
+
+        } else if self.pause_menu.map_controller2 {
+            if let Some(p1_id) = self.p1_controller_id {
+                if p1_id == gamepad_id {
+                    self.p1_controller_id = None;
+                }
+            }
+
+            self.p2_controller_id = Some(gamepad_id);
+
+            self.controller2_map.set_button_mapping(
+                self.pause_menu.controller_read.button(),
+                button,
+                val,
+            );
+            mapped_button = true;
+        }
+
+        if mapped_button {
+            self.pause_menu.controller_read = self.pause_menu.controller_read.next();
+        
+            if self.pause_menu.controller_read.finished() {
+                self.pause_menu.mapping_controller = false;
+                self.pause_menu.map_controller1 = false;
+                self.pause_menu.map_controller2 = false;
+            }
         }
     }
 
@@ -876,10 +999,6 @@ impl NesApp {
         if let Some(stream) = self.audio_stream_queue.clone() {
             stream.lock().unwrap().clear();
         }
-    }
-
-    fn add_mapping(map: &mut Mapping, event: gilrs::Event) {
-
     }
 }
 

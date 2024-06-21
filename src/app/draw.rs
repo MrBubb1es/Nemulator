@@ -1,6 +1,6 @@
 use chars::{CHAR_HEIGHT, CHAR_WIDTH};
 
-use crate::{cartridge::mapper::NametableMirror, system::nes::Nes};
+use crate::{cartridge::mapper::NametableMirror, system::{controller::ControllerButton, nes::Nes}};
 
 use super::app::{PauseMenu, PauseMenuItem};
 
@@ -1044,11 +1044,9 @@ pub fn draw_debug_bg(frame: &mut [u8], palette: DebugPalette, nes: &Nes) {
     let pgtbl2 = nes.get_pgtbl2();
 
     if nes.large_sprites() {
-        println!("Using 8x16 Sprites");
         draw_nes_pagetable_8x16(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, DEBUG_PGTBL1_VIEW_X, DEBUG_PGTBL1_VIEW_Y);
         draw_nes_pagetable_8x16(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, DEBUG_PGTBL2_VIEW_X, DEBUG_PGTBL2_VIEW_Y);
     } else {
-        println!("Using 8x8 Sprites");
         draw_nes_pagetable_8x8(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl1, DEBUG_PGTBL1_VIEW_X, DEBUG_PGTBL1_VIEW_Y);
         draw_nes_pagetable_8x8(frame, DEBUG_FRAME_WIDTH, DEBUG_FRAME_HEIGHT, pgtbl2, DEBUG_PGTBL2_VIEW_X, DEBUG_PGTBL2_VIEW_Y);
     }
@@ -1197,11 +1195,64 @@ fn draw_volume_menu(frame: &mut [u8], menu: &PauseMenu) {
         menu.slider_sprite.draw(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, MENU_VOLUME_SLIDER_X, MENU_VOLUME_SLIDER_Y, menu.volume_percent);
 }
 
+fn draw_controller_mapping_menu(frame: &mut [u8], menu: &PauseMenu) {
+    let w = GAME_FRAME_WIDTH;
+    let h = GAME_FRAME_HEIGHT;
+    let x = 10;
+    let y = 10;
+    let chr_col = DEFAULT_DEBUG_PAL.txt_col;
+    let bg_col = DEFAULT_DEBUG_PAL.bg_col;
+    let s = 1;
+
+    menu.controller_sprite.draw(frame, w, h, MENU_CONTROLLER_X, MENU_CONTROLLER_Y, menu.controller_state);
+    
+    if menu.map_controller1 || menu.map_controller2 {
+        if menu.map_controller1 {
+            draw_string(frame, w, h, "Player 1",
+                x, y, chr_col, bg_col, 2);
+        } else {
+            draw_string(frame, w, h, "Player 2",
+                x, y, chr_col, bg_col, 2);
+        }
+
+        let button_str = match menu.controller_read.button() {
+            ControllerButton::A =>      "A Button     ",
+            ControllerButton::B =>      "B Button     ",
+            ControllerButton::Up =>     "Up Arrow     ",
+            ControllerButton::Down =>   "Down Arrow   ",
+            ControllerButton::Left =>   "Left Arrow   ",
+            ControllerButton::Right =>  "Right Arrow  ",
+            ControllerButton::Select => "Select Button",
+            ControllerButton::Start =>  "Start Button ",
+        };
+        let button_str = format!("Press the {}", button_str);
+
+        draw_string(frame, w, h, &button_str, 
+            MENU_CONTROLLER_X + 20, MENU_CONTROLLER_Y - 16, chr_col, bg_col, 1);
+
+    } else {
+        let(next_x, next_y) = draw_string(frame, w, h, "Controller Mappings\n\n ",
+            x, y, chr_col, bg_col, 2);
+        
+        if menu.player1_map_selected {
+            draw_string(frame, w, h,
+                "`> `", next_x, next_y, WHITE, bg_col, 1);
+        } else {
+            draw_string(frame, w, h,
+                "\n`> `", next_x, next_y, WHITE, bg_col, 1);
+        }
+
+        draw_string(frame, w, h, "`  `Player 1\n`  `Player 2", 
+            next_x, next_y, chr_col, bg_col, 1);
+        
+    }
+}
+
 pub fn draw_menu(frame: &mut [u8], menu: &PauseMenu, limit_fps: bool) {
     frame.fill(0);
 
     if menu.mapping_controller {
-        menu.controller_sprite.draw(frame, GAME_FRAME_WIDTH, GAME_FRAME_HEIGHT, MENU_CONTROLLER_X, MENU_CONTROLLER_Y, menu.controller_state);
+        draw_controller_mapping_menu(frame, menu);
     } else if menu.setting_volume {
         draw_volume_menu(frame, menu);
     } else {

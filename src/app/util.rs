@@ -5,7 +5,7 @@ use rodio::Sink;
 use std::fs::File;
 use std::io::BufReader;
 use serde_json::Result;
-use crate::system::{apu_util::NesAudioStream, controller::NesController};
+use crate::system::{apu_util::NesAudioStream, controller::{ControllerButton, NesController}};
 
 pub struct Sprite {
     sprite_rgba: Vec<u8>,
@@ -168,5 +168,175 @@ impl MenuSound {
 
     pub fn play_to_stream(&self, stream: Arc<Mutex<VecDeque<f32>>>) {
         stream.lock().unwrap().extend(self.raw_samples.clone());
+    }
+}
+
+#[derive(Default)]
+struct ButtonMapping {
+    to_button: ControllerButton,
+    from_code: Option<gilrs::ev::Code>,
+    from_axis: Option<gilrs::Axis>,
+    axis_dir_positive: Option<bool>,
+    from_button: Option<gilrs::Button>,
+    button_dir_positive: Option<bool>,
+}
+
+impl ButtonMapping {
+    fn new_from_code(to_button: ControllerButton, code: gilrs::ev::Code) -> Self {
+        Self {
+            to_button,
+            from_code: Some(code),
+            ..Default::default()
+        }
+    }
+
+    fn new_from_axis(to_button: ControllerButton, axis: gilrs::Axis, positive_dir: bool) -> Self {
+        Self {
+            to_button,
+            from_axis: Some(axis),
+            axis_dir_positive: Some(positive_dir),
+            ..Default::default()
+        }
+    }
+
+    fn new_from_button(to_button: ControllerButton, button: gilrs::Button, positive_dir: bool) -> Self {
+        Self {
+            to_button,
+            from_button: Some(button),
+            button_dir_positive: Some(positive_dir),
+            ..Default::default()
+        }
+    }
+
+    fn set_mapping_from_code(&mut self, code: gilrs::ev::Code) {
+        self.from_code = Some(code);
+        self.from_axis = None;
+        self.axis_dir_positive = None;
+        self.from_button = None;
+    }
+
+    fn set_mapping_from_axis(&mut self, axis: gilrs::Axis, positive_dir: bool) {
+        self.from_code = None;
+        self.from_axis = Some(axis);
+        self.axis_dir_positive = Some(positive_dir);
+        self.from_button = None;
+    }
+
+    fn set_mapping_from_button(&mut self, button: gilrs::Button, positive_dir: bool) {
+        self.from_code = None;
+        self.from_axis = None;
+        self.axis_dir_positive = None;
+        self.from_button = Some(button);
+        self.button_dir_positive = Some(positive_dir);
+    }
+
+    fn is_this_button(&self, controller_event: gilrs::Event) -> bool {
+        if let Some(code) = self.from_code {
+            match controller_event.event {
+                gilrs::EventType::AxisChanged(_, _, ev_code) |
+                gilrs::EventType::ButtonChanged(_, _, ev_code) => {
+                    return code == ev_code;
+                }
+
+                _ => {}
+            }
+        }
+
+        if let (Some(axis), Some(dir_positive)) = (self.from_axis, self.axis_dir_positive) {
+            match controller_event.event {
+                gilrs::EventType::AxisChanged(ev_axis, ev_dir, _) => {
+                    return (axis == ev_axis) && (dir_positive == (ev_dir > 0.0));
+                }
+
+                _ => {}
+            }
+        }
+
+        if let (Some(button), Some(dir_positive)) = (self.from_button, self.button_dir_positive) {
+            match controller_event.event {
+                gilrs::EventType::ButtonChanged(ev_button, ev_dir, _) => {
+                    return (button == ev_button) && (dir_positive == (ev_dir > 0.0));
+                }
+
+                _ => {}
+            }
+        }
+
+        return false;
+    }
+
+    fn is_this_button_from_button(&self, ev_button: gilrs::Button, val: f32) -> bool {
+        if let (Some(button), Some(dir_positive)) = (self.from_button, self.button_dir_positive) {
+            if button == ev_button {
+                return (dir_positive == (val > 0.0)) || (val.abs() < 0.5);
+            }
+        }
+
+        false
+    }
+}
+
+pub struct ControllerMapping {
+    a_map: ButtonMapping,
+    b_map: ButtonMapping,
+    up_map: ButtonMapping,
+    down_map: ButtonMapping,
+    left_map: ButtonMapping,
+    right_map: ButtonMapping,
+    select_map: ButtonMapping,
+    start_map: ButtonMapping,
+}
+
+impl Default for ControllerMapping {
+    fn default() -> Self {
+        Self {
+            a_map: ButtonMapping::new_from_button(ControllerButton::A, gilrs::Button::South, true),
+            b_map: ButtonMapping::new_from_button(ControllerButton::B, gilrs::Button::East, true),
+            up_map: ButtonMapping::new_from_button(ControllerButton::Up, gilrs::Button::DPadUp, false),
+            down_map: ButtonMapping::new_from_button(ControllerButton::Down, gilrs::Button::DPadUp, true),
+            right_map: ButtonMapping::new_from_button(ControllerButton::Right, gilrs::Button::DPadRight, true),
+            left_map: ButtonMapping::new_from_button(ControllerButton::Left, gilrs::Button::DPadRight, false),
+            select_map: ButtonMapping::new_from_button(ControllerButton::Select, gilrs::Button::Select, true),
+            start_map: ButtonMapping::new_from_button(ControllerButton::Start, gilrs::Button::Start, true),
+        }
+    }
+}
+
+impl ControllerMapping {
+    pub fn set_button_mapping(&mut self, to_button: ControllerButton, from_button: gilrs::Button, val: f32) {
+        let button_map = match to_button {
+            ControllerButton::A => &mut self.a_map,
+            ControllerButton::B => &mut self.b_map,
+            ControllerButton::Up => &mut self.up_map,
+            ControllerButton::Down => &mut self.down_map,
+            ControllerButton::Left => &mut self.left_map,
+            ControllerButton::Right => &mut self.right_map,
+            ControllerButton::Select => &mut self.select_map,
+            ControllerButton::Start => &mut self.start_map,
+        };
+
+        button_map.set_mapping_from_button(from_button, val > 0.0);
+    }
+
+    pub fn get_mapped_button(&self, from_button: gilrs::Button, val: f32) -> Option<ControllerButton> {
+        if self.a_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::A )
+        } else if self.b_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::B )
+        } else if self.up_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::Up )
+        } else if self.down_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::Down )
+        } else if self.left_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::Left )
+        } else if self.right_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::Right )
+        } else if self.select_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::Select )
+        } else if self.start_map.is_this_button_from_button(from_button, val) {
+            Some( ControllerButton::Start )
+        } else {
+            None
+        }
     }
 }

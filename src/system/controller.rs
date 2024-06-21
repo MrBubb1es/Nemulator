@@ -1,7 +1,10 @@
+use std::default;
+
 use bitfield_struct::bitfield;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum ControllerButton {
+    #[default]
     A,
     B,
     Select,
@@ -46,6 +49,10 @@ impl ControllerReadState {
 
     pub fn button(&self) -> ControllerButton {
         self.button
+    }
+
+    pub fn finished(&self) -> bool {
+        self.finished
     }
 }
 

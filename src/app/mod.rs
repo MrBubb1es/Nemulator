@@ -1,4 +1,5 @@
-pub mod app;
-pub mod draw;
+mod app;
+mod draw;
+mod util;
 
 pub use app::NesApp;

@@ -43,6 +43,10 @@ impl ControllerReadState {
             ControllerButton::Right => ControllerReadState{button: ControllerButton::Right, finished: true},
         }
     }
+
+    pub fn button(&self) -> ControllerButton {
+        self.button
+    }
 }
 
 #[bitfield(u8)]
@@ -74,6 +78,19 @@ impl NesController {
             ControllerButton::Down => if self.down() { 1 } else { 0 },
             ControllerButton::Left => if self.left() { 1 } else { 0 },
             ControllerButton::Right => if self.right() { 1 } else { 0 },
+        }
+    }
+
+    pub fn set_button(&mut self, button: ControllerButton, val: bool) {
+        match button {
+            ControllerButton::A => self.set_a(val),
+            ControllerButton::B => self.set_b(val),
+            ControllerButton::Select => self.set_select(val),
+            ControllerButton::Start => self.set_start(val),
+            ControllerButton::Up => self.set_up(val),
+            ControllerButton::Down => self.set_down(val),
+            ControllerButton::Left => self.set_left(val),
+            ControllerButton::Right => self.set_right(val),
         }
     }
 }

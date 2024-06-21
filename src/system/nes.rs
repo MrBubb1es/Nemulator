@@ -2,7 +2,7 @@ use std::{
     borrow::{Borrow, BorrowMut}, cell::{Ref, RefCell, RefMut}, collections::VecDeque, fs, io::Read, rc::Rc, sync::{Arc, Mutex}
 };
 
-use crate::cartridge::{cartridge::Cartridge, mapper::{self, Mapper}};
+use crate::cartridge::{cartridge::Cartridge, mapper::{self, Mapper, NametableMirror}};
 
 use super::{
     apu::Apu2A03,
@@ -177,6 +177,10 @@ impl Nes {
         self.apu.as_ref().unwrap().as_ref().borrow_mut()
     }
 
+    pub fn get_mapper(&self) -> Ref<dyn Mapper> {
+        self.mapper.as_ref().unwrap().as_ref().borrow()
+    }
+
     pub fn get_mapper_mut(&mut self) -> RefMut<dyn Mapper> {
         self.mapper.as_ref().unwrap().as_ref().borrow_mut()
     }
@@ -331,5 +335,13 @@ impl Nes {
 
     pub fn large_sprites(&self) -> bool {
         self.get_ppu().using_large_sprites()
+    }
+
+    pub fn current_mirror_type(&self) -> NametableMirror {
+        self.get_mapper().get_nt_mirror_type()
+    }
+
+    pub fn set_block_audio_samples(&mut self, val: bool) {
+        self.get_apu_mut().set_block_samples(val);
     }
 }

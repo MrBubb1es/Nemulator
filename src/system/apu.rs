@@ -52,9 +52,6 @@ pub struct Apu2A03 {
     high_pass2: DirectForm1<f32>,
     low_pass: DirectForm1<f32>,
 
-    frame_sequence: bool,
-    disable_frame_interrupt: bool,
-
     frame_update_counter: usize,
     frame_update_mode1: bool,
 
@@ -63,6 +60,9 @@ pub struct Apu2A03 {
 
     irq_request_flag: bool,
     trigger_irq: bool,
+
+    // The app can block the APU from adding samples to the queue
+    block_samples: bool,
 }
 
 impl Apu2A03 {
@@ -153,9 +153,6 @@ impl Apu2A03 {
             high_pass2: DirectForm1::<f32>::new(high_pass2_coeffs),
             low_pass: DirectForm1::<f32>::new(low_pass_coeffs),
 
-            frame_sequence: false,
-            disable_frame_interrupt: false,
-
             frame_update_counter: 0,
             frame_update_mode1: false,
 
@@ -164,6 +161,8 @@ impl Apu2A03 {
 
             irq_request_flag: false,
             trigger_irq: false,
+
+            block_samples: false,
         }
     }
 
@@ -486,22 +485,28 @@ impl Apu2A03 {
         let sample = pulse_out + tnd_out;
 
         self.high_pass1.run(sample);
-        self.high_pass2.run(sample);
-        self.low_pass.run(sample);
+        // self.high_pass2.run(sample);
+        // self.low_pass.run(sample);
 
         sample
     }
 
     fn push_sample(&mut self, sample: f32) {
-        self.sample_batch.push(sample);
-
-        if self.sample_batch.len() >= SAMPLE_BATCH_SIZE {
-            self.sample_queue.lock().unwrap()
-                .extend(self.sample_batch.drain(..));
-
-            self.last_output = Instant::now();
-            self.batches_sent += 1;
+        if !self.block_samples {
+            self.sample_batch.push(sample);
+    
+            if self.sample_batch.len() >= SAMPLE_BATCH_SIZE {
+                self.send_sample_batch();
+            }
         }
+    }
+
+    fn send_sample_batch(&mut self) {
+        self.sample_queue.lock().unwrap()
+            .extend(self.sample_batch.drain(..));
+
+        self.last_output = Instant::now();
+        self.batches_sent += 1;
     }
 
     pub fn audio_samples_queued(&self) -> usize {
@@ -604,5 +609,13 @@ impl Apu2A03 {
 
     pub fn set_dmc_irq_flag(&mut self, val: bool) {
         self.dmc_channel.set_irq_flag(val);
+    }
+
+    pub fn set_block_samples(&mut self, val: bool) {
+        self.block_samples = val;
+
+        if self.block_samples {
+            self.send_sample_batch();
+        }
     }
 }

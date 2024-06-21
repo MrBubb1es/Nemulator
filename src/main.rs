@@ -29,7 +29,8 @@ pub fn main() -> Result<(), String> {
     let mut config = RuntimeConfig::default();
 
     config.cart_path = args[1].clone();
-    config.limit_fps = !args.contains(&String::from("--nolimit"));
+    config.limit_fps = !args.contains(&String::from("--nolimit")) && !args.contains(&String::from("-nl"));
+    config.can_debug = args.contains(&String::from("--debug")) || args.contains(&String::from("-d"));
 
     nes_emulator::run(config);
 

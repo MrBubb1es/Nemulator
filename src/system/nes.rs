@@ -213,8 +213,6 @@ impl Nes {
 
         let mut cpu_cycled = false;
 
-        self.handle_cpu_interrupts();
-
         if self.clocks % 3 == 0 {
             // APU cycles with CPU clock
             self.get_apu_mut().cycle();
@@ -226,6 +224,8 @@ impl Nes {
                 .get_cpu_mut()
                 .cycle(p1_controller_state, p2_controller_state);
         }
+
+        self.handle_cpu_interrupts();
 
         self.clocks += 1;
 

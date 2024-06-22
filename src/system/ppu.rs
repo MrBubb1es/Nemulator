@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::cartridge::{mapper::NametableMirror, Mapper};
 
-use super::{nes::NES_SCREEN_BUF_SIZE, nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
+use super::{nes_graphics::{NesColor, DEFAULT_PALETTE}, ppu_util::{PpuCtrl, PpuMask, PpuScrollReg, PpuStatus}};
 
 const VRAM_SIZE: usize = 0x800;
 const PALETTE_MEM_SIZE: usize = 32;

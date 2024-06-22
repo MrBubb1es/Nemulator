@@ -1,8 +1,8 @@
-use gilrs::{GamepadId, Gilrs, Mapping};
+use gilrs::{GamepadId, Gilrs};
 use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use rodio::Sink;
 use winit::dpi::PhysicalSize;
-use winit::event::{self, ElementState, KeyEvent, WindowEvent};
+use winit::event::{ElementState, KeyEvent, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
@@ -16,7 +16,7 @@ use crate::system::nes::Nes;
 use crate::RuntimeConfig;
 
 use super::util::{ControllerMapping, ControllerSprite, MenuSound, SliderSprite};
-use super::draw::{self, draw_paused_menu_bg, GAME_FRAME_HEIGHT, GAME_FRAME_WIDTH};
+use super::draw::{self, draw_paused_menu_bg};
 
 const MICROS_PER_FRAME: u128 = 1_000_000 / 60;
 const MIN_SAMPLES_THRESH: usize = 600;
@@ -419,7 +419,7 @@ impl NesApp {
         let new_state = event.state == ElementState::Pressed;
 
         const PLAYER1_ID: usize = 0;
-        const PLAYER2_ID: usize = 1;
+        // const PLAYER2_ID: usize = 1; // Keyboard controls player 1 controller
 
         let controller_update: Option<ControllerUpdate> = match event.physical_key {
             // Player 1 keys
@@ -766,8 +766,6 @@ impl NesApp {
                             println!("Quit button pressed, exiting.");
                             event_loop.exit();
                         }
-
-                        _ => {},
                     }
 
                     true

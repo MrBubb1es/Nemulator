@@ -1,11 +1,6 @@
-use std::{collections::{HashMap, VecDeque}, path::Path, sync::{Arc, Mutex}};
+use std::{collections::VecDeque, path::Path, sync::{Arc, Mutex}};
 
-use gilrs::Mapping;
-use rodio::Sink;
-use std::fs::File;
-use std::io::BufReader;
-use serde_json::Result;
-use crate::system::{apu_util::NesAudioStream, controller::{ControllerButton, NesController}};
+use crate::system::controller::{ControllerButton, NesController};
 
 pub struct Sprite {
     sprite_rgba: Vec<u8>,

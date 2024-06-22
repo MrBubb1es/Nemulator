@@ -1,4 +1,4 @@
-use crate::cartridge::{mapper::NametableMirror, Cartridge, Header, Mapper};
+use crate::cartridge::{mapper::NametableMirror, Cartridge, Mapper};
 
 #[derive(Default)]
 pub struct Mapper3 {

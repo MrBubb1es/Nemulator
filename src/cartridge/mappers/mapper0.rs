@@ -1,4 +1,4 @@
-use crate::cartridge::{Cartridge, Header};
+use crate::cartridge::{Cartridge};
 use crate::cartridge::mapper::{Mapper, NametableMirror};
 
 /// The simplest mapper, and the most common.

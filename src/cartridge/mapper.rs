@@ -1,11 +1,11 @@
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
-use std::{default, rc::Rc};
+use std::{rc::Rc};
 
 use crate::cartridge::mappers::{Mapper2, Mapper4, Mapper9};
 
 use super::mappers::{Mapper0, Mapper1, Mapper3};
-use super::{cartridge::Header, Cartridge};
+use super::{Cartridge};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum NametableMirror {

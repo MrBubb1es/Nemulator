@@ -1,4 +1,4 @@
-use crate::cartridge::{Cartridge, Header};
+use crate::cartridge::{Cartridge};
 use crate::cartridge::mapper::{Mapper, NametableMirror};
 
 /// In this mapper, the low half of the PRG ROM address space ($8000-$BFFF) is

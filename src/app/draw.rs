@@ -1,4 +1,3 @@
-use chars::{CHAR_HEIGHT, CHAR_WIDTH};
 
 use crate::{cartridge::mapper::NametableMirror, system::{controller::ControllerButton, nes::Nes}};
 
@@ -735,8 +734,8 @@ pub fn draw_string(frame: &mut [u8], frame_width: usize, frame_height: usize,
     let mut curr_x = x_pos;
     let mut curr_y = y_pos;
 
-    let mut horizontal_step = text_size * (chars::CHAR_WIDTH - 1) + 1;;
-    let mut vertical_step = text_size * chars::CHAR_HEIGHT + chars::NEWLINE_PADDING;
+    let horizontal_step = text_size * (chars::CHAR_WIDTH - 1) + 1;;
+    let vertical_step = text_size * chars::CHAR_HEIGHT + chars::NEWLINE_PADDING;
 
     let mut special = false;
     for character in text.chars().into_iter() {

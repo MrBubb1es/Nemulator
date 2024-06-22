@@ -49,8 +49,8 @@ pub struct Apu2A03 {
     dmc_channel: DmcChannel,
 
     high_pass1: DirectForm1<f32>,
-    high_pass2: DirectForm1<f32>,
-    low_pass: DirectForm1<f32>,
+    _high_pass2: DirectForm1<f32>,
+    _low_pass: DirectForm1<f32>,
 
     frame_update_counter: usize,
     frame_update_mode1: bool,
@@ -150,8 +150,8 @@ impl Apu2A03 {
             dmc_channel: DmcChannel::new(),
 
             high_pass1: DirectForm1::<f32>::new(high_pass1_coeffs),
-            high_pass2: DirectForm1::<f32>::new(high_pass2_coeffs),
-            low_pass: DirectForm1::<f32>::new(low_pass_coeffs),
+            _high_pass2: DirectForm1::<f32>::new(high_pass2_coeffs),
+            _low_pass: DirectForm1::<f32>::new(low_pass_coeffs),
 
             frame_update_counter: 0,
             frame_update_mode1: false,

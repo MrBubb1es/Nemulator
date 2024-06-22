@@ -1,9 +1,5 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 
-use crate::cartridge::mapper;
 
-use super::mapper::Mapper;
 
 // Identifier for NES 2.0 and INES formats
 pub const NES_2V0_IDENT: [u8; 4] = [b'N', b'E', b'S', 0x1A];

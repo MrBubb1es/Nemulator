@@ -1,5 +1,5 @@
 use std::{
-    borrow::{Borrow, BorrowMut}, cell::{Ref, RefCell, RefMut}, collections::VecDeque, fs, io::Read, rc::Rc, sync::{Arc, Mutex}
+    borrow::Borrow, cell::{Ref, RefCell, RefMut}, collections::VecDeque, fs, io::Read, rc::Rc, sync::{Arc, Mutex}
 };
 
 use crate::cartridge::{cartridge::Cartridge, mapper::{self, Mapper, NametableMirror}};

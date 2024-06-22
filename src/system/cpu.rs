@@ -83,7 +83,7 @@ pub struct Cpu6502 {
     total_clocks: u64, // Total number of clocks since CPU started running
 
     current_instr: Instruction,
-    instr_data: OpcodeData,
+    _instr_data: OpcodeData,
 }
 
 impl Cpu6502 {
@@ -125,7 +125,7 @@ impl Cpu6502 {
             total_clocks: 0,
     
             current_instr: DEFAULT_ILLEGAL_OP,
-            instr_data: OpcodeData {
+            _instr_data: OpcodeData {
                 data: None,
                 address: None,
                 offset: None,
